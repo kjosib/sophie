@@ -13,8 +13,8 @@ The design goals are:
 
 My aesthetic bends toward those derived from [Algol 60](https://www.theregister.com/2020/05/15/algol_60_at_60/),
 such as Pascal, C, Perl, Python, and Ruby. Given that most programmers seem to learn Java and Python these days,
-this should not break too many brains. However, Sophie an expression-oriented call-by-need language,
-so some things will look a bit more like SQL.
+this should not break too many brains. However, Sophie is an expression-oriented call-by-need language,
+so some things will look a bit more like SQL or Haskell.
 
 Here is a preliminary example:
 ```
