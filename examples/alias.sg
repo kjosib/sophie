@@ -1,0 +1,5 @@
+# Let comments begin with hash marks.
+
+type:
+predicate[A] is A -> flag;
+

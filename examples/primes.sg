@@ -1,0 +1,13 @@
+define:
+primes(max) = NIL IF max < 2 ELSE cons(2, odd_primes) where
+	odd_primes = more_primes(0, cons(4, map(square, odd_primes)), 3);
+	more_primes(bound, squares, candidate_prime) = CASE
+		WHEN candidate_prime > max THEN NIL;
+		WHEN candidate_prime > head(squares) THEN more_primes(bound+1, tail(squares), candidate_prime);
+		WHEN is_prime THEN cons(candidate, successors);
+		ELSE successors;
+	ESAC where
+		is_prime = NOT any [ candidate MOD p == 0 FOR p IN take(bound, odd_primes) ];
+		successors = more_primes(bound, squares, candidate_prime+2);
+	end more_primes;
+end primes;
