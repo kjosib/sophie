@@ -11,7 +11,7 @@ _tables = make_tables(Path(__file__).parent/"Sophie.md")
 class SophieParser(TypicalApplication):
 	RESERVED = frozenset(t for t in _tables["parser"]["terminals"] if t.isupper() and t.isalpha())
 	
-	def scan_ignore(self, yy: IterableScanner, what_to_ignore): pass
+	def scan_ignore(self, yy: IterableScanner): pass
 	def scan_punctuation(self, yy: IterableScanner):
 		punctuation = sys.intern(yy.match())
 		yy.token(punctuation, punctuation)

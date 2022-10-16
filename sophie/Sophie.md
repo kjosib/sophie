@@ -12,39 +12,45 @@ There are three main goals:
 
 ## Productions start
 
-Quick style primer:
+Quick primer on reading the grammar:
 
-* All-upper-case represents a KEYWORD.
+* All-upper-case represents a KEYWORD, which by the way have no semantic value.
+* Punctuation in `'` quotes `'` are terminals which also have no semantic value.
 * Things like `:foo` refer to parse actions, defined elsewhere.
+* Production rules without a parse action either are renaming rules or else create tuples.
 
 ```
 start -> optional(exports) optional(imports) optional(types) optional(functions) :Module
 
 exports -> EXPORT ':' comma_terminated_list(name) ';'
 imports -> IMPORT ':' semicolon_terminated_list(one_import)
-types -> TYPE ':' semicolon_terminated_list(type_decl)
+types -> TYPE ':' semicolon_terminated_list(type_declaration)
 functions -> DEFINE ':' semicolon_terminated_list(function)
 
 one_import -> short_string AS name
 
-type_decl -> name optional(generic) IS type :TypeDecl
-generic -> '[' comma_terminated_list(name) ']'
+type_declaration -> name optional(type_parameters) IS type_body :TypeDecl
+type_parameters -> '[' comma_terminated_list(name) ']'
+type_body -> union_type | product_type | simple_type
+union_type -> '{' seplist(type_summand, '|') '}'  :union_type
+type_summand -> name optional(product_type) | NIL :nil_type
+product_type -> '(' comma_terminated_list(field_definition) ')'
+field_definition -> name ':' simple_type
+
+simple_type -> '?' :type_implicit
+| name  :type_name
+| name '[' comma_terminated_list(simple_type) ']' :type_call
+| simple_type '->' simple_type :arrow_type
+
 
 function -> signature '=' expr optional(where_clause) :Function
 signature -> name  optional(parameter_list) optional(return_type) :Signature
 return_type -> '->' type
 where_clause -> WHERE semicolon_terminated_list(function) END name :where_clause
 
-type -> '?' :type_implicit
-| name  :type_name
-| name '[' comma_terminated_list(type) ']' :type_call
-| type '->' type :arrow_type
-| record_type
-| union_type
-
 parameter_list -> '(' comma_terminated_list(parameter) ')'
 parameter -> name :param_inferred
-| name ':' type :param_constrained
+| name ':' simple_type :param_constrained
 
 expr -> NIL | integer | real | short_string | list_expr | case_expr
 | '(' expr ')'
@@ -103,12 +109,16 @@ optional(x) -> :nothing | x
 %left AND OR
 
 %right '->' IF ELSE
+```
 
+This next bit tells the parser-generator how to tell which terminals have semantic value,
+and therefore get passed to a production rule's action:
+```
 %void_set punct UPPER
 ```
 
-
 ## Definitions
+These next two sections define the scanner.
 ```
 leadingDigit    [1-9]
 moreDigits      {digit}+(_{digit})*
@@ -120,13 +130,13 @@ hex             {xdigit}+(_{xdigit}+)*
 sigil           ([#$]|0[xX])
 ```
 ## Patterns
+As with the parser, the scan-actions are given by `:words`.
 ```
 {wholeNumber}      :integer
 {real}             :real
 {alpha}{word}*     :word
 \"[^"\v]*\"        :short_string
-\s+                :ignore whitespace
-\#.*               :ignore comments
+\s+|\#.*           :ignore
 [<:>!=]=|[-=]>|{punct}  :punctuation
 ```
 
