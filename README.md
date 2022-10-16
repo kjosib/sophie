@@ -22,7 +22,9 @@ Here is a preliminary example:
 
 type:
 predicate[A] is A -> flag;
+album is (title:string, artist:string, year:integer, tracks:list[string]);
 tree[X] is { nil | tree(left:X,right:X) };
+album_tree is tree[album];
 
 define:
 
@@ -66,7 +68,7 @@ Nothing is yet etched in stone but the general philosophy.
 
 At the moment, it just parses and reports on the parse.
 There is not yet any semantic analysis or execution.
-Not every grammar rule is yet written down, so the example above won't yet parse.
+Not every grammar rule is yet written down, so the `primes_simple` example above won't yet parse.
 
 ## How do I Learn Sophie?
 
