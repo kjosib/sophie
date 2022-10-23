@@ -19,4 +19,8 @@ associated with the value-expressions associated with each call site.
 The key to it all is the matching and unification mechanism as a critical component.
 """
 
+class ProductType:
+	# stand-in until something nicer.
+	def __init__(self, slots):
+		self.slots = slots
 

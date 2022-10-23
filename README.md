@@ -36,7 +36,7 @@ primes_smarter(max:integer) -> list[integer] = NIL IF max < 2 ELSE cons(2, odd_p
     odd_primes = more_primes(0, cons(4, map(square, odd_primes)), 3);
     more_primes(bound, squares, candidate_prime) = CASE
         WHEN candidate_prime > max THEN NIL;
-        WHEN candidate_prime > head(squares) THEN more_primes(bound+1, tail(squares), candidate_prime);
+		WHEN candidate_prime > squares.head THEN more_primes(bound+1, squares.tail, candidate_prime);
         WHEN is_prime THEN cons(candidate, successors);
         ELSE successors;
     ESAC where

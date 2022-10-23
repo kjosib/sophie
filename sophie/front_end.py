@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 from boozetools.macroparse.runtime import TypicalApplication, make_tables
 from boozetools.scanning.engine import IterableScanner
-from . import forms
+from . import syntax
 
 _tables = make_tables(Path(__file__).parent/"Sophie.md")
 
@@ -15,14 +15,14 @@ class SophieParser(TypicalApplication):
 	def scan_punctuation(self, yy: IterableScanner):
 		punctuation = sys.intern(yy.match())
 		yy.token(punctuation, punctuation)
-	def scan_integer(self, yy: IterableScanner): yy.token("integer", int(yy.match()))
-	def scan_real(self, yy: IterableScanner): yy.token("real", float(yy.match()))
-	def scan_short_string(self, yy: IterableScanner): yy.token("short_string", yy.match()[1:-1])
+	def scan_integer(self, yy: IterableScanner): yy.token("integer", syntax.Literal(int(yy.match()), yy.slice()))
+	def scan_real(self, yy: IterableScanner): yy.token("real", syntax.Literal(float(yy.match()), yy.slice()))
+	def scan_short_string(self, yy: IterableScanner): yy.token("short_string", syntax.Literal(yy.match()[1:-1], yy.slice()))
 	
 	def scan_word(self, yy: IterableScanner):
 		upper = yy.match().upper()
-		if upper in self.RESERVED: yy.token(upper, upper)
-		else: yy.token("name", sys.intern(yy.match()))
+		if upper in self.RESERVED: yy.token(upper, yy.slice() if 'NIL'==upper else None)
+		else: yy.token("name", syntax.Token(sys.intern(yy.match()), yy.slice()))
 	
 	def scan_relop(self, yy: IterableScanner, op:str):
 		yy.token("relop", op)
@@ -34,7 +34,14 @@ class SophieParser(TypicalApplication):
 		return some
 	
 	def default_parse(self, ctor, *args):
-		return getattr(forms, ctor)(*args) if hasattr(forms, ctor) else (ctor, *args)
+		if hasattr(syntax, ctor):
+			return getattr(syntax, ctor)(*args)
+		else:
+			if "type" in ctor:
+				return ctor, *args
+			else:
+				raise NotImplementedError(ctor)
+			
 	pass
 
 sophie_parser = SophieParser(_tables)

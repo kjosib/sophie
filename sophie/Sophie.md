@@ -14,18 +14,19 @@ There are three main goals:
 
 Quick primer on reading the grammar:
 
-* All-upper-case represents a KEYWORD, which by the way have no semantic value.
+* All-upper-case represents a KEYWORD, which by the way has no semantic value.
 * Punctuation in `'` quotes `'` are terminals which also have no semantic value.
 * Things like `:foo` refer to parse actions, defined elsewhere.
 * Production rules without a parse action either are renaming rules or else create tuples.
 
 ```
-start -> optional(exports) optional(imports) optional(types) optional(functions) :Module
+start -> optional(exports) optional(imports) optional(types) optional(functions) main :Module
 
 exports -> EXPORT ':' comma_terminated_list(name) ';'
 imports -> IMPORT ':' semicolon_terminated_list(one_import)
 types -> TYPE ':' semicolon_terminated_list(type_declaration)
 functions -> DEFINE ':' semicolon_terminated_list(function)
+main -> BEGIN ':' expr END '.'
 
 one_import -> short_string AS name
 
@@ -33,27 +34,29 @@ type_declaration -> name optional(type_parameters) IS type_body :TypeDecl
 type_parameters -> '[' comma_terminated_list(name) ']'
 type_body -> union_type | product_type | simple_type
 union_type -> '{' seplist(type_summand, '|') '}'  :union_type
-type_summand -> name optional(product_type) | NIL :nil_type
+type_summand -> name optional(product_type) | .NIL :nil_type_summand
 product_type -> '(' comma_terminated_list(field_definition) ')'
 field_definition -> name ':' simple_type
 
 simple_type -> '?' :type_implicit
-| name  :type_name
+| name
 | name '[' comma_terminated_list(simple_type) ']' :type_call
 | simple_type '->' simple_type :arrow_type
 
 
 function -> signature '=' expr optional(where_clause) :Function
-signature -> name  optional(parameter_list) optional(return_type) :Signature
-return_type -> '->' type
-where_clause -> WHERE semicolon_terminated_list(function) END name :where_clause
+signature -> name optional(parameter_list) optional(return_type) :Signature
+return_type -> '->' simple_type
+where_clause -> WHERE semicolon_terminated_list(function) END name :WhereClause
 
 parameter_list -> '(' comma_terminated_list(parameter) ')'
 parameter -> name :param_inferred
 | name ':' simple_type :param_constrained
 
-expr -> NIL | integer | real | short_string | list_expr | case_expr
+expr -> integer | real | short_string | list_expr | case_expr
+| .NIL :nil_value
 | '(' expr ')'
+| expr '.' name :FieldReference
 | expr IF expr ELSE expr :Cond
 | '-' expr :Negative %prec UMINUS
 | expr '*' expr :Mul
@@ -64,7 +67,7 @@ expr -> NIL | integer | real | short_string | list_expr | case_expr
 | expr '+' expr :Add
 | expr '-' expr :Sub
 | expr '==' expr :EQ
-| expr '!=' expr :EQ
+| expr '!=' expr :NE
 | expr '<=' expr :LE
 | expr '<' expr :LT
 | expr '>' expr :GT
@@ -74,8 +77,8 @@ expr -> NIL | integer | real | short_string | list_expr | case_expr
 | NOT expr  :LogicalNot
 
 | name
-| name '(' comma_terminated_list(expr) ')' :Call
-| name list_expr :ListCall
+| expr '(' comma_terminated_list(expr) ')' :Call
+| expr list_expr :call_upon_list
 
 list_expr -> '[' list_body ']'
 list_body -> comma_terminated_list(expr) :ExplicitList
@@ -100,7 +103,7 @@ optional(x) -> :nothing | x
 
 ```
 %bogus UMINUS
-%left '(' '.'
+%left '(' '[' '.'
 %right '^'
 %left '*' '/' '%' DIV MOD
 %left '+' '-'
