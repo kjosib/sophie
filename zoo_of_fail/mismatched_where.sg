@@ -1,0 +1,9 @@
+# This file has a mismatched where-clause and should not parse.
+
+define:
+
+main = a + b where
+	a = 5;
+	b = 7;
+end not_main;
+

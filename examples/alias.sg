@@ -5,3 +5,7 @@ predicate[A] is A -> flag;
 album is (title:string, artist:string, year:integer, tracks:list[string]);
 tree[X] is { nil | tree(left:X,right:X) };
 album_tree is tree[album];
+
+begin:
+5+2
+end.
