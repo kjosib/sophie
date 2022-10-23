@@ -26,7 +26,7 @@ exports -> EXPORT ':' comma_terminated_list(name) ';'
 imports -> IMPORT ':' semicolon_terminated_list(one_import)
 types -> TYPE ':' semicolon_terminated_list(type_declaration)
 functions -> DEFINE ':' semicolon_terminated_list(function)
-main -> BEGIN ':' expr END '.'
+main -> BEGIN ':' semicolon_terminated_list(expr) END '.'
 
 one_import -> short_string AS name
 
@@ -59,6 +59,7 @@ expr -> integer | real | short_string | list_expr | case_expr
 | expr '.' name :FieldReference
 | expr IF expr ELSE expr :Cond
 | '-' expr :Negative %prec UMINUS
+| expr '^' expr :PowerOf
 | expr '*' expr :Mul
 | expr '/' expr :FloatDiv
 | expr '%' expr :FloatMod
@@ -76,7 +77,7 @@ expr -> integer | real | short_string | list_expr | case_expr
 | expr OR expr :LogicalOr
 | NOT expr  :LogicalNot
 
-| name
+| name :Lookup
 | expr '(' comma_terminated_list(expr) ')' :Call
 | expr list_expr :call_upon_list
 

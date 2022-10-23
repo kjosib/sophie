@@ -27,6 +27,7 @@ ABSENT = object()
 class Thunk:
 	""" A kind of not-yet-value which can be forced. """
 	def __init__(self, dynamic_env: NameSpace, expr: syntax.Expr):
+		assert isinstance(expr, syntax.Expr), type(expr)
 		self._dynamic_env = dynamic_env
 		self._expr = expr
 		self._value = ABSENT
@@ -43,7 +44,7 @@ class Thunk:
 		else:
 			return str(self._value)
 
-LAZY_VALUE = Union[Thunk, STRICT_VALUE]
+LAZY_VALUE = Union[STRICT_VALUE, Thunk]
 
 def actual_value(it:LAZY_VALUE) -> STRICT_VALUE:
 	while isinstance(it, Thunk):
@@ -51,9 +52,11 @@ def actual_value(it:LAZY_VALUE) -> STRICT_VALUE:
 	return it
 
 def evaluate(dynamic_env:NameSpace, expr:syntax.Expr) -> LAZY_VALUE:
+	# Hinkey double-dispatch would be faster as a dictionary look-up.
+	# That's a side-quest, though.
 	def strict(sub_expr): return actual_value(evaluate(dynamic_env, sub_expr))
 	if isinstance(expr, syntax.Literal): return expr.value
-	elif isinstance(expr, syntax.Token): return _look_up(dynamic_env, expr)
+	elif isinstance(expr, syntax.Lookup): return _look_up(dynamic_env, expr.name)
 	elif isinstance(expr, syntax.BinExp):
 		return expr.op(strict(expr.lhs), strict(expr.rhs))
 	elif isinstance(expr, syntax.UnaryExp):
@@ -86,12 +89,14 @@ def evaluate(dynamic_env:NameSpace, expr:syntax.Expr) -> LAZY_VALUE:
 	else:
 		raise NotSupported(type(expr), expr)
 
-def delay(dynamic_env:NameSpace, expr:syntax.Expr):
+def delay(dynamic_env:NameSpace, item) -> LAZY_VALUE:
 	# For two kinds of expression, there is no profit to delay:
-	if isinstance(expr, syntax.Literal): return expr.value
-	if isinstance(expr, syntax.Token): return _look_up(dynamic_env, expr)
+	if isinstance(item, syntax.Literal): return item.value
+	if isinstance(item, syntax.Lookup): return _look_up(dynamic_env, item.name)
 	# In less trivial cases, make a thunk and pass that instead.
-	return Thunk(dynamic_env, expr)
+	if isinstance(item, syntax.Expr): return Thunk(dynamic_env, item)
+	# Some internals already have the data and it's no use making a (new) thunk.
+	return item
 
 def _look_up(dynamic_env:NameSpace, name:syntax.Token) -> LAZY_VALUE:
 	try:
@@ -109,13 +114,15 @@ class Closure(Procedure):
 		self._static_link = static_link
 		self._params = [p.name.text for p in udf.signature.params or ()]
 		self._arity = len(self._params)
+	
+	def _name(self): return self._udf.signature.name.text
 
 	def apply(self, caller_env:NameSpace, args:list[syntax.Expr]) -> LAZY_VALUE:
 		if self._arity != len(args):
-			udf_name = self._udf.signature.name.text
-			raise TypeError("Procedure %s expected %d args, got %d."%(udf_name, self._arity, len(args)))
+			raise TypeError("Procedure %s expected %d args, got %d."%(self._name(), self._arity, len(args)))
 		inner_env = self._static_link.new_child(self._udf)
 		for param_name, expr in zip(self._params, args):
+			assert isinstance(expr, syntax.Expr), "%s :: %s given %r"%(self._name(), param_name, expr)
 			inner_env[param_name] = delay(caller_env, expr)
 		for key, fn in self._udf.sub_fns.items():
 			inner_env[key] = close_one_function(inner_env, fn)
@@ -168,9 +175,11 @@ def run_module(module: syntax.Module):
 			pass
 		else:
 			print("Don't know how to deal with %r %r"%(type(dfn), key))
-	result = evaluate(module_env, module.main)
-	if isinstance(result, Thunk): result = actual_value(result)
-	if isinstance(result, dict): dethunk(result)
+	for expr in module.main:
+		result = evaluate(module_env, expr)
+		if isinstance(result, Thunk): result = actual_value(result)
+		if isinstance(result, dict): dethunk(result)
+		print(result)
 	return result
 
 def dethunk(result:dict):
