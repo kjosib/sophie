@@ -66,7 +66,7 @@ class WhereClause(NamedTuple):
 	end_name: Token
 	
 class Module:
-	def __init__(self, exports:Optional[list], imports:Optional[list], types:Optional[list[TypeDecl]], functions:Optional[list[Function]], main:Expr):
+	def __init__(self, exports:Optional[list], imports:Optional[list], types:Optional[list[TypeDecl]], functions:Optional[list[Function]], main:list[Expr]):
 		self.exports = exports
 		self.imports = imports
 		self.namespace = NameSpace(place=self, parent=static_root)
@@ -83,6 +83,10 @@ class Literal(Expr):
 	def __str__(self):
 		return "<Literal %r>"%self.value
 
+class Lookup(Expr):
+	def __init__(self, name:Token):
+		self.name = name
+
 class FieldReference(Expr):
 	def __init__(self, lhs:Expr, field_name:Token):
 		self.lhs, self.field_name = lhs, field_name
@@ -95,6 +99,7 @@ class BinExp(Expr):
 
 def _be(op): return lambda a, b: BinExp(op, a, b)
 
+PowerOf = _be(operator.pow)
 Mul = _be(operator.mul)
 FloatDiv = _be(operator.truediv)
 FloatMod = _be(operator.mod)

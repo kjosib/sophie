@@ -15,7 +15,6 @@ class ExampleSmokeTests(unittest.TestCase):
 		sut = parse_file(example_folder / "alias.sg")
 		assert isinstance(sut, syntax.Module)
 		assert isinstance(sut.namespace["album_tree"], syntax.TypeDecl)
-		assert isinstance(sut.main, syntax.Expr)
 		self.assertEqual(7, simple_evaluator.run_module(sut))
 		
 	

@@ -1,11 +1,18 @@
-# Let comments begin with hash marks.
+# Comments begin with hash marks.
+# This file is actually a test-case for the type declarations which will soon
+# become an important part of doing advanced programming in Sophie.
+
 
 type:
-predicate[A] is A -> flag;
-album is (title:string, artist:string, year:integer, tracks:list[string]);
-tree[X] is { nil | tree(left:X,right:X) };
-album_tree is tree[album];
+
+	predicate[A] is A -> flag;
+	tree[X] is { nil | tree(left:X,right:X) };
+
+	album is (title:string, artist:string, year:integer, tracks:list[string]);
+	album_tree is tree[album];
+
 
 begin:
-5+2
+	13/2;
+	5+2;
 end.

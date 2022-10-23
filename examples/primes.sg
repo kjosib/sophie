@@ -1,3 +1,5 @@
+# This one's a bit more meat on the bones.
+
 define:
 
 primes(max) -> list[int] = NIL IF max < 2 ELSE cons(2, odd_primes) where
@@ -24,4 +26,9 @@ map(fn, elts) = nil if elts == nil else cons(fn(elts.head), map(fn, elts.tail));
 take(n, xs) = nil if n < 1 else cons(xs.head, take(n-1, xs.tail));
 
 
-begin: primes(256) end.
+begin:
+	"Here's a list of square numbers:";
+	some_squares;
+	"Here are the first few dozen prime numbers:";
+	primes(256);
+end.

@@ -1,0 +1,24 @@
+# This file demonstrates a little arithmetic.
+# Sophie can play the role of overpriced calculator.
+
+begin:
+
+"Precedence works like you learned in school:"; 3 + 4 * 5;
+"You can always override that with parentheses:"; (3+4)*5;
+
+"Three to the fourth power:"; 3 ^ 4;
+
+"Exponents are right-associative:"; 3^3^3;
+"It makes a big difference:"; (3^3)^3;
+
+"This next thing should be positive 16:"; -4 ^ 2;
+
+"Normal division gives you fractions:"; 10 / 3;
+
+"You can get integer division and remainder:"; 10 div 3; 10 mod 3;
+
+"There is also a concept of fractional remainder:"; 2.0 % 1.25;
+
+"Scientific Notation is available:"; 1e-4; 6.02e23;
+
+end.

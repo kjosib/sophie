@@ -9,7 +9,6 @@ and it needs to be connected with a suitable definition of a cons-cell.
 The interface to types is just nascent and will change much.
 """
 
-from collections import namedtuple
 from boozetools.support.symtab import NameSpace
 from . import type_algebra
 
