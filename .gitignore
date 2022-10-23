@@ -7,6 +7,7 @@ __pycache__/
 # local bits
 *.automaton
 .idea/*
+docs/_build/
 
 # C extensions
 *.so
