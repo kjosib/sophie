@@ -37,13 +37,22 @@ primes_smarter(max:integer) -> list[integer] = NIL IF max < 2 ELSE cons(2, odd_p
     more_primes(bound, squares, candidate_prime) = CASE
         WHEN candidate_prime > max THEN NIL;
 		WHEN candidate_prime > squares.head THEN more_primes(bound+1, squares.tail, candidate_prime);
-        WHEN is_prime THEN cons(candidate, successors);
+        WHEN is_prime THEN cons(candidate_prime, successors);
         ELSE successors;
     ESAC where
-        is_prime = NOT any [ candidate MOD p == 0 FOR p IN take(bound, odd_primes) ];
+		is_prime = NOT any (map(is_divisor, take(bound, odd_primes)));
+		is_divisor(p) = candidate_prime MOD p == 0;
         successors = more_primes(bound, squares, candidate_prime+2);
     end more_primes;
 end primes_smarter;
+
+square(x) = x * x;
+
+any(xs) = xs != nil and (xs.head or any(xs.tail));
+map(fn, elts) = nil if elts == nil else cons(fn(elts.head), map(fn, elts.tail));
+take(n, xs) = nil if n < 1 else cons(xs.head, take(n-1, xs.tail));
+
+begin: primes_smarter(2000) end.
 ```
 
 Keywords are case-insensitive. Names will preserve case but must differ in more than just case.
@@ -87,9 +96,18 @@ which is already a somewhat-advanced topic in CS.
 So the most likely direction is to set up some experimental instructional setting,
 and then take notes on how things go.
 
-## Open Problems
+## Current Status
 
-Most is not implemented yet. Some is not even contemplated yet.
+It parses, and it runs, but it does not check types, so run-time errors are absolutely still possible.
+Also, list comprehensions (such as you see in this example) do not yet evaluate,
+so the test case uses a mapping call instead.
+
+```
+    is_prime = NOT any [ candidate_prime MOD p == 0 FOR p IN take(bound, odd_primes) ];
+```
+
+Ideally list comprehensions would be syntactic sugar, but some underlying semantics are yet unsolved.
+Imports and exports are waiting on a proper module system, so they don't do anything yet.
 
 Interactivity is a big question mark right now.
 One option is explicit syntax for sequencing and (allowed) concurrency.
@@ -109,6 +127,7 @@ Here are some examples:
 
 I occasionally give talks on comp-sci concepts.
 Experience with audience reaction to the syntax and semantics of Sophie will guide further design development.
+It may seem a small thing, but algebra-style parentheses are much more clear to me than Lisp or Haskell style. 
 
 ### Various forms of optimization
 
