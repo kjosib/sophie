@@ -6,13 +6,18 @@
 type:
 
 	predicate[A] is A -> flag;
-	tree[X] is { nil | tree(left:X,right:X) };
-
-	album is (title:string, artist:string, year:integer, tracks:list[string]);
+	tree[X] is { nil | node(left:X,right:X) };
+	year is number;
+	track is (title:string, artist:string, published:year, recorded:year);
+	album is (title:string, published:year, tracks:list[track]);
 	album_tree is tree[album];
 
 
 begin:
 	13/2;
+	album("50 Public-Domain Songs", 2022, [
+		track("After You Get What You Want, You Don't Want It", "Irving Berlin", 1925, 2021),
+		track("Some of These Days", "Shelton Brooks", 1925, 2022),
+	]);
 	5+2;
 end.

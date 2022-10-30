@@ -1,0 +1,4 @@
+define:
+defined_twice = 12;
+defined_twice(x) = x + x;
+begin: defined_twice; end.

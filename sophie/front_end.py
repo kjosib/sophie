@@ -2,9 +2,17 @@
 """
 import sys
 from pathlib import Path
+from typing import Union
+
 from boozetools.macroparse.runtime import TypicalApplication, make_tables
 from boozetools.scanning.engine import IterableScanner
+from boozetools.parsing.interface import ParseError
+from boozetools.support.failureprone import Issue, Evidence, Severity
+from boozetools.support.pretty import DOT
 from . import syntax
+
+class SophieParseError(ParseError):
+	pass
 
 _tables = make_tables(Path(__file__).parent/"Sophie.md")
 
@@ -34,14 +42,40 @@ class SophieParser(TypicalApplication):
 		return some
 	
 	def default_parse(self, ctor, *args):
-		if hasattr(syntax, ctor):
-			return getattr(syntax, ctor)(*args)
-		else:
-			if "type" in ctor:
-				return ctor, *args
-			else:
-				raise NotImplementedError(ctor)
-			
+		return getattr(syntax, ctor)(*args)
+		
+	def unexpected_token(self, kind, semantic, pds):
+		raise SophieParseError(self.stack_symbols(pds), kind, self.yy.slice())
 	pass
 
 sophie_parser = SophieParser(_tables)
+
+def parse_file(pathname):
+	"""Read file given by name; pass contents to next phase."""
+	with open(pathname, "r") as fh:
+		text = fh.read()
+	return parse_text(text, pathname)
+
+def parse_text(text:str, pathname:Path) -> Union[syntax.Module, Issue]:
+	""" Submit text to parser; submit the resulting tree to subsequent pass """
+	try:
+		return sophie_parser.parse(text, filename=str(pathname))
+	except syntax.MismatchedBookendsError as ex:
+		return Issue(
+			phase="Checking Bookends",
+			severity=Severity.ERROR,
+			description="Mismatched where-clause end needs to match",
+			evidence={"": [Evidence(where) for where in ex.args]}
+		)
+	except ParseError as ex:
+		stack_symbols, kind, where = ex.args
+		return Issue(
+			phase="Parsing",
+			severity=Severity.ERROR,
+			description="Unexpected token at %r %s %r" % (stack_symbols, DOT, kind),
+			evidence={"": [Evidence(where)]},
+		)
+
+def complain(issues:list[Issue]):
+	for i in issues:
+		i.emit(lambda x:sophie_parser.source)

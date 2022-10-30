@@ -1,38 +1,67 @@
 """
 The set of parse-nodes in simple form.
 The parser calls these constructors with subordinate semantic-values in a bottom-up tree transduction.
-The constructors must organize the information so later algorithms can traverse and access this stuff easily.
-So, the resulting data structures will toss out much of the original linear structure,
-to replace it with such internal linkages as seem proper for analyzing and translating the program.
+These constructors may add a touch of organization.
+Class-level type annotations make peace with pycharm wherever later passes add fields.
 """
+
 import abc
 from typing import NamedTuple, Optional, Any, Callable
 import operator
 from boozetools.parsing.interface import SemanticError
 from boozetools.support.symtab import NameSpace
-from .preamble import static_root
 
-def expect(desire, error, *tokens):
-	if not desire:
-		raise SemanticError(error, *tokens)
-
-def nil_type_summand(a_slice): return Token("NIL", a_slice), None
-
-class Expr(abc.ABC):
-	pass
 
 class Token(NamedTuple):
-	# This is the generic semantic-value type the scanner yields for all nontrivial tokens.
+	# The generic semantic-value type the scanner yields for all nontrivial tokens.
 	text: str
 	slice: slice
 	
 	def __str__(self):
 		return "<Token %r>"%self.text
 
-class TypeDecl(NamedTuple):
+class MismatchedBookendsError(SemanticError):
+	# The one semantic error we catch early enough to interrupt the parse.
+	# It's early warning that things have gotten out of whack.
+	def __init__(self, head:slice, coda:slice):
+		super().__init__(head, coda)
+
+def _bookend(head:Token, coda:Token):
+	if head.text != coda.text:
+		raise MismatchedBookendsError(head.slice, coda.slice)
+
+class ProductType(NamedTuple):
+	factors: list
+	
+	def fields(self):
+		return [f.name.text for f in self.factors]
+
+class TypeSummand:
+	tag_ordinal: int
+	def __init__(self, name:Token, body:Optional[ProductType]):
+		self.name, self.body = name, body
+	
+def nil_type_summand(a_slice):
+	return TypeSummand(Token("NIL", a_slice), None)
+
+class UnionType:
+	def __init__(self, alternatives:list[TypeSummand]):
+		self.alternatives = alternatives
+		for tag_ordinal, t in enumerate(alternatives):
+			t.tag_ordinal = tag_ordinal
+
+class ArrowType(NamedTuple):
+	lhs: Any
+	rhs: Any
+
+class TypeCall(NamedTuple):
 	name: Token
-	params: Optional[list]
-	body: Any
+	params: list
+
+class TypeDecl:
+	namespace: NameSpace
+	def __init__(self, name:Token, params:Optional[list], body:Any):
+		self.name, self.params, self.body = name, params, body
 
 class Parameter(NamedTuple):
 	name: Token
@@ -46,36 +75,36 @@ class Signature(NamedTuple):
 	params: Optional[list[Parameter]]
 	return_type: Optional[object]
 
+class Expr(abc.ABC):
+	pass
+
 class Function:
+	namespace: NameSpace
+	sub_fns: dict[str:"Function"]  # for simple evaluator
 	def __init__(self, signature: Signature, expr:Expr, where: Optional["WhereClause"]):
 		self.signature, self.expr = signature, expr
-		self.namespace = NameSpace(place=self)
-		self.sub_fns = {}
-		for param in signature.params or ():
-			self.namespace[param.name.text] = param
-		if where is not None:
-			desire = where.end_name.text == signature.name.text
-			expect(desire, "Mismatched where-clause end needs to match", signature.name, where.end_name)
-			for fn in where.sub_fns:
-				key = fn.signature.name.text
-				self.namespace[key] = fn
-				self.sub_fns[key] = fn
-			
+		if where:
+			_bookend(signature.name, where.end_name)
+			self.where = where.sub_fns
+		else:
+			self.where = ()
+
+
 class WhereClause(NamedTuple):
 	sub_fns: list[Function]
 	end_name: Token
+
 	
 class Module:
+	namespace: NameSpace
+	constructors: dict[str:]
 	def __init__(self, exports:Optional[list], imports:Optional[list], types:Optional[list[TypeDecl]], functions:Optional[list[Function]], main:list[Expr]):
-		self.exports = exports
-		self.imports = imports
-		self.namespace = NameSpace(place=self, parent=static_root)
+		self.exports = exports or ()
+		self.imports = imports or ()
+		self.types = types or ()
+		self.functions = functions or ()
 		self.main = main
-		for td in types or ():
-			self.namespace[td.name.text] = td
-		for fn in functions or ():
-			self.namespace[fn.signature.name.text] = fn
-			fn.namespace.parent = self.namespace  # Hack? Or not?
+
 
 class Literal(Expr):
 	def __init__(self, value:Any, slice:slice):
@@ -157,4 +186,6 @@ class Comprehension(Expr):
 
 class ExplicitList(Expr):
 	def __init__(self, elts:list[Expr]):
+		for e in elts:
+			assert isinstance(e, Expr), e
 		self.elts = elts
