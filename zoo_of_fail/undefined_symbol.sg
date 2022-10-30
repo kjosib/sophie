@@ -1,0 +1,4 @@
+define:
+perfectly_cromulent = 37 + 42 * 12;
+no_good = 14 + something_absent;  # Expect an error about an undefined symbol here.
+begin: perfectly_cromulent / no_good; end.

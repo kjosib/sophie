@@ -7,3 +7,4 @@ main = a + b where
 	b = 7;
 end not_main;
 
+begin: main; end.

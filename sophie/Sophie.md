@@ -29,30 +29,48 @@ functions -> DEFINE ':' semicolon_terminated_list(function)
 main -> BEGIN ':' semicolon_terminated_list(expr) END '.'
 
 one_import -> short_string AS name
+```
 
+The grammar of type declarations leaves no room for doubt.
+I've not yet considered co/contravariance,
+but that's for another time.
+```
 type_declaration -> name optional(type_parameters) IS type_body :TypeDecl
 type_parameters -> '[' comma_terminated_list(name) ']'
-type_body -> union_type | product_type | simple_type
-union_type -> '{' seplist(type_summand, '|') '}'  :union_type
-type_summand -> name optional(product_type) | .NIL :nil_type_summand
-product_type -> '(' comma_terminated_list(field_definition) ')'
-field_definition -> name ':' simple_type
+type_body -> union_type | product_type | field_type
+union_type -> '{' seplist(type_summand, '|') '}'  :UnionType
+type_summand -> name optional(product_type) :TypeSummand | .NIL :nil_type_summand
+product_type -> '(' comma_terminated_list(field) ')' :ProductType
+field -> name ':' field_type :Parameter
+field_type -> name
+| name '[' comma_terminated_list(field_type) ']' :TypeCall
+| field_type '->' field_type :ArrowType
 
-simple_type -> '?' :type_implicit
-| name
-| name '[' comma_terminated_list(simple_type) ']' :type_call
-| simple_type '->' simple_type :arrow_type
+```
 
-
+The general structure of a function:
+```
 function -> signature '=' expr optional(where_clause) :Function
 signature -> name optional(parameter_list) optional(return_type) :Signature
-return_type -> '->' simple_type
+return_type -> '->' param_type
 where_clause -> WHERE semicolon_terminated_list(function) END name :WhereClause
+```
 
+Note that the parameters to a function allow things to be implied.
+You can either leave off the type for a name,
+or use a question-mark anywhere a type-name would normally go,
+and the system will deal with it sensibly.
+```
 parameter_list -> '(' comma_terminated_list(parameter) ')'
-parameter -> name :param_inferred
-| name ':' simple_type :param_constrained
+parameter -> name ':' param_type :Parameter | name :param_inferred
+param_type -> '?' :type_implicit
+| name
+| name '[' comma_terminated_list(param_type) ']' :TypeCall
+| param_type '->' param_type :ArrowType
+```
 
+From here down is the expression grammar.
+```
 expr -> integer | real | short_string | list_expr | case_expr
 | .NIL :nil_value
 | '(' expr ')'
@@ -92,7 +110,7 @@ when_clause -> WHEN expr THEN expr
 And here are the grammar macros: 
 ```
 seplist(x,s) -> x :first | ._ s .x :more
-termlist(x,s) -> seplist(x,s) | seplist(x,s) s
+termlist(x,s) -> seplist(x,s) | .seplist(x,s) s
 comma_terminated_list(x) -> termlist(x,',')
 semicolon_terminated_list(x) -> seplist(x,';') ';'
 optional(x) -> :nothing | x
