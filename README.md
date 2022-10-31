@@ -2,19 +2,28 @@
 
 A call-by-need strong-inferred-type language named for French mathematician Sophie Germain.
 
-The design goals are:
+Sophie is an educational project. It's for fun and learning, but might grow into something useful.
+
+The design goals, _in priority order,_ are:
 
 1. Have Fun!
 2. Keep it simple.
-3. Approachable appearance. This is admittedly subjective.
+3. Subjectively readable appearance in my personal opinion.
 4. Be pragmatic. Trade cheap computer power for a nicer time.
+5. Call-by-need pure-functional for general computation.
+6. Turtle graphics.
+7. Other nice things to have. (See the roadmap.)
+
+When all is said and done, I'd like Sophie to be a viable alternative for learning (or deepening one's grasp of) comp-sci.
+The call-by-need pure-functional design gives Sophie a very different flavor from your average introductory language,
+but should produce excellent habits.
 
 ## What's it look like?
 
-My aesthetic bends toward those derived from [Algol 60](https://www.theregister.com/2020/05/15/algol_60_at_60/),
+My aesthetic bends toward the [Algol](https://www.theregister.com/2020/05/15/algol_60_at_60/) clade,
 such as Pascal, C, Perl, Python, and Ruby. Given that most programmers seem to learn Java and Python these days,
 this should not break too many brains. However, Sophie is an expression-oriented call-by-need language,
-so some things will look a bit more like SQL or Haskell.
+so some things are bound look a bit more like SQL or Haskell.
 
 Here is a preliminary example:
 ```
@@ -23,7 +32,7 @@ Here is a preliminary example:
 type:
 predicate[A] is A -> flag;
 album is (title:string, artist:string, year:integer, tracks:list[string]);
-tree[X] is { nil | tree(left:X,right:X) };
+tree[X] is { nil | node(left:X,right:X) };
 album_tree is tree[album];
 
 define:
@@ -52,7 +61,10 @@ any(xs) = xs != nil and (xs.head or any(xs.tail));
 map(fn, elts) = nil if elts == nil else cons(fn(elts.head), map(fn, elts.tail));
 take(n, xs) = nil if n < 1 else cons(xs.head, take(n-1, xs.tail));
 
-begin: primes_smarter(2000) end.
+begin:
+    map(square, [1,2,3,4]);
+    primes_smarter(2000);
+end.
 ```
 
 Keywords are case-insensitive. Names will preserve case but must differ in more than just case.
@@ -66,53 +78,45 @@ I'd like syntax for literal sets and dictionary-like objects.
 
 ## Install/Run
 
-1. `pip install booze-tools`
+1. `pip install --upgrade booze-tools`
 2. Clone or download the repository.
-3. `py -m sophie your_program.sg`
+3. `py -m sophie examples/primes.sg`
 
 ## What to Expect
 
-Sophie is presently an exploratory project.
-Nothing is yet etched in stone but the general philosophy.
+Sophie can run programs, subject to a few caveats.
 
-At the moment, it just parses and reports on the parse.
-There is not yet any semantic analysis or execution.
-Not every grammar rule is yet written down, so the `primes_simple` example above won't yet parse.
+* There is not yet any way to take input.
+* The only output is the return value from each expression in the `begin:` section.
+* List comprehensions and range/progression operator(s) do not yet work.
+* It is of course not a high-performance experience yet.
 
 ## How do I Learn Sophie?
 
-When all is said and done, I'd like Sophie to be a viable alternative for
-learning (or deepening one's grasp of) comp-sci.
-The call-by-need pure-functional design gives Sophie a very different flavor from
-your average introductory language, but should produce excellent habits.
+1. [Read the docs](https://sophie.readthedocs.io)
+2. Poke around the [examples](https://github.com/kjosib/sophie/tree/main/examples) and [grammar](https://github.com/kjosib/sophie/blob/main/sophie/Sophie.md)
+3. Contribute to the docs in the usual way.
 
 It sure might be nice to have a *Learn computer science with Sophie*
 book on the coffee table, but that book has yet to be written.
-You could start by looking at the grammar,
-which is at `sophie/Sophie.md` in the project hierarchy.
-Of course that assumes you know how to read a context-free grammar,
-which is already a somewhat-advanced topic in CS.
-
 So the most likely direction is to set up some experimental instructional setting,
 and then take notes on how things go.
 
 ## Current Status
 
-It parses, and it runs, but it does not check types, so run-time errors are absolutely still possible.
-Also, list comprehensions (such as you see in this example) do not yet evaluate,
-so the test case uses a mapping call instead.
+* It runs, with caveats as below.
+* It does not check types, so run-time errors are absolutely still possible.
+* It does check the validity of identifiers (but not yet field names, which depend on type).
+* List comprehension syntax `[expr FOR name IN expr]` parses but does not yet evaluate.
+  Also, that might not be the final form.
+* There is no interactivity. It will depend on the _Functional Process Abstraction_ which also doesn't exist yet.
+* Imports and exports are waiting on a proper module system, so they don't do anything yet.
 
-```
-    is_prime = NOT any [ candidate_prime MOD p == 0 FOR p IN take(bound, odd_primes) ];
-```
+Ideally list comprehensions would be syntactic sugar for some combination of map/filter/zip expressions.
 
-Ideally list comprehensions would be syntactic sugar, but some underlying semantics are yet unsolved.
-Imports and exports are waiting on a proper module system, so they don't do anything yet.
-
-Interactivity is a big question mark right now.
-One option is explicit syntax for sequencing and (allowed) concurrency.
-Maybe controlling a bank of elevators would be a good concrete example problem?
+For FPA, maybe controlling a bank of elevators would be a good concrete example problem?
 The pipe-dream is an asynchronous and resilient processes network similar to Erlang.
+
 
 ## Why not just use Language X, Y, or Z?
 

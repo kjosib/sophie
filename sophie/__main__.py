@@ -14,11 +14,13 @@ if len(sys.argv) == 2:
 		issues = resolve_words(module, static_root)
 		if issues:
 			complain(issues)
-		else:
+		elif module.main:
 			run_module(module)
+		else:
+			print("That module has no `begin:` section and thus is not a main program.", file=sys.stderr)
 	else:
 		complain([module])
 else:
 	print("    py -m sophie program.sg")
-	print("will attempt to parse and analyze the program.")
+	print("will run program.sg if possible, or else try to explain why not.")
 

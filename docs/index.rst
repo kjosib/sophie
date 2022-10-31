@@ -8,20 +8,17 @@ Welcome to Sophie's documentation!
 
 Sophie is a call-by-need strong-inferred-type language named for French mathematician Sophie Germain.
 
-The design goals are:
-
-1. Have Fun!
-2. Keep it simple.
-3. Subjectively readable appearance in my personal opinion.
-4. Be pragmatic. Trade cheap computer power for having a nicer time.
-
 
 .. toctree::
    :maxdepth: 2
    :caption: Contents:
 
-   beginner
-   crosswalk
+   why_sophie
+   learn
+   quick_start
+   reference
+   goals
+   contributing
 
 .. note::
    Sophie is not yet a complete system. If you're feeling adventurous, read on.

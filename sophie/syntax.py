@@ -3,6 +3,7 @@ The set of parse-nodes in simple form.
 The parser calls these constructors with subordinate semantic-values in a bottom-up tree transduction.
 These constructors may add a touch of organization.
 Class-level type annotations make peace with pycharm wherever later passes add fields.
+
 """
 
 import abc
@@ -11,6 +12,9 @@ import operator
 from boozetools.parsing.interface import SemanticError
 from boozetools.support.symtab import NameSpace
 
+class PrimitiveType:
+	""" For the moment, a few primitive bits unavailable to the language-proper are also here. """
+	pass
 
 class Token(NamedTuple):
 	# The generic semantic-value type the scanner yields for all nontrivial tokens.
@@ -98,12 +102,12 @@ class WhereClause(NamedTuple):
 class Module:
 	namespace: NameSpace
 	constructors: dict[str:]
-	def __init__(self, exports:Optional[list], imports:Optional[list], types:Optional[list[TypeDecl]], functions:Optional[list[Function]], main:list[Expr]):
+	def __init__(self, exports:Optional[list], imports:Optional[list], types:Optional[list[TypeDecl]], functions:Optional[list[Function]], main:Optional[list[Expr]]):
 		self.exports = exports or ()
 		self.imports = imports or ()
 		self.types = types or ()
 		self.functions = functions or ()
-		self.main = main
+		self.main = main or ()
 
 
 class Literal(Expr):

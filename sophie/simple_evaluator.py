@@ -3,7 +3,7 @@ Call-By-Need with Direct Interpretation
 Absolutely simplest, most straight-forward possible implementation.
 
 """
-
+import sys
 from typing import Any, Union
 from collections import namedtuple, deque
 import abc
@@ -44,6 +44,10 @@ class Thunk:
 LAZY_VALUE = Union[STRICT_VALUE, Thunk]
 
 def actual_value(it:LAZY_VALUE) -> STRICT_VALUE:
+	'''
+	While this will not return a thunk as such,
+	it may return a structure which contains thunks.
+	'''
 	while isinstance(it, Thunk):
 		it = it.force()
 	return it
@@ -180,20 +184,28 @@ def _prepare_global_scope(dynamic_env:NameSpace, items):
 			dynamic_env[key] = Constructor("", dfn.fields())
 		elif callable(dfn):
 			dynamic_root[key] = Primitive(key, dfn)
+		elif isinstance(dfn, (float, int, str, bytes)):
+			dynamic_root[key] = dfn
 		elif type(dfn) in _ignore_these:
 			pass
 		else:
 			dynamic_root[key] = dfn
-			print("Don't know how to deal with %r %r"%(type(dfn), key))
+			print("Don't know how to deal with %r %r"%(type(dfn), key), file=sys.stderr)
 
 _ignore_these = {
 	syntax.ArrowType,
-	syntax.UnionType,
+	syntax.PrimitiveType,
 	syntax.Token,
 	syntax.TypeCall,
+	syntax.UnionType,
 }
 
 def dethunk(result:dict):
+	"""
+	This can be considered as (most of) the first and most trivial I/O driver.
+	Its entire job is to push a program to completion by evaluating every thunk it produces.
+	There should be a better way, but it will probably be the consequence of an I/O subsystem.
+	"""
 	dict_queue = deque()
 	dict_queue.append(result)
 	while dict_queue:
@@ -203,4 +215,5 @@ def dethunk(result:dict):
 			if isinstance(v, dict): dict_queue.append(v)
 
 dynamic_root = NameSpace(place=None)
+_prepare_global_scope(dynamic_root, static_root.parent.local.items())
 _prepare_global_scope(dynamic_root, static_root.local.items())

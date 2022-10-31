@@ -16,15 +16,8 @@ primes(max) -> list[int] = NIL IF max < 2 ELSE cons(2, odd_primes) where
 	end more_primes;
 end primes;
 
-
-some_squares = map(square, [1,2,3]);
-
-square(x) = x * x;
-
-any(xs) = xs != nil and (xs.head or any(xs.tail));
-map(fn, elts) = nil if elts == nil else cons(fn(elts.head), map(fn, elts.tail));
-take(n, xs) = nil if n < 1 else cons(xs.head, take(n-1, xs.tail));
-
+some_squares = map(square, [1,2,3]);  # You can use words before you define them,
+square(x) = x * x;                    # as long as you do get around to defining them.
 
 begin:
 	"Here's a list of square numbers:";

@@ -21,4 +21,8 @@ begin:
 
 "Scientific Notation is available:"; 1e-4; 6.02e23;
 
+"Typical constants are available"; e; tau; pi;
+
+"Math functions are built in"; sqrt(2); sum [1, 2, 3, 4]; hypot([3,4]);
+
 end.
