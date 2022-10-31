@@ -1,6 +1,6 @@
 # Grammar for Sophie (Germain)
 
-Toy programming language inspired by Pascal and way too many other things.
+Programming language inspired by Pascal and way too many other things.
 Named for another French mathematician: Sophie Germain.
 She was, among other things, a number theorist.
 
@@ -20,13 +20,13 @@ Quick primer on reading the grammar:
 * Production rules without a parse action either are renaming rules or else create tuples.
 
 ```
-start -> optional(exports) optional(imports) optional(types) optional(functions) main :Module
+start -> optional(exports) optional(imports) optional(types) optional(functions) optional(main) END '.' :Module
 
 exports -> EXPORT ':' comma_terminated_list(name) ';'
 imports -> IMPORT ':' semicolon_terminated_list(one_import)
 types -> TYPE ':' semicolon_terminated_list(type_declaration)
 functions -> DEFINE ':' semicolon_terminated_list(function)
-main -> BEGIN ':' semicolon_terminated_list(expr) END '.'
+main -> BEGIN ':' semicolon_terminated_list(expr)
 
 one_import -> short_string AS name
 ```
