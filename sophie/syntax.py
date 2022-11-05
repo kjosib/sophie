@@ -34,29 +34,36 @@ def _bookend(head:Token, coda:Token):
 	if head.text != coda.text:
 		raise MismatchedBookendsError(head.slice, coda.slice)
 
-class ProductType(NamedTuple):
-	factors: list
+class RecordType:
+	def __init__(self, factors:list):
+		self.factors = factors
 	
 	def fields(self):
 		return [f.name.text for f in self.factors]
 
 class TypeSummand:
 	tag_ordinal: int
-	def __init__(self, name:Token, body:Optional[ProductType]):
+	def __init__(self, name:Token, body:Optional[Any]):
 		self.name, self.body = name, body
 	
-def nil_type_summand(a_slice):
+def nil_type(a_slice):
 	return TypeSummand(Token("NIL", a_slice), None)
 
-class UnionType:
+def ordinal_type(name:Token):
+	return TypeSummand(name, None)
+
+class VariantType:
 	def __init__(self, alternatives:list[TypeSummand]):
 		self.alternatives = alternatives
 		for tag_ordinal, t in enumerate(alternatives):
 			t.tag_ordinal = tag_ordinal
 
 class ArrowType(NamedTuple):
-	lhs: Any
+	lhs: list[Any]
 	rhs: Any
+
+def short_arrow_type(lhs, rhs):
+	return ArrowType([lhs], rhs)
 
 class TypeCall(NamedTuple):
 	name: Token

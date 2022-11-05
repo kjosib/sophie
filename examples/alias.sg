@@ -5,8 +5,12 @@
 
 type:
 
-	predicate[A] is A -> flag;
-	tree[X] is { nil | node(left:X,right:X) };
+	predicate[A] is function A -> flag;
+	comparator[A] is function A,A -> flag;
+	tree[X] is case
+	    nil;
+	    node(left:X,right:X);
+    esac;
 	year is number;
 	track is (title:string, artist:string, published:year, recorded:year);
 	album is (title:string, published:year, tracks:list[track]);

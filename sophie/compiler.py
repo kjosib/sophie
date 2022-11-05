@@ -85,12 +85,12 @@ class WordDefiner(Visitor):
 				self._install(td.namespace, param_name, None)
 		self.visit(td.body, td.name)
 	
-	def visit_UnionType(self, it:syntax.UnionType, name:syntax.Token):
+	def visit_VariantType(self, it:syntax.VariantType, name:syntax.Token):
 		for summand in it.alternatives:
 			if summand.body is not None:
 				self._install(self.globals, summand.name, summand)
 	
-	def visit_ProductType(self, it:syntax.ProductType, name:syntax.Token):
+	def visit_RecordType(self, it:syntax.RecordType, name:syntax.Token):
 		slots = NameSpace(place=self)
 		for name, factor in it.factors:
 			self._install(slots, name, None)
@@ -131,11 +131,11 @@ class WordResolver(Visitor):
 		for expr in module.main:
 			self.visit(expr, module.namespace)
 		
-	def visit_UnionType(self, it:syntax.UnionType, env:NameSpace):
+	def visit_VariantType(self, it:syntax.VariantType, env:NameSpace):
 		for alt in it.alternatives:
 			self.visit(alt, env)
 	
-	def visit_ProductType(self, it:syntax.ProductType, env:NameSpace):
+	def visit_RecordType(self, it:syntax.RecordType, env:NameSpace):
 		for name, factor in it.factors:
 			self.visit(factor, env)
 	
@@ -168,7 +168,8 @@ class WordResolver(Visitor):
 		pass
 	
 	def visit_ArrowType(self, it:syntax.ArrowType, env:NameSpace):
-		self.visit(it.lhs, env)
+		for a in it.lhs:
+			self.visit(a, env)
 		self.visit(it.rhs, env)
 
 	def visit_ShortCutExp(self, it:syntax.ShortCutExp, env:NameSpace):

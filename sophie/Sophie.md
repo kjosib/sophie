@@ -10,6 +10,10 @@ There are three main goals:
 2. Use a call-by-need evaluation strategy.
 3. Do something cool with data type declarations.
 
+**This document is no mere reference.**
+It is the very source-file from which Sophie's parser and scanner are generated.
+It is up to date by definition.
+
 ## Productions start
 
 Quick primer on reading the grammar:
@@ -18,6 +22,7 @@ Quick primer on reading the grammar:
 * Punctuation in `'` quotes `'` are terminals which also have no semantic value.
 * Things like `:foo` refer to parse actions, defined elsewhere.
 * Production rules without a parse action either are renaming rules or else create tuples.
+* Something like `optional(foo)` means a reference to the `optional` macro. These are defined later on in this file.
 
 ```
 start -> optional(exports) optional(imports) optional(types) optional(functions) optional(main) END '.' :Module
@@ -31,24 +36,35 @@ main -> BEGIN ':' semicolon_terminated_list(expr)
 one_import -> short_string AS name
 ```
 
-The grammar of type declarations leaves no room for doubt.
-I've not yet considered co/contravariance,
-but that's for another time.
+**The grammar of type declarations**
+
+At the moment, the intended semantics are typical of Hindley-Milner type algebras,
+with one quirk: the NIL symbol can be a member of any club that will have it.
+I've not yet considered more general co/contravariance: That's for another time.
+
 ```
 type_declaration -> name optional(type_parameters) IS type_body :TypeDecl
 type_parameters -> '[' comma_terminated_list(name) ']'
-type_body -> union_type | product_type | field_type
-union_type -> '{' seplist(type_summand, '|') '}'  :UnionType
-type_summand -> name optional(product_type) :TypeSummand | .NIL :nil_type_summand
-product_type -> '(' comma_terminated_list(field) ')' :ProductType
+type_body -> field_type | record_type | variant_type
+record_type -> '(' comma_terminated_list(field) ')'   :RecordType
+variant_type -> CASE semicolon_terminated_list(type_summand) ESAC  :VariantType
+type_summand -> .NIL                :nil_type
+              | name                :ordinal_type
+              | name field_type     :TypeSummand
+              | name record_type    :TypeSummand
+
+
 field -> name ':' field_type :Parameter
 field_type -> name
 | name '[' comma_terminated_list(field_type) ']' :TypeCall
-| field_type '->' field_type :ArrowType
+| FUNCTION comma_terminated_list(field_type) '->' field_type :ArrowType
 
 ```
 
-The general structure of a function:
+Longer-term, I'd like to take on 
+
+
+**The general structure of a function:**
 ```
 function -> signature '=' expr optional(where_clause) :Function
 signature -> name optional(parameter_list) optional(return_type) :Signature
@@ -66,10 +82,11 @@ parameter -> name ':' param_type :Parameter | name :param_inferred
 param_type -> '?' :type_implicit
 | name
 | name '[' comma_terminated_list(param_type) ']' :TypeCall
-| param_type '->' param_type :ArrowType
+| FUNCTION comma_terminated_list(param_type) '->' param_type :ArrowType
 ```
 
-From here down is the expression grammar.
+**The Expression Grammar:**
+
 ```
 expr -> integer | real | short_string | list_expr | case_expr
 | .NIL :nil_value
@@ -105,9 +122,9 @@ list_body -> expr FOR name IN expr :Comprehension
 
 case_expr -> CASE semicolon_terminated_list(when_clause) ELSE expr ';' ESAC :CaseWhen
 when_clause -> WHEN expr THEN expr
-
 ```
-And here are the grammar macros: 
+
+**Grammar Macros:**
 ```
 seplist(x,s) -> x :first | ._ s .x :more
 termlist(x,s) -> seplist(x,s) | .seplist(x,s) s

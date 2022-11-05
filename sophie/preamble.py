@@ -4,7 +4,10 @@
 # Also for the moment, I import (most of) Python's math library directly into the primitive-root namespace.
 
 type:
-	list[x] is { nil | cons(head:x, tail:list[x]) };
+	list[x] is CASE
+		 cons(head:x, tail:list[x]);
+		 nil;
+	ESAC;
 define:
 	any(xs) = xs != nil and (xs.head or any(xs.tail));
 	all(xs) = xs == nil or (xs.head and all(xs.tail));
