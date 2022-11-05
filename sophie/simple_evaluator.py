@@ -177,10 +177,13 @@ def _prepare_global_scope(dynamic_env:NameSpace, items):
 			dynamic_env[key] = close_one_function(dynamic_env, dfn)
 		elif isinstance(dfn, syntax.TypeSummand):
 			if dfn.body:
-				dynamic_env[key] = Constructor(key, dfn.body.fields())
+				if isinstance(dfn.body, syntax.RecordType):
+					dynamic_env[key] = Constructor(key, dfn.body.fields())
+				else:
+					raise NotImplementedError(key, "This particular form isn't yet implemented.")
 			elif key != 'NIL':
 				dynamic_env[key] = Constructor(key, [])
-		elif isinstance(dfn, (syntax.TypeDecl, syntax.ProductType)):
+		elif isinstance(dfn, (syntax.TypeDecl, syntax.RecordType)):
 			dynamic_env[key] = Constructor("", dfn.fields())
 		elif callable(dfn):
 			dynamic_root[key] = Primitive(key, dfn)
@@ -197,7 +200,7 @@ _ignore_these = {
 	syntax.PrimitiveType,
 	syntax.Token,
 	syntax.TypeCall,
-	syntax.UnionType,
+	syntax.VariantType,
 }
 
 def dethunk(result:dict):
