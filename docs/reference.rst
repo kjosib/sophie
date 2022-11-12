@@ -47,6 +47,7 @@ Intrinsics
 Predefined type names include ``flag``, ``number``, ``string``, and ``list``.
 That last has the pre-defined constructor ``cons``, which takes fields ``head`` and ``tail``.
 The implementation of explicit lists like ``[this, that, the, other]`` is in terms of ``cons``.
+The Boolean truth values are called ``yes`` and ``no``.
 
 Predefined functions include:
 
@@ -58,7 +59,8 @@ Predefined functions include:
   If ``xs`` is empty, it returns ``zero`` without ever calling ``fn``.
 * ``filter(predicate, xs)``: Returns a list composed of those elements from ``fn`` such that ``predicate(fn)``.
 * ``sum(xs)``: add all the numbers in the given list and return their sum, or zero if the list is empty.
-* take(n, xs): return a list composed of the first ``n`` elements of ``xs``.
+* ``take(n, xs)``: return a list composed of the first ``n`` elements of ``xs``.
+* ``drop(n, xs)``: return the remainder of list ``xs`` after skipping the first ``n`` elements.
 * Python's math library of functions and constants are also installed, with two caveats:
   * ``log`` becomes two functions: ``log(x)`` and ``log_base(x, b)`` because Sophie does not deal in optional arguments.
   * ``hypot`` is re-implemented in Sophie because the python version takes a variable number of arguments, which is currently too hard to deal with more directly.

@@ -18,7 +18,7 @@ class Procedure(abc.ABC):
 	def apply(self, caller_env:NameSpace, args:list[syntax.Expr]) -> Any:
 		pass
 
-STRICT_VALUE = Union[int, float, str, Procedure, namedtuple, "Closure"]
+STRICT_VALUE = Union[int, float, str, Procedure, namedtuple, "Closure", dict]
 
 ABSENT = object()
 class Thunk:
@@ -31,7 +31,7 @@ class Thunk:
 		
 	def force(self) -> STRICT_VALUE:
 		if self._value is ABSENT:
-			self._value = actual_value(evaluate(self._dynamic_env, self._expr))
+			self._value = actual_value(evaluate(self._expr, self._dynamic_env))
 			del self._dynamic_env, self._expr
 		return self._value
 	
@@ -52,43 +52,68 @@ def actual_value(it:LAZY_VALUE) -> STRICT_VALUE:
 		it = it.force()
 	return it
 
-def evaluate(dynamic_env:NameSpace, expr:syntax.Expr) -> LAZY_VALUE:
-	# Hinkey double-dispatch might be faster as a dictionary look-up.
-	# That's a side-quest, though.
-	def strict(sub_expr): return actual_value(evaluate(dynamic_env, sub_expr))
-	if isinstance(expr, syntax.Literal): return expr.value
-	elif isinstance(expr, syntax.Lookup): return dynamic_env[expr.name.text]
-	elif isinstance(expr, syntax.BinExp):
-		return expr.op(strict(expr.lhs), strict(expr.rhs))
-	elif isinstance(expr, syntax.UnaryExp):
-		return expr.op(strict(expr.arg))
-	elif isinstance(expr, syntax.ShortCutExp):
-		lhs = strict(expr.lhs)
-		assert isinstance(lhs, bool)
-		return lhs if lhs == expr.keep else strict(expr.rhs)
-	elif isinstance(expr, syntax.Call):
-		procedure = strict(expr.fn_exp)
-		assert isinstance(procedure, Procedure)
-		return procedure.apply(dynamic_env, expr.args)
-	elif isinstance(expr, syntax.Cond):
-		if_part = strict(expr.if_part)
-		sequel = expr.then_part if if_part else expr.else_part
-		return delay(dynamic_env, sequel)
-	elif isinstance(expr, syntax.FieldReference):
-		lhs = strict(expr.lhs)
-		key = expr.field_name.text
-		if isinstance(lhs, dict): return lhs[key]
-		else: return getattr(lhs, key)
-	elif isinstance(expr, syntax.ExplicitList):
-		cons = dynamic_root['cons']
-		assert isinstance(cons, Constructor)
-		it = None
-		for sx in reversed(expr.elts):
-			it = cons.apply(dynamic_env, [sx, it])
-		return it
-	# elif isinstance(expr, syntax.Comprehension):  # Undecided how just yet.
+def strict(expr:syntax.Expr, dynamic_env:NameSpace):
+	return actual_value(evaluate(expr, dynamic_env))
+
+def _eval_literal(expr:syntax.Literal, dynamic_env:NameSpace):
+	return expr.value
+
+def _eval_lookup(expr:syntax.Lookup, dynamic_env:NameSpace):
+	return dynamic_env[expr.name.text]
+
+def _eval_bin_exp(expr:syntax.BinExp, dynamic_env:NameSpace):
+	return expr.op(strict(expr.lhs, dynamic_env), strict(expr.rhs, dynamic_env))
+
+def _eval_unary_exp(expr:syntax.UnaryExp, dynamic_env:NameSpace):
+	return expr.op(strict(expr.arg, dynamic_env))
+
+def _eval_shortcut_exp(expr:syntax.ShortCutExp, dynamic_env:NameSpace):
+	lhs = strict(expr.lhs, dynamic_env)
+	assert isinstance(lhs, bool)
+	return lhs if lhs == expr.keep else strict(expr.rhs, dynamic_env)
+
+def _eval_call(expr:syntax.Call, dynamic_env:NameSpace):
+	procedure = strict(expr.fn_exp, dynamic_env)
+	assert isinstance(procedure, Procedure)
+	return procedure.apply(dynamic_env, expr.args)
+
+def _eval_cond(expr:syntax.Cond, dynamic_env:NameSpace):
+	if_part = strict(expr.if_part, dynamic_env)
+	sequel = expr.then_part if if_part else expr.else_part
+	return delay(dynamic_env, sequel)
+
+def _eval_field_ref(expr:syntax.FieldReference, dynamic_env:NameSpace):
+	lhs = strict(expr.lhs, dynamic_env)
+	key = expr.field_name.text
+	if isinstance(lhs, dict):
+		return lhs[key]
 	else:
-		raise NotImplementedError(type(expr), expr)
+		return getattr(lhs, key)
+
+def _eval_explicit_list(expr:syntax.ExplicitList, dynamic_env:NameSpace):
+	cons = dynamic_root['cons']
+	assert isinstance(cons, Constructor)
+	it = None
+	for sx in reversed(expr.elts):
+		it = cons.apply(dynamic_env, [sx, it])
+	return it
+
+def _eval_match_expr(expr:syntax.MatchExpr, dynamic_env:NameSpace):
+	subject = actual_value(dynamic_env[expr.name.text])
+	tag = None if subject is None else subject[""]
+	try:
+		branch = expr.dispatch[tag]
+	except KeyError:
+		branch = expr.otherwise
+		if branch is None:
+			raise RuntimeError("Confused by tag %r; this will not be possible after type-checking works.")
+	return delay(dynamic_env, branch)
+
+
+def evaluate(expr:syntax.Expr, dynamic_env:NameSpace) -> LAZY_VALUE:
+	try: fn = EVALUATE[type(expr)]
+	except KeyError: raise NotImplementedError(type(expr), expr)
+	else: return fn(expr, dynamic_env)
 
 def delay(dynamic_env:NameSpace, item) -> LAZY_VALUE:
 	# For two kinds of expression, there is no profit to delay:
@@ -146,7 +171,7 @@ class Primitive(Procedure):
 		if self._arity != len(args):
 			message = "Native procedure %s expected %d args, got %d."
 			raise TypeError(message%(self._key, self._arity, len(args)))
-		values = [actual_value(evaluate(caller_env, a)) for a in args]
+		values = [actual_value(evaluate(a, caller_env)) for a in args]
 		return self._native(*values)
 
 class Constructor(Procedure):
@@ -165,9 +190,12 @@ def run_module(module: syntax.Module):
 	module_env = dynamic_root.new_child(module)
 	_prepare_global_scope(module_env, module.namespace.local.items())
 	for expr in module.main:
-		result = evaluate(module_env, expr)
+		result = evaluate(expr, module_env)
 		if isinstance(result, Thunk): result = actual_value(result)
-		if isinstance(result, dict): dethunk(result)
+		if isinstance(result, dict):
+			dethunk(result)
+			if result.get("") == 'cons':
+				result = decons(result)
 		print(result)
 	return result
 
@@ -198,7 +226,7 @@ def _prepare_global_scope(dynamic_env:NameSpace, items):
 _ignore_these = {
 	syntax.ArrowType,
 	syntax.PrimitiveType,
-	syntax.Token,
+	syntax.Name,
 	syntax.TypeCall,
 	syntax.VariantType,
 }
@@ -217,6 +245,23 @@ def dethunk(result:dict):
 			if isinstance(v, Thunk): work_dict[k] = v = actual_value(v)
 			if isinstance(v, dict): dict_queue.append(v)
 
+def decons(cons:dict) -> list:
+	result = []
+	while isinstance(cons, dict) and cons.get("") == 'cons':
+		result.append(cons['head'])
+		cons = cons['tail']
+	if cons is not None:
+		result.append(cons)
+	return result
+
 dynamic_root = NameSpace(place=None)
 _prepare_global_scope(dynamic_root, static_root.parent.local.items())
 _prepare_global_scope(dynamic_root, static_root.local.items())
+
+EVALUATE = {}
+for _k, _v in list(globals().items()):
+	if _k.startswith("_eval_"):
+		_t = _v.__annotations__["expr"]
+		assert isinstance(_t, type), (_k, _t)
+		EVALUATE[_t] = _v
+
