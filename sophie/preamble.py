@@ -8,22 +8,43 @@ type:
 		 cons(head:x, tail:list[x]);
 		 nil;
 	ESAC;
+	
 define:
 	any(xs) = xs != nil and (xs.head or any(xs.tail));
 	all(xs) = xs == nil or (xs.head and all(xs.tail));
-	map(fn, xs) = nil if xs == nil else cons(fn(xs.head), map(fn, xs.tail));
+	#any(xs) = case xs: nil -> no; cons -> xs.head or any(xs.tail); esac;
+	#all(xs) = case xs: nil -> yes; cons -> xs.head and all(xs.tail); esac;
+	
+	map(fn, xs) = case xs:
+		nil -> nil;
+		cons -> cons(fn(xs.head), map(fn, xs.tail));
+	esac;
+	
 	reduce(fn, zero, xs) = fold(zero, xs) where
-		fold(a, xs) = a if xs == nil else fold(fn(a, xs.head), xs.tail);
+		fold(a, xs) = case xs:
+			nil -> a;
+			cons -> fold(fn(a, xs.head), xs.tail);
+		esac;
 	end reduce;
-	filter(predicate, xs) = case
-		when xs == nil then nil;
-		when predicate(xs.head) then cons(xs.head, rest);
-		else rest;
+	
+	filter(predicate, xs) = case xs:
+		nil -> nil;
+		cons -> cons(xs.head, rest) if predicate(xs.head) else rest;
 	esac where
 		rest = filter(predicate, xs.tail);
 	end filter;
+	
+	take(n, xs) = nil if n < 1 else case xs:
+		nil -> nil;
+		cons -> cons(xs.head, take(n-1, xs.tail));
+	esac;
+	
+	drop(n, xs) = xs if n < 1 else case xs:
+		nil -> nil;
+		cons -> drop(n-1, xs.tail);
+	esac;
+	
 	sum(xs) = reduce(add, 0, xs) where add(a,b) = a+b; end sum;
-	take(n, xs) = nil if n < 1 else cons(xs.head, take(n-1, xs.tail));
 	hypot(xs) = sqrt(sum(map(square, xs))) where square(x) = x*x; end hypot;
 end.
 
@@ -44,6 +65,8 @@ def _init():
 			primitive_root[name] = getattr(math, name)
 	primitive_root['log'] = lambda x:math.log(x)
 	primitive_root['log_base'] = lambda x,b: math.log(x, b)
+	primitive_root['yes'] = True
+	primitive_root['no'] = False
 	
 	preamble = front_end.parse_text(__doc__, __file__)
 	if isinstance(preamble, Module):

@@ -8,14 +8,20 @@ type:
 	predicate[A] is function A -> flag;
 	comparator[A] is function A,A -> flag;
 	tree[X] is case
-	    nil;
-	    node(left:X,right:X);
+	    leaf(item:X);
+	    node(left:tree[X], right:tree[X]);
     esac;
 	year is number;
 	track is (title:string, artist:string, published:year, recorded:year);
 	album is (title:string, published:year, tracks:list[track]);
 	album_tree is tree[album];
 
+define:
+
+treemap(fn, t) = case t:
+    leaf -> leaf(fn(t.item));
+    node -> node(treemap(fn, t.left), treemap(fn, t.right));
+esac;
 
 begin:
 	13/2;

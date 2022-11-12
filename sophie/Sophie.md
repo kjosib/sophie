@@ -13,6 +13,7 @@ There are three main goals:
 **This document is no mere reference.**
 It is the very source-file from which Sophie's parser and scanner are generated.
 It is up to date by definition.
+(However, it might get out ahead of the evaluator.)
 
 ## Productions start
 
@@ -20,9 +21,10 @@ Quick primer on reading the grammar:
 
 * All-upper-case represents a KEYWORD, which by the way has no semantic value.
 * Punctuation in `'` quotes `'` are terminals which also have no semantic value.
-* Things like `:foo` refer to parse actions, defined elsewhere.
+* Things like `:foo` refer to parse actions, defined elsewhere. You can ignore them.
 * Production rules without a parse action either are renaming rules or else create tuples.
 * Something like `optional(foo)` means a reference to the `optional` macro. These are defined later on in this file.
+* You occasionally see a dot before a symbol, as in `.NIL`. You can ignore these dots.
 
 ```
 start -> optional(exports) optional(imports) optional(types) optional(functions) optional(main) END '.' :Module
@@ -88,7 +90,7 @@ param_type -> '?' :type_implicit
 **The Expression Grammar:**
 
 ```
-expr -> integer | real | short_string | list_expr | case_expr
+expr -> integer | real | short_string | list_expr | case_expr | match_expr
 | .NIL :nil_value
 | '(' expr ')'
 | expr '.' name :FieldReference
@@ -120,9 +122,16 @@ list_expr -> '[' list_body ']'
 list_body -> comma_terminated_list(expr) :ExplicitList
 list_body -> expr FOR name IN expr :Comprehension
 
-case_expr -> CASE semicolon_terminated_list(when_clause) ELSE expr ';' ESAC :CaseWhen
+case_expr -> CASE semicolon_terminated_list(when_clause) else_clause ESAC :CaseWhen
 when_clause -> WHEN expr THEN expr
+else_clause -> ELSE expr ';'
+
+match_expr -> CASE subject ':' semicolon_terminated_list(alternative) optional(else_clause) ESAC  :match_expr
+subject -> name | expr AS name :SubjectWithExpr
+alternative -> pattern '->' expr  :Alternative
+pattern -> name  | .NIL :NilToken
 ```
+Experience may later suggest expanding the `pattern` grammar, but this will do for now.
 
 **Grammar Macros:**
 ```

@@ -26,6 +26,7 @@ Sophie is different on all accounts.
 * Sophie has *call-by-need*. That lets you focus on meaning, not a particular ordering of sub-tasks.
   Sophie will figure out a sensible ordering of tasks automatically.
 * Sophie is youthful and thus able to stay consistent with a vision, not an installed base.
+  (Fresh new mistakes, in other words. But anyway, more leeway to adapt.)
 * Sophie is functionally pure. That means *meaning is eternal* and you don't have to worry about
   changes behind your back. That may also sound impossibly constraining, but trust me: it's fine.
 * Sophie ... doesn't dirty herself with objects of the usual sort. (There is a better way.)

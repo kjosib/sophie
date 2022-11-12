@@ -50,6 +50,12 @@ def resolve_words(module:syntax.Module, outside:NameSpace) -> list[Issue]:
 			"Finding Definitions",
 			"I do not see an available definition for:",
 		))
+	for guilty in resolver.duptags:
+		issues.append(_error_report(
+			guilty,
+			"Checking type-match expressions",
+			"The same type-case appears more than once in a single type-matching expression."
+		))
 	return issues
 
 def _error_report(guilty:list[slice], phase:str, description:str) -> Issue:
@@ -70,8 +76,8 @@ class WordDefiner(Visitor):
 		for fn in module.functions:
 			self.visit(fn, self.globals)
 
-	def _install(self, namespace:NameSpace, name:syntax.Token, item):
-		assert isinstance(name, syntax.Token), name
+	def _install(self, namespace:NameSpace, name:syntax.Name, item):
+		assert isinstance(name, syntax.Name), name
 		try: namespace[name.text] = item
 		except SymbolAlreadyExists: self.redef.append(name.slice)
 	
@@ -85,23 +91,23 @@ class WordDefiner(Visitor):
 				self._install(td.namespace, param_name, None)
 		self.visit(td.body, td.name)
 	
-	def visit_VariantType(self, it:syntax.VariantType, name:syntax.Token):
+	def visit_VariantType(self, it:syntax.VariantType, name:syntax.Name):
 		for summand in it.alternatives:
 			if summand.body is not None:
 				self._install(self.globals, summand.name, summand)
 	
-	def visit_RecordType(self, it:syntax.RecordType, name:syntax.Token):
+	def visit_RecordType(self, it:syntax.RecordType, name:syntax.Name):
 		slots = NameSpace(place=self)
 		for name, factor in it.factors:
 			self._install(slots, name, None)
 	
-	def visit_ArrowType(self, it:syntax.ArrowType, name:syntax.Token):
+	def visit_ArrowType(self, it:syntax.ArrowType, name:syntax.Name):
 		pass
 
-	def visit_Token(self, it:syntax.Token, name:syntax.Token):
+	def visit_Name(self, it:syntax.Name, name:syntax.Name):
 		pass
 
-	def visit_TypeCall(self, it:syntax.TypeCall, name:syntax.Token):
+	def visit_TypeCall(self, it:syntax.TypeCall, name:syntax.Name):
 		pass
 
 	def visit_Function(self, fn:syntax.Function, env:NameSpace):
@@ -123,6 +129,7 @@ class WordResolver(Visitor):
 	"""
 	def __init__(self, module:syntax.Module):
 		self.undef = []
+		self.duptags = []
 		for td in module.types:
 			assert isinstance(td, syntax.TypeDecl)
 			self.visit(td.body, td.namespace)
@@ -143,7 +150,7 @@ class WordResolver(Visitor):
 		if it.body is not None:
 			self.visit(it.body, env)
 	
-	def visit_Token(self, token:syntax.Token, env:NameSpace):
+	def visit_Name(self, token:syntax.Name, env:NameSpace):
 		try:
 			env.find(token.text)
 		except NoSuchSymbol:
@@ -203,3 +210,21 @@ class WordResolver(Visitor):
 	def visit_ExplicitList(self, expr:syntax.ExplicitList, env:NameSpace):
 		for e in expr.elts:
 			self.visit(e, env)
+	
+	def visit_MatchExpr(self, expr:syntax.MatchExpr, env:NameSpace):
+		# Maybe ought to be in a separate pass,
+		# but it seems sensible to check for duplicate tags here.
+		expr.dispatch = {}
+		seen = {}
+		for item in expr.alternatives:
+			assert isinstance(item, syntax.Alternative)
+			tag = item.pattern.tag()
+			if tag in seen:
+				self.duptags.append((seen[tag], item.pattern.slice))
+			else:
+				seen[tag] = item.pattern.slice
+				expr.dispatch[tag] = item.expr
+			self.visit(item.expr, env)
+		if expr.otherwise is not None:
+			self.visit(expr.otherwise, env)
+	

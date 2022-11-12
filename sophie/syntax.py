@@ -7,7 +7,7 @@ Class-level type annotations make peace with pycharm wherever later passes add f
 """
 
 import abc
-from typing import NamedTuple, Optional, Any, Callable
+from typing import NamedTuple, Optional, Any, Callable, Union
 import operator
 from boozetools.parsing.interface import SemanticError
 from boozetools.support.symtab import NameSpace
@@ -16,13 +16,30 @@ class PrimitiveType:
 	""" For the moment, a few primitive bits unavailable to the language-proper are also here. """
 	pass
 
-class Token(NamedTuple):
-	# The generic semantic-value type the scanner yields for all nontrivial tokens.
-	text: str
-	slice: slice
-	
+class Name:
+	# The generic semantic-value type the scanner yields for non-reserved words.
+	def __init__(self, text, slice):
+		self.text, self.slice = text, slice
+
 	def __str__(self):
-		return "<Token %r>"%self.text
+		return "<Name %r>"%self.text
+	
+	def tag(self):
+		return self.text
+
+class NilToken:
+	def __init__(self, a_slice):
+		self.text = "NIL"
+		self.slice = a_slice
+
+	def __str__(self):
+		return "NIL"
+	
+	@staticmethod
+	def tag():
+		return None
+
+TypeTag = Union[Name, NilToken]
 
 class MismatchedBookendsError(SemanticError):
 	# The one semantic error we catch early enough to interrupt the parse.
@@ -30,7 +47,7 @@ class MismatchedBookendsError(SemanticError):
 	def __init__(self, head:slice, coda:slice):
 		super().__init__(head, coda)
 
-def _bookend(head:Token, coda:Token):
+def _bookend(head:Name, coda:Name):
 	if head.text != coda.text:
 		raise MismatchedBookendsError(head.slice, coda.slice)
 
@@ -43,13 +60,13 @@ class RecordType:
 
 class TypeSummand:
 	tag_ordinal: int
-	def __init__(self, name:Token, body:Optional[Any]):
+	def __init__(self, name:TypeTag, body:Optional[Any]):
 		self.name, self.body = name, body
 	
 def nil_type(a_slice):
-	return TypeSummand(Token("NIL", a_slice), None)
+	return TypeSummand(NilToken(a_slice), None)
 
-def ordinal_type(name:Token):
+def ordinal_type(name:Name):
 	return TypeSummand(name, None)
 
 class VariantType:
@@ -66,23 +83,23 @@ def short_arrow_type(lhs, rhs):
 	return ArrowType([lhs], rhs)
 
 class TypeCall(NamedTuple):
-	name: Token
+	name: Name
 	params: list
 
 class TypeDecl:
 	namespace: NameSpace
-	def __init__(self, name:Token, params:Optional[list], body:Any):
+	def __init__(self, name:Name, params:Optional[list], body:Any):
 		self.name, self.params, self.body = name, params, body
 
 class Parameter(NamedTuple):
-	name: Token
+	name: Name
 	type_expr: Any
 
 def param_inferred(name):
 	return Parameter(name, None)
 
 class Signature(NamedTuple):
-	name: Token
+	name: Name
 	params: Optional[list[Parameter]]
 	return_type: Optional[object]
 
@@ -103,7 +120,7 @@ class Function:
 
 class WhereClause(NamedTuple):
 	sub_fns: list[Function]
-	end_name: Token
+	end_name: Name
 
 	
 class Module:
@@ -124,11 +141,11 @@ class Literal(Expr):
 		return "<Literal %r>"%self.value
 
 class Lookup(Expr):
-	def __init__(self, name:Token):
+	def __init__(self, name:Name):
 		self.name = name
 
 class FieldReference(Expr):
-	def __init__(self, lhs:Expr, field_name:Token):
+	def __init__(self, lhs:Expr, field_name:Name):
 		self.lhs, self.field_name = lhs, field_name
 	def __str__(self):
 		return "(%s.%s)"%(self.lhs,self.field_name.text)
@@ -200,3 +217,28 @@ class ExplicitList(Expr):
 		for e in elts:
 			assert isinstance(e, Expr), e
 		self.elts = elts
+
+class SubjectWithExpr(NamedTuple):
+	expr: Expr
+	name: Name
+
+class Alternative(NamedTuple):
+	pattern: TypeTag
+	expr: Expr
+
+class MatchExpr(Expr):
+	dispatch: dict[Optional[str]:Expr]
+	def __init__(self, name:Name, alternatives:list[Alternative], otherwise:Optional[Expr]):
+		self.name, self.alternatives, self.otherwise = name, alternatives, otherwise
+
+class WithExpr(Expr):
+	# Represent a block-local scope for a name bound to an expression.
+	def __init__(self, expr:Expr, name:Name, body:Expr):
+		self.expr, self.name, self.body = expr, name, body
+
+def match_expr(subject, alternatives:list[Alternative], otherwise:Optional[Expr]):
+	if isinstance(subject, Name):
+		return MatchExpr(subject, alternatives, otherwise)
+	else:
+		assert isinstance(subject, SubjectWithExpr)
+		return WithExpr(subject.expr, subject.name, MatchExpr(subject.name, alternatives, otherwise))
