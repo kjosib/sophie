@@ -9,23 +9,33 @@ type:
 		 nil;
 	ESAC;
 	
+	drawing is (steps: list[turtle_step]);
+	
+	turtle_step is case
+		forward(distance:number);
+		backward(distance:number);
+		right(angle:number);
+		left(angle:number);
+		goto(x:number, y:number);
+		setheading(angle:number);
+		home;
+		pendown;
+		penup;
+		color(color:string);
+		pensize(width:string);
+		showturtle;
+		hideturtle;
+	esac;
+	
 define:
-	any(xs) = xs != nil and (xs.head or any(xs.tail));
-	all(xs) = xs == nil or (xs.head and all(xs.tail));
-	#any(xs) = case xs: nil -> no; cons -> xs.head or any(xs.tail); esac;
-	#all(xs) = case xs: nil -> yes; cons -> xs.head and all(xs.tail); esac;
+	id(x) = x;
+	any(xs) = case xs: nil -> no; cons -> xs.head or any(xs.tail); esac;
+	all(xs) = case xs: nil -> yes; cons -> xs.head and all(xs.tail); esac;
 	
 	map(fn, xs) = case xs:
 		nil -> nil;
 		cons -> cons(fn(xs.head), map(fn, xs.tail));
 	esac;
-	
-	reduce(fn, zero, xs) = fold(zero, xs) where
-		fold(a, xs) = case xs:
-			nil -> a;
-			cons -> fold(fn(a, xs.head), xs.tail);
-		esac;
-	end reduce;
 	
 	filter(predicate, xs) = case xs:
 		nil -> nil;
@@ -34,14 +44,36 @@ define:
 		rest = filter(predicate, xs.tail);
 	end filter;
 	
+	reduce(fn, a, xs) = case xs:
+		nil -> a;
+		cons -> reduce(fn, fn(a, xs.head), xs.tail);
+	esac;
+	
+	expand(fn, acc, xs) = case xs:
+		nil -> nil;
+		cons -> cons(item, expand(fn, item, xs.tail));
+	esac where
+		item = fn(acc, xs.head);
+	end expand;
+	
+	cat(xs,ys) = case xs:
+		nil -> ys;
+		cons -> cons(xs.head, cat(xs.tail, ys));
+	esac;
+	
+	flat(xss) = case xss:
+		nil -> nil;
+		cons -> cat(xss.head, flat(xss.tail));
+	esac;
+	
 	take(n, xs) = nil if n < 1 else case xs:
 		nil -> nil;
 		cons -> cons(xs.head, take(n-1, xs.tail));
 	esac;
 	
-	drop(n, xs) = xs if n < 1 else case xs:
+	skip(n, xs) = xs if n < 1 else case xs:
 		nil -> nil;
-		cons -> drop(n-1, xs.tail);
+		cons -> skip(n-1, xs.tail);
 	esac;
 	
 	sum(xs) = reduce(add, 0, xs) where add(a,b) = a+b; end sum;

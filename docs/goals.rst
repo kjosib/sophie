@@ -25,8 +25,8 @@ Things on Deck
 
 The next release will probably do one of:
 
-* Turtle-graphics in some form, so Sophie can join the ranks of Advanced Logo Substitutes and be fun to watch.
 * Ahead-of-time type inference.
+* Better error messages.
 * Preliminary support for shared modules: an export/import mechanism.
 
 Other Nice Things to Have
@@ -43,6 +43,7 @@ In no particular order:
 * Making it easier to get started.
 * Integration with some popular IDEs. (VS-code might fit this bill.)
 * An educator's guide.
+* An ecosystem.
 
 Any one of these would be a proper quest in its own right.
 

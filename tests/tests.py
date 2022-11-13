@@ -62,11 +62,12 @@ class ZooOfFailTests(unittest.TestCase):
 		self.assertIsInstance(parse_file(zoo_folder/"syntax_error.sg"), Issue)
 		self.assertEqual(complain.call_count, 0)
 
-	@mock.patch("boozetools.support.failureprone.SourceText.complain")
-	def test_undefined_symbol(self, complain):
-		sut = parse_file(zoo_folder/"undefined_symbol.sg")
-		errors = resolve_words(sut, static_root)
-		assert errors
+	def test_undefined_symbol(self):
+		for fn in ["undefined_symbol", "bad_typecase_name", ]:
+			with self.subTest(fn):
+				sut = parse_file(zoo_folder/(fn+".sg"))
+				errors = resolve_words(sut, static_root)
+				self.assertTrue(errors)
 
 if __name__ == '__main__':
 	unittest.main()

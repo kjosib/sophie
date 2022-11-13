@@ -104,15 +104,14 @@ and then take notes on how things go.
 
 ## Current Status
 
-* It runs, with caveats as below.
-* It does not check types, so run-time errors are absolutely still possible.
+* Sophie has Turtle-graphics! (See [here](https://github.com/kjosib/sophie/blob/main/examples/turtle.sg) for examples.)
+* The evaluator can run programs and display results.
+* It does not check types, so run-time errors are still possible.
 * It does check the validity of identifiers (but not yet field names, which depend on type).
-* List comprehension syntax `[expr FOR name IN expr]` parses but does not yet evaluate.
-  Also, that might not be the final form.
+* List comprehension (expressions like `[expr FOR name IN expr]`) are removed from the syntax for now.
+  Something will take its place, but it will take some work.
 * There is no interactivity. It will depend on the _Functional Process Abstraction_ which also doesn't exist yet.
 * Imports and exports are waiting on a proper module system, so they don't do anything yet.
-
-Ideally list comprehensions would be syntactic sugar for some combination of map/filter/zip expressions.
 
 For FPA, maybe controlling a bank of elevators would be a good concrete example problem?
 The pipe-dream is an asynchronous and resilient processes network similar to Erlang.

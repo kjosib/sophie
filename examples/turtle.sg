@@ -1,0 +1,30 @@
+# --- Some turtle designs. ---
+
+# Feel free to send your favorite designs to: kjosib@gmail.com
+# or submit a pull request to the repository.
+# I need to know two things:
+#   1. That you have the right to submit the design as either public-domain or your own original work.
+#   2. How you'd like your name to appear in the credits for inclusion of your work.
+
+define:
+    repeat(n, portion) = nil if n < 1 else cat(portion, repeat(n-1, portion));
+    range(a, b) = nil if a > b else cons(a, range(a+1, b));
+
+    square(size) = repeat(4, [forward(size), right(90)]);
+
+    daisy(k) = repeat(k, cons(right(360/k), square(150)));
+
+    rosette = repeat(12, petal) where
+        petal = flat[square(150), [right(15)], square(75), [right(15)]];
+    end rosette;
+
+    spiral(k, r) = flat(map(leg, range(1, k))) where
+        leg(x) = [forward(x), left(r)];
+    end spiral;
+
+begin:
+    "Daisy:"; drawing(daisy(30));
+    "Rosette:"; drawing(rosette);
+    "Spiral 1:"; drawing(spiral(180, 61));
+    "Spiral 2:"; drawing(spiral(360, 122));
+end.

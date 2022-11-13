@@ -1,18 +1,5 @@
 """
 Main driver for Sophie langauge.
-
-This will be done in phases:
-
-1. to parse Sophie. This works on the happy path and a few error cases (not many) are also tested.
-2. a simple-minded call-by-need evaluator. This also works, leaving out list comprehensions.
-2a. Check that used words are defined somewhere. Maybe make some connections along the way.
-3. a type checker. Not started yet.
-4. strictness propagation, with call-site strictness where indicated.
-5. interfacing to more outputs than a print-out of the computed value, such as turtle graphics
-6. contemplating inputs
-7. a deeper consideration for explicit concurrency
-8. emitting native or VM code
-9. an ecosystem
 """
 from pathlib import Path
 from typing import Optional
@@ -214,6 +201,7 @@ class WordResolver(Visitor):
 	def visit_MatchExpr(self, expr:syntax.MatchExpr, env:NameSpace):
 		# Maybe ought to be in a separate pass,
 		# but it seems sensible to check for duplicate tags here.
+		self.visit(expr.name, env)
 		expr.dispatch = {}
 		seen = {}
 		for item in expr.alternatives:

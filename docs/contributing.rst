@@ -3,6 +3,7 @@ How to Contribute
 
 There are many ways.
 
+* Have fun with turtle-graphics. Maybe teach your kids that way. And send in fun designs.
 * Play with the notation in a design context. Add whatever extra notation you seem to need. Then report back on what you learned.
 * Find ways to get some task or another done with Sophie as-is. (I'm thinking physics homework.) Explain what you did and your workflow.
 * Useful functions are useful. Maybe you're the motivation for adding something meaningful to the standard library.

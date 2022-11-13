@@ -120,7 +120,6 @@ expr -> integer | real | short_string | list_expr | case_expr | match_expr
 
 list_expr -> '[' list_body ']'
 list_body -> comma_terminated_list(expr) :ExplicitList
-list_body -> expr FOR name IN expr :Comprehension
 
 case_expr -> CASE semicolon_terminated_list(when_clause) else_clause ESAC :CaseWhen
 when_clause -> WHEN expr THEN expr
