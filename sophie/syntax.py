@@ -208,10 +208,6 @@ def call_upon_list(fn_exp:Expr, list_arg:Expr):
 
 def nil_value(a_slice): return Literal(None, a_slice)
 
-class Comprehension(Expr):
-	def __init__(self, selection, binding, projection):
-		self.selection, self.binding, self.projection = selection, binding, projection
-
 class ExplicitList(Expr):
 	def __init__(self, elts:list[Expr]):
 		for e in elts:

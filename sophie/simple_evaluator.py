@@ -151,7 +151,7 @@ def close_one_function(env:NameSpace, udf:syntax.Function):
 		return Closure(env, udf)
 	elif udf.sub_fns:
 		inner_env = env.new_child(udf)
-		for inner_key, inner_function in udf.sub_fns:
+		for inner_key, inner_function in udf.sub_fns.items():
 			inner_env[inner_key] = close_one_function(inner_env, inner_function)
 		return delay(inner_env, udf.expr)
 	else:
@@ -189,14 +189,21 @@ class Constructor(Procedure):
 def run_module(module: syntax.Module):
 	module_env = dynamic_root.new_child(module)
 	_prepare_global_scope(module_env, module.namespace.local.items())
+	result = None  # Pacify the IDE
 	for expr in module.main:
 		result = evaluate(expr, module_env)
 		if isinstance(result, Thunk): result = actual_value(result)
 		if isinstance(result, dict):
 			dethunk(result)
-			if result.get("") == 'cons':
+			tag = result.get("")
+			if tag == 'cons':
 				result = decons(result)
-		print(result)
+			elif tag == 'drawing':
+				steps = decons(result['steps'])
+				do_turtle_graphics(steps)
+				result = None
+		if result is not None:
+			print(result)
 	return result
 
 def _prepare_global_scope(dynamic_env:NameSpace, items):
@@ -212,7 +219,7 @@ def _prepare_global_scope(dynamic_env:NameSpace, items):
 			elif key != 'NIL':
 				dynamic_env[key] = Constructor(key, [])
 		elif isinstance(dfn, (syntax.TypeDecl, syntax.RecordType)):
-			dynamic_env[key] = Constructor("", dfn.fields())
+			dynamic_env[key] = Constructor(key, dfn.fields())
 		elif callable(dfn):
 			dynamic_root[key] = Primitive(key, dfn)
 		elif isinstance(dfn, (float, int, str, bytes)):
@@ -230,6 +237,29 @@ _ignore_these = {
 	syntax.TypeCall,
 	syntax.VariantType,
 }
+
+def do_turtle_graphics(steps):
+	import turtle, tkinter
+	root = tkinter.Tk()
+	root.title("Sophie: Turtle Graphics")
+	screen = tkinter.Canvas(root, width=600, height=600)
+	screen.pack()
+	t = turtle.RawTurtle(screen)
+	t.hideturtle()
+	t.speed(0)
+	t.screen.delay(0)
+	t.setheading(90)
+	for s in steps:
+		args = dict(s)  # Make a copy because of (deliberate) aliasing.
+		tag = args.pop("")
+		fn = getattr(t, tag)
+		fn(**args)
+	root.bind("<ButtonRelease>", lambda event: root.destroy())
+	text = str(len(steps))+" turtle steps. Click the drawing to dismiss it."
+	print(text)
+	label = tkinter.Label(root, text=text)
+	label.pack()
+	tkinter.mainloop()
 
 def dethunk(result:dict):
 	"""
