@@ -12,7 +12,8 @@ The design goals, _in priority order,_ are:
 4. Be pragmatic. Trade cheap computer power for a nicer time.
 5. Call-by-need pure-functional for general computation.
 6. Turtle graphics.
-7. Other nice things to have. (See the roadmap.)
+7. Strong type-inference so run-time troubles are few and far between.
+8. Other nice things to have. (See the roadmap.)
 
 When all is said and done, I'd like Sophie to be a viable alternative for learning (or deepening one's grasp of) comp-sci.
 The call-by-need pure-functional design gives Sophie a very different flavor from your average introductory language,
@@ -25,42 +26,45 @@ such as Pascal, C, Perl, Python, and Ruby. Given that most programmers seem to l
 this should not break too many brains. However, Sophie is an expression-oriented call-by-need language,
 so some things are bound look a bit more like SQL or Haskell.
 
-Here is a preliminary example:
+Here is a preliminary example, although a few things are changing:
 ```
 # Comments extend from a hash-mark to the end of the same line.
 
 type:
-predicate[A] is A -> flag;
-album is (title:string, artist:string, year:integer, tracks:list[string]);
-tree[X] is { nil | node(left:X,right:X) };
-album_tree is tree[album];
+    predicate[A] is A -> flag;
+    album is (title:string, artist:string, year:integer, tracks:list[string]);
+	tree[X] is case
+	    leaf(item:X);
+	    node(left:tree[X], right:tree[X]);
+    esac;
+    album_tree is tree[album];
 
 define:
-
-primes_simple(max) = filter(is_prime, 2 .<=. max) where
-    is_prime(x) = not any [ y mod x == 0 for y in 2 .<=. floor(sqrt(x)) ];
-end primes_simple;
-
-primes_smarter(max:integer) -> list[integer] = NIL IF max < 2 ELSE cons(2, odd_primes) where
-    odd_primes = more_primes(0, cons(4, map(square, odd_primes)), 3);
-    more_primes(bound, squares, candidate_prime) = CASE
-        WHEN candidate_prime > max THEN NIL;
-		WHEN candidate_prime > squares.head THEN more_primes(bound+1, squares.tail, candidate_prime);
-        WHEN is_prime THEN cons(candidate_prime, successors);
-        ELSE successors;
-    ESAC where
-		is_prime = NOT any (map(is_divisor, take(bound, odd_primes)));
-		is_divisor(p) = candidate_prime MOD p == 0;
-        successors = more_primes(bound, squares, candidate_prime+2);
-    end more_primes;
-end primes_smarter;
-
-square(x) = x * x;
-
-any(xs) = xs != nil and (xs.head or any(xs.tail));
-map(fn, elts) = nil if elts == nil else cons(fn(elts.head), map(fn, elts.tail));
-take(n, xs) = nil if n < 1 else cons(xs.head, take(n-1, xs.tail));
-
+  
+  primes_simple(max) = filter(is_prime, 2 .<=. max) where
+      is_prime(candidate) = not any(map(divides, divisors) where
+          divides(d) = candidate mod d == 0;
+          divisors = range(2, floor(sqrt(x)));
+      end is_prime;
+      range(a,b) = nil if a > b else cons(a, range(a+1, b));
+  end primes_simple;
+  
+  primes_smarter(max:integer) -> list[integer] = NIL IF max < 2 ELSE cons(2, odd_primes) where
+      odd_primes = more_primes(0, cons(4, map(square, odd_primes)), 3);
+      more_primes(bound, squares, candidate_prime) = CASE
+          WHEN candidate_prime > max THEN NIL;
+          WHEN candidate_prime > squares.head THEN more_primes(bound+1, squares.tail, candidate_prime);
+          WHEN is_prime THEN cons(candidate_prime, successors);
+          ELSE successors;
+      ESAC where
+          is_prime = NOT any (map(is_divisor, take(bound, odd_primes)));
+          is_divisor(p) = candidate_prime MOD p == 0;
+          successors = more_primes(bound, squares, candidate_prime+2);
+      end more_primes;
+  end primes_smarter;
+  
+  square(x) = x * x;
+  
 begin:
     map(square, [1,2,3,4]);
     primes_smarter(2000);
