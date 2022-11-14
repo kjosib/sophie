@@ -9,6 +9,16 @@
 define:
     repeat(n, portion) = nil if n < 1 else cat(portion, repeat(n-1, portion));
     range(a, b) = nil if a > b else cons(a, range(a+1, b));
+    cycle(xs) = cat(xs, cycle(xs));  # You can have an infinite list as long as you don't try to use the whole thing.
+    map2(fn, xs, ys) = case xs:  # Work-around for lack of proper zip/apply forms.
+        nil -> nil;
+        cons -> case ys:
+            nil -> nil;
+            cons -> cons(fn(xs.head, ys.head), map2(fn, xs.tail, ys.tail));
+       esac;
+   esac;
+
+    rainbow = ["red", "#DDDD00", "light green", "cyan", "#0000FF", "#FF00FF"];
 
     square(size) = repeat(4, [forward(size), right(90)]);
 
@@ -22,9 +32,14 @@ define:
         leg(x) = [forward(x), left(r)];
     end spiral;
 
+    color_spiral(k, r, cs) = flat(map2(leg, range(1,k), cycle(cs))) where
+        leg(x, c) = [color(c), forward(x), left(r)];
+    end color_spiral;
+
 begin:
     "Daisy:"; drawing(daisy(30));
     "Rosette:"; drawing(rosette);
     "Spiral 1:"; drawing(spiral(180, 61));
     "Spiral 2:"; drawing(spiral(360, 122));
+    "Color Spiral:"; drawing(cons(pensize(2), color_spiral(180, 59, rainbow)));
 end.
