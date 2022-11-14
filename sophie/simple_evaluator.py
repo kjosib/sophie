@@ -253,7 +253,7 @@ def do_turtle_graphics(steps):
 		args = dict(s)  # Make a copy because of (deliberate) aliasing.
 		tag = args.pop("")
 		fn = getattr(t, tag)
-		fn(**args)
+		fn(*args.values())  # Insertion-order is assured.
 	root.bind("<ButtonRelease>", lambda event: root.destroy())
 	text = str(len(steps))+" turtle steps. Click the drawing to dismiss it."
 	print(text)
