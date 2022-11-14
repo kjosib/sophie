@@ -3,7 +3,7 @@ import unittest
 from unittest import mock
 from boozetools.support.failureprone import Issue
 
-from sophie.front_end import parse_file, sophie_parser, complain
+from sophie.front_end import parse_file, complain
 from sophie.compiler import resolve_words
 from sophie.preamble import static_root
 from sophie import syntax, simple_evaluator
@@ -39,6 +39,9 @@ class ExampleSmokeTests(unittest.TestCase):
 		module = _load_good_example("alias")
 		self.assertIsInstance(module.namespace["album_tree"], syntax.TypeCall)
 		self.assertEqual(7, simple_evaluator.run_module(module))
+	
+	def test_turtle_compiles(self):
+		module = _load_good_example("turtle")
 		
 class ZooOfFailTests(unittest.TestCase):
 	""" Tests that assert about failure modes. """

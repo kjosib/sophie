@@ -80,7 +80,7 @@ class WordDefiner(Visitor):
 	
 	def visit_VariantType(self, it:syntax.VariantType, name:syntax.Name):
 		for summand in it.alternatives:
-			if summand.body is not None:
+			if not isinstance(summand.name, syntax.NilToken):
 				self._install(self.globals, summand.name, summand)
 	
 	def visit_RecordType(self, it:syntax.RecordType, name:syntax.Name):
