@@ -14,7 +14,8 @@ The design goals, *in priority order,* are:
 4. Be pragmatic. Trade cheap computer power for a nicer time.
 5. Call-by-need pure-functional for general computation.
 6. Turtle graphics.
-7. Other nice things to have.
+7. Strong type-inference so run-time troubles are few and far between.
+8. Other nice things to have.
 
 When all is said and done, I'd like Sophie to be a viable alternative for learning (or deepening one's grasp of) comp-sci.
 The call-by-need pure-functional design gives Sophie a very different flavor from your average introductory language,
@@ -25,7 +26,7 @@ Things on Deck
 
 The next release will probably do one of:
 
-* Ahead-of-time type inference.
+* Some measure of type inference.
 * Better error messages.
 * Preliminary support for shared modules: an export/import mechanism.
 
