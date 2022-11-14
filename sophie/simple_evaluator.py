@@ -217,7 +217,7 @@ def _prepare_global_scope(dynamic_env:NameSpace, items):
 				else:
 					raise NotImplementedError(key, "This particular form isn't yet implemented.")
 			elif key != 'NIL':
-				dynamic_env[key] = Constructor(key, [])
+				dynamic_env[key] = {"":key}
 		elif isinstance(dfn, (syntax.TypeDecl, syntax.RecordType)):
 			dynamic_env[key] = Constructor(key, dfn.fields())
 		elif callable(dfn):

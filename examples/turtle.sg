@@ -36,10 +36,23 @@ define:
         leg(x, c) = [color(c), forward(x), left(r)];
     end color_spiral;
 
+    koch_curve = cat(prepare, iterate(5, basis)) where
+        prepare = [penup, goto(-145, -250), pendown];
+        basis = repeat(3, [forward(500), right(120)]);
+        iterate(n, curve) = curve if n < 1 else iterate(n-1, flat(map(tweak, curve)));
+        tweak(item) = case item:
+            forward -> [step, left(60), step, right(120), step, left(60), step];
+            else [item];
+        esac where
+            step = forward(item.distance / 3);
+        end tweak;
+    end koch_curve;
+
 begin:
     "Daisy:"; drawing(daisy(30));
     "Rosette:"; drawing(rosette);
     "Spiral 1:"; drawing(spiral(180, 61));
     "Spiral 2:"; drawing(spiral(360, 122));
     "Color Spiral:"; drawing(cons(pensize(2), color_spiral(180, 59, rainbow)));
+    "Koch Curve:"; drawing(koch_curve);
 end.
