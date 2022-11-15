@@ -106,7 +106,7 @@ def _eval_match_expr(expr:syntax.MatchExpr, dynamic_env:NameSpace):
 	except KeyError:
 		branch = expr.otherwise
 		if branch is None:
-			raise RuntimeError("Confused by tag %r; this will not be possible after type-checking works.")
+			raise RuntimeError("Confused by tag %r; this will not be possible after type-checking works."%tag)
 	return delay(dynamic_env, branch)
 
 
@@ -242,11 +242,13 @@ def do_turtle_graphics(steps):
 	import turtle, tkinter
 	root = tkinter.Tk()
 	root.title("Sophie: Turtle Graphics")
-	screen = tkinter.Canvas(root, width=600, height=600)
+	root.bind("<ButtonRelease>", lambda event: root.destroy())
+	screen = tkinter.Canvas(root, width=1000, height=1000)
 	screen.pack()
 	t = turtle.RawTurtle(screen)
 	t.hideturtle()
 	t.speed(0)
+	t.screen.tracer(1 + int(len(steps)/1000))
 	t.screen.delay(0)
 	t.setheading(90)
 	for s in steps:
@@ -254,7 +256,7 @@ def do_turtle_graphics(steps):
 		tag = args.pop("")
 		fn = getattr(t, tag)
 		fn(*args.values())  # Insertion-order is assured.
-	root.bind("<ButtonRelease>", lambda event: root.destroy())
+	t.screen.update()
 	text = str(len(steps))+" turtle steps. Click the drawing to dismiss it."
 	print(text)
 	label = tkinter.Label(root, text=text)
