@@ -88,7 +88,7 @@ class TypeCall(NamedTuple):
 
 class TypeDecl:
 	namespace: NameSpace
-	def __init__(self, name:Name, params:Optional[list], body:Any):
+	def __init__(self, name:Name, params:Optional[list[Name]], body:Any):
 		self.name, self.params, self.body = name, params, body
 
 class Parameter(NamedTuple):
