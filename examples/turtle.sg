@@ -6,6 +6,16 @@
 #   1. That you have the right to submit the design as either public-domain or your own original work.
 #   2. How you'd like your name to appear in the credits for inclusion of your work.
 
+type:
+    hilbert is case
+        # Evidently, I shall want to do something about proper mappings.
+        h_alpha;
+        h_beta;
+        h_fwd;
+        h_left;
+        h_right;
+    esac;
+
 define:
     repeat(n, portion) = nil if n < 1 else cat(portion, repeat(n-1, portion));
     range(a, b) = nil if a > b else cons(a, range(a+1, b));
@@ -16,43 +26,87 @@ define:
             nil -> nil;
             cons -> cons(fn(xs.head, ys.head), map2(fn, xs.tail, ys.tail));
        esac;
-   esac;
+    esac;
 
     rainbow = ["red", "#DDDD00", "light green", "cyan", "#0000FF", "#FF00FF"];
 
     square(size) = repeat(4, [forward(size), right(90)]);
 
-    daisy(k) = repeat(k, cons(right(360/k), square(150)));
+    daisy(k) = repeat(k, cons(right(360/k), square(250)));
 
     rosette = repeat(12, petal) where
-        petal = flat[square(150), [right(15)], square(75), [right(15)]];
+        petal = flat[square(250), [right(15)], square(125), [right(15)]];
     end rosette;
 
     spiral(k, r) = flat(map(leg, range(1, k))) where
-        leg(x) = [forward(x), left(r)];
+        leg(x) = [forward(x*2), left(r)];
     end spiral;
 
     color_spiral(k, r, cs) = flat(map2(leg, range(1,k), cycle(cs))) where
-        leg(x, c) = [color(c), forward(x), left(r)];
+        leg(x, c) = [color(c), forward(x*2), left(r)];
     end color_spiral;
 
-    koch_curve = cat(prepare, iterate(5, basis)) where
-        prepare = [penup, goto(-145, -250), pendown];
-        basis = repeat(3, [forward(500), right(120)]);
-        iterate(n, curve) = curve if n < 1 else iterate(n-1, flat(map(tweak, curve)));
-        tweak(item) = case item:
-            forward -> [step, left(60), step, right(120), step, left(60), step];
-            else [item];
-        esac where
-            step = forward(item.distance / 3);
-        end tweak;
+    koch_curve(order) = cat(prepare, L_system(order, translate, rewrite, basis)) where
+        prepare = [penup, goto(-240, -400), pendown];
+        basis = [yes, yes, yes];
+        rewrite(x) = [no, yes, no, x];
+        translate(b) = [step, sharp_right if b else slight_left];
+        sharp_right = right(120);
+        slight_left = left(60);
+        step = forward(800 / 3^order);
     end koch_curve;
+
+    morphic(order, fn, xs) = xs if order < 1 else morphic(order-1, fn, flat(map(fn, xs)));
+    L_system(order, translate, rewrite, basis) = flat(map(translate, morphic(order, rewrite, basis)));
+
+    koch_rosette = L_system(4, translate, rewrite, [no]) where
+        # See https://www.win.tue.nl/~hzantema/turtle.pdf page 9
+        rewrite(x) = [x, no, yes, no];
+        translate(b) = [alpha if b else beta, step];
+        alpha = left(36);
+        beta = right(72);
+        step = forward(150);
+    end koch_rosette;
+
+    gailiunas_rosette = L_system(12, translate, rewrite, [yes, yes]) where
+        # See https://www.win.tue.nl/~hzantema/turtle.pdf page 10
+        rewrite(x) = [yes, no, no] if x else [yes];
+        translate(x) = [alpha if x else beta, step];
+        alpha = left(140);
+        beta = right(40);
+        step = forward(16);
+    end gailiunas_rosette;
+
+    hilbert_curve(order) = cat(prepare, L_system(order, translate, rewrite, [h_alpha])) where
+        prepare = [penup, goto(start, start), pendown];
+        rewrite(x) = case x:
+            h_alpha -> [h_right, h_beta, h_fwd, h_left, h_alpha, h_fwd, h_alpha, h_left, h_fwd, h_beta, h_right];
+            h_beta -> [h_left, h_alpha, h_fwd, h_right, h_beta, h_fwd, h_beta, h_right, h_fwd, h_alpha, h_left];
+            else [x];
+        esac;
+        translate(x) = case x:
+            h_left -> turn_left;
+            h_right -> turn_right;
+            h_fwd -> walk_forward;
+            else nil;
+        esac;
+        turn_left = [left(90)];
+        turn_right = [right(90)];
+        walk_forward = [forward(unit)];
+        unit = 1000 / (1 + 2^order);
+        start = unit - 500;
+    end hilbert_curve;
 
 begin:
     "Daisy:"; drawing(daisy(30));
     "Rosette:"; drawing(rosette);
     "Spiral 1:"; drawing(spiral(180, 61));
     "Spiral 2:"; drawing(spiral(360, 122));
-    "Color Spiral:"; drawing(cons(pensize(2), color_spiral(180, 59, rainbow)));
-    "Koch Curve:"; drawing(koch_curve);
+    "Color Spiral:"; drawing(cons(pensize(3), color_spiral(240, 59, rainbow)));
+    "Koch Curve (3):"; drawing(koch_curve(3));
+    "Koch Curve (4):"; drawing(koch_curve(4));
+    "Koch Curve (5):"; drawing(koch_curve(5));
+    "Koch Rosette"; drawing(koch_rosette);
+    "Hilbert Curve (6)"; drawing(hilbert_curve(6));
+    "Gailiunas Rosette"; drawing(gailiunas_rosette);
 end.
