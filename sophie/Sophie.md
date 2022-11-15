@@ -63,9 +63,6 @@ field_type -> name
 
 ```
 
-Longer-term, I'd like to take on 
-
-
 **The general structure of a function:**
 ```
 function -> signature '=' expr optional(where_clause) :Function
