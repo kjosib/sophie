@@ -1,0 +1,4 @@
+# You can't add numbers to strings directly. (Use a conversion function.)
+# So let's show that with the type checker.
+
+begin: 1 + "one"; end.

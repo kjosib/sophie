@@ -3,14 +3,12 @@ Call-By-Need with Direct Interpretation
 Absolutely simplest, most straight-forward possible implementation.
 
 """
-import sys
 from typing import Any, Union
 from collections import namedtuple, deque
 import abc
-import inspect
-from boozetools.support.symtab import NameSpace, NoSuchSymbol
+from boozetools.support.symtab import NameSpace
 from .preamble import static_root
-from . import syntax
+from . import syntax, primitive
 
 class Procedure(abc.ABC):
 	""" A run-time object that can be applied with arguments. """
@@ -109,7 +107,6 @@ def _eval_match_expr(expr:syntax.MatchExpr, dynamic_env:NameSpace):
 			raise RuntimeError("Confused by tag %r; this will not be possible after type-checking works."%tag)
 	return delay(dynamic_env, branch)
 
-
 def evaluate(expr:syntax.Expr, dynamic_env:NameSpace) -> LAZY_VALUE:
 	try: fn = EVALUATE[type(expr)]
 	except KeyError: raise NotImplementedError(type(expr), expr)
@@ -147,7 +144,7 @@ class Closure(Procedure):
 		return delay(inner_env, self._udf.expr)
 
 def close_one_function(env:NameSpace, udf:syntax.Function):
-	if udf.signature.params:
+	if isinstance(udf.signature, syntax.FunctionSignature):
 		return Closure(env, udf)
 	elif udf.sub_fns:
 		inner_env = env.new_child(udf)
@@ -159,13 +156,11 @@ def close_one_function(env:NameSpace, udf:syntax.Function):
 
 class Primitive(Procedure):
 	""" All parameters to primitive procedures are strict. Also a kind of value, like a closure. """
-	def __init__(self, key:str, native):
+	def __init__(self, key:str, native:primitive.NativeFunction):
 		assert isinstance(key, str)
-		assert callable(native)
 		self._key = key
-		self._native = native
-		self._params = list(inspect.signature(native).parameters.keys())
-		self._arity = len(self._params)
+		self._native = native.value
+		self._arity = native.arity
 		
 	def apply(self, caller_env:NameSpace, args:list[syntax.Expr]) -> STRICT_VALUE:
 		if self._arity != len(args):
@@ -207,32 +202,32 @@ def run_module(module: syntax.Module):
 	return result
 
 def _prepare_global_scope(dynamic_env:NameSpace, items):
-	for key, dfn in items:
+	for key, entry in items:
+		dfn = entry.dfn
 		if isinstance(dfn, syntax.Function):
 			dynamic_env[key] = close_one_function(dynamic_env, dfn)
 		elif isinstance(dfn, syntax.TypeSummand):
 			if dfn.body:
 				if isinstance(dfn.body, syntax.RecordType):
-					dynamic_env[key] = Constructor(key, dfn.body.fields())
+					dynamic_env[key] = Constructor(key, dfn.body.field_names())
 				else:
 					raise NotImplementedError(key, "This particular form isn't yet implemented.")
 			elif key != 'NIL':
 				dynamic_env[key] = {"":key}
 		elif isinstance(dfn, (syntax.TypeDecl, syntax.RecordType)):
-			dynamic_env[key] = Constructor(key, dfn.fields())
-		elif callable(dfn):
+			dynamic_env[key] = Constructor(key, dfn.field_names())
+		elif isinstance(dfn, primitive.NativeFunction):
 			dynamic_root[key] = Primitive(key, dfn)
-		elif isinstance(dfn, (float, int, str, bytes)):
-			dynamic_root[key] = dfn
+		elif isinstance(dfn, primitive.NativeValue):
+			dynamic_root[key] = dfn.value
 		elif type(dfn) in _ignore_these:
 			pass
 		else:
-			dynamic_root[key] = dfn
-			print("Don't know how to deal with %r %r"%(type(dfn), key), file=sys.stderr)
+			raise ValueError("Don't know how to deal with %r %r"%(type(dfn), key))
 
 _ignore_these = {
+	type(None),
 	syntax.ArrowType,
-	syntax.PrimitiveType,
 	syntax.Name,
 	syntax.TypeCall,
 	syntax.VariantType,
@@ -287,7 +282,7 @@ def decons(cons:dict) -> list:
 	return result
 
 dynamic_root = NameSpace(place=None)
-_prepare_global_scope(dynamic_root, static_root.parent.local.items())
+_prepare_global_scope(dynamic_root, primitive.root_namespace.local.items())
 _prepare_global_scope(dynamic_root, static_root.local.items())
 
 EVALUATE = {}

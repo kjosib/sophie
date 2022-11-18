@@ -27,13 +27,13 @@ Quick primer on reading the grammar:
 * You occasionally see a dot before a symbol, as in `.NIL`. You can ignore these dots.
 
 ```
-start -> optional(exports) optional(imports) optional(types) optional(functions) optional(main) END '.' :Module
+start -> export_section import_section typedef_section define_section main_section END '.' :Module
 
-exports -> EXPORT ':' comma_terminated_list(name) ';'
-imports -> IMPORT ':' semicolon_terminated_list(one_import)
-types -> TYPE ':' semicolon_terminated_list(type_declaration)
-functions -> DEFINE ':' semicolon_terminated_list(function)
-main -> BEGIN ':' semicolon_terminated_list(expr)
+export_section  -> :nothing | EXPORT ':' comma_terminated_list(name) ';'
+import_section  -> :nothing | IMPORT ':' semicolon_terminated_list(one_import)
+typedef_section -> :nothing | TYPE ':' semicolon_terminated_list(type_declaration)
+define_section  -> :nothing | DEFINE ':' semicolon_terminated_list(function)
+main_section    -> :nothing | BEGIN ':' semicolon_terminated_list(expr)
 
 one_import -> short_string AS name
 ```
@@ -57,29 +57,34 @@ type_summand -> .NIL                :nil_type
 
 
 field -> name ':' field_type :Parameter
-field_type -> name
-| name '[' comma_terminated_list(field_type) ']' :TypeCall
-| FUNCTION comma_terminated_list(field_type) '->' field_type :ArrowType
+field_type -> named_type | arrow_type
+
+named_type -> name '[' comma_terminated_list(field_type) ']' :TypeCall
+named_type -> name :plain_type
+arrow_type -> FUNCTION comma_terminated_list(field_type) '->' field_type :ArrowType
 
 ```
 
 **The general structure of a function:**
 ```
-function -> signature '=' expr optional(where_clause) :Function
-signature -> name optional(parameter_list) optional(return_type) :Signature
+function -> name signature '=' expr optional(where_clause) :Function
+signature -> parameter_list optional(return_type)  :FunctionSignature
+   | ':' named_type :ExpressionSignature
+   | :AbsentSignature
+
 return_type -> '->' param_type
 where_clause -> WHERE semicolon_terminated_list(function) END name :WhereClause
 ```
 
-Note that the parameters to a function allow things to be implied.
-You can either leave off the type for a name,
+Parameters to a function allow things to be implied.
+You can leave off the type for a name,
 or use a question-mark anywhere a type-name would normally go,
 and the system will deal with it sensibly.
 ```
 parameter_list -> '(' comma_terminated_list(parameter) ')'
 parameter -> name ':' param_type :Parameter | name :param_inferred
-param_type -> '?' :type_implicit
-| name
+param_type -> name :plain_type
+| '?' name :TypeVariable
 | name '[' comma_terminated_list(param_type) ']' :TypeCall
 | FUNCTION comma_terminated_list(param_type) '->' param_type :ArrowType
 ```

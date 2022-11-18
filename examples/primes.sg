@@ -2,7 +2,7 @@
 
 define:
 
-primes(max) -> list[int] = NIL IF max < 2 ELSE cons(2, odd_primes) where
+primes(max) -> list[number] = NIL IF max < 2 ELSE cons(2, odd_primes) where
 	odd_primes = more_primes(0, cons(4, map(square, odd_primes)), 3);
 	more_primes(bound, squares, candidate_prime) = CASE
 		WHEN candidate_prime > max THEN NIL;
