@@ -3,35 +3,35 @@ The set of parse-nodes in simple form.
 The parser calls these constructors with subordinate semantic-values in a bottom-up tree transduction.
 These constructors may add a touch of organization.
 Class-level type annotations make peace with pycharm wherever later passes add fields.
-
 """
 
 import abc
-from typing import NamedTuple, Optional, Any, Callable, Union
-import operator
+from typing import NamedTuple, Optional, Any, Union, Sequence
 from boozetools.parsing.interface import SemanticError
 from boozetools.support.symtab import NameSpace
+from .primitive import ops
+from .ontology import SymbolTableEntry, Cell, SyntaxNode
 
-class PrimitiveType:
-	""" For the moment, a few primitive bits unavailable to the language-proper are also here. """
-	pass
-
-class Name:
-	# The generic semantic-value type the scanner yields for non-reserved words.
+class Name(SyntaxNode):
+	entry: SymbolTableEntry  # The name-resolution pass fills this in.
 	def __init__(self, text, slice):
 		self.text, self.slice = text, slice
-
+	
+	def head(self) -> slice: return self.slice
+	
 	def __str__(self):
 		return "<Name %r>"%self.text
 	
 	def tag(self):
 		return self.text
 
-class NilToken:
+class NilToken(SyntaxNode):
 	def __init__(self, a_slice):
 		self.text = "NIL"
 		self.slice = a_slice
 
+	def head(self) -> slice: return self.slice
+	
 	def __str__(self):
 		return "NIL"
 	
@@ -39,7 +39,7 @@ class NilToken:
 	def tag():
 		return None
 
-TypeTag = Union[Name, NilToken]
+Key = Union[Name, NilToken]
 
 class MismatchedBookendsError(SemanticError):
 	# The one semantic error we catch early enough to interrupt the parse.
@@ -52,16 +52,19 @@ def _bookend(head:Name, coda:Name):
 		raise MismatchedBookendsError(head.slice, coda.slice)
 
 class RecordType:
-	def __init__(self, factors:list):
-		self.factors = factors
+	def __init__(self, fields:list["Parameter"]):
+		self.fields = fields
 	
-	def fields(self):
-		return [f.name.text for f in self.factors]
+	def field_names(self):
+		return [f.name.text for f in self.fields]
 
 class TypeSummand:
 	tag_ordinal: int
-	def __init__(self, name:TypeTag, body:Optional[Any]):
-		self.name, self.body = name, body
+	def __init__(self, tag:Key, body:Optional[Any]):
+		self.tag, self.body = tag, body
+		assert not (body and self.is_nil())
+	def is_nil(self):
+		return isinstance(self.tag, NilToken)
 	
 def nil_type(a_slice):
 	return TypeSummand(NilToken(a_slice), None)
@@ -72,24 +75,30 @@ def ordinal_type(name:Name):
 class VariantType:
 	def __init__(self, alternatives:list[TypeSummand]):
 		self.alternatives = alternatives
-		for tag_ordinal, t in enumerate(alternatives):
-			t.tag_ordinal = tag_ordinal
 
 class ArrowType(NamedTuple):
-	lhs: list[Any]
+	lhs: Sequence[Any]
 	rhs: Any
 
 def short_arrow_type(lhs, rhs):
 	return ArrowType([lhs], rhs)
 
-class TypeCall(NamedTuple):
-	name: Name
-	params: list
+class TypeCall(SyntaxNode):
+	def __init__(self, name:Name, arguments:Sequence):
+		self.name, self.arguments = name, arguments
+	
+	def head(self) -> slice:
+		return self.name.head()
+
+
+def plain_type(name:Name):
+	return TypeCall(name, ())
 
 class TypeDecl:
 	namespace: NameSpace
 	def __init__(self, name:Name, params:Optional[list[Name]], body:Any):
-		self.name, self.params, self.body = name, params, body
+		self.name, self.body = name, body
+		self.parameters = params or ()
 
 class Parameter(NamedTuple):
 	name: Name
@@ -98,33 +107,48 @@ class Parameter(NamedTuple):
 def param_inferred(name):
 	return Parameter(name, None)
 
-class Signature(NamedTuple):
-	name: Name
-	params: Optional[list[Parameter]]
-	return_type: Optional[object]
+class TypeVariable:
+	""" For writing out the parametric polymorphism in a function's signature. """
+	def __init__(self, name):
+		self.name = name
 
-class Expr(abc.ABC):
+class Signature:
+	expr_type: Cell
+
+class FunctionSignature(Signature):
+	def __init__(self, params: list[Parameter], return_type: Optional[Any]):
+		self.params = params
+		self.return_type = return_type
+	
+class ExpressionSignature(Signature):
+	def __init__(self, name: Name):
+		self.name = name
+
+class AbsentSignature(Signature):
+	pass
+
+class Expr(SyntaxNode):
 	pass
 
 class Function:
 	namespace: NameSpace
 	sub_fns: dict[str:"Function"]  # for simple evaluator
-	def __init__(self, signature: Signature, expr:Expr, where: Optional["WhereClause"]):
-		self.signature, self.expr = signature, expr
+	def __init__(self, name: Name, signature: Signature, expr:Expr, where: Optional["WhereClause"]):
+		self.name = name
+		self.signature = signature
+		self.expr = expr
 		if where:
-			_bookend(signature.name, where.end_name)
+			_bookend(name, where.end_name)
 			self.where = where.sub_fns
 		else:
 			self.where = ()
 
-
 class WhereClause(NamedTuple):
 	sub_fns: list[Function]
 	end_name: Name
-
 	
 class Module:
-	namespace: NameSpace
+	namespace: NameSpace[SymbolTableEntry]
 	constructors: dict[str:]
 	def __init__(self, exports:Optional[list], imports:Optional[list], types:Optional[list[TypeDecl]], functions:Optional[list[Function]], main:Optional[list[Expr]]):
 		self.exports = exports or ()
@@ -132,7 +156,6 @@ class Module:
 		self.types = types or ()
 		self.functions = functions or ()
 		self.main = main or ()
-
 
 class Literal(Expr):
 	def __init__(self, value:Any, slice:slice):
@@ -151,40 +174,43 @@ class FieldReference(Expr):
 		return "(%s.%s)"%(self.lhs,self.field_name.text)
 
 class BinExp(Expr):
-	def __init__(self, op:Callable, lhs:Expr, rhs:Expr):
-		self.op, self.lhs, self.rhs = op, lhs, rhs
+	def __init__(self, glyph:str, lhs:Expr, rhs:Expr):
+		self.glyph, self.lhs, self.rhs = glyph, lhs, rhs
+		self.op, self.op_typ = ops[glyph]
 
-def _be(op): return lambda a, b: BinExp(op, a, b)
+def _be(glyph:str): return lambda a, b: BinExp(glyph, a, b)
 
-PowerOf = _be(operator.pow)
-Mul = _be(operator.mul)
-FloatDiv = _be(operator.truediv)
-FloatMod = _be(operator.mod)
-IntDiv = _be(operator.ifloordiv)
-IntMod = _be(operator.imod)
-Add = _be(operator.add)
-Sub = _be(operator.sub)
+PowerOf = _be("PowerOf")
+Mul = _be("Mul")
+FloatDiv = _be("FloatDiv")
+FloatMod = _be("FloatMod")
+IntDiv = _be("IntDiv")
+IntMod = _be("IntMod")
+Add = _be("Add")
+Sub = _be("Sub")
 
-EQ = _be(operator.eq)
-NE = _be(operator.ne)
-LE = _be(operator.le)
-LT = _be(operator.lt)
-GE = _be(operator.ge)
-GT = _be(operator.gt)
+EQ = _be("EQ")
+NE = _be("NE")
+LE = _be("LE")
+LT = _be("LT")
+GE = _be("GE")
+GT = _be("GT")
 
 class ShortCutExp(Expr):
-	def __init__(self, keep:bool, lhs:Expr, rhs:Expr):
-		self.keep, self.lhs, self.rhs = keep, lhs, rhs
+	def __init__(self, glyph:str, lhs:Expr, rhs:Expr):
+		self.keep, self.op_typ = ops[glyph]
+		self.lhs, self.rhs = lhs, rhs
 
-def LogicalAnd(a,b): return ShortCutExp(False, a, b)
-def LogicalOr(a,b): return ShortCutExp(True, a, b)
+def LogicalAnd(a,b): return ShortCutExp("LogicalAnd", a, b)
+def LogicalOr(a,b): return ShortCutExp("LogicalOr", a, b)
 
 class UnaryExp(Expr):
-	def __init__(self, op:Callable, arg:Expr):
-		self.op, self.arg = op, arg
+	def __init__(self, glyph:str, arg:Expr):
+		self.glyph, self.arg = glyph, arg
+		self.op, self.op_typ = ops[glyph]
 
-def Negative(arg): return UnaryExp(operator.neg, arg)
-def LogicalNot(arg): return UnaryExp(operator.not_, arg)
+def Negative(arg): return UnaryExp("Negative", arg)
+def LogicalNot(arg): return UnaryExp("LogicalNot", arg)
 
 class Cond(Expr):
 	def __init__(self, then_part:Expr, if_part:Expr, else_part:Expr):
@@ -219,13 +245,16 @@ class SubjectWithExpr(NamedTuple):
 	name: Name
 
 class Alternative(NamedTuple):
-	pattern: TypeTag
+	pattern: Key
 	expr: Expr
 
 class MatchExpr(Expr):
 	dispatch: dict[Optional[str]:Expr]
 	def __init__(self, name:Name, alternatives:list[Alternative], otherwise:Optional[Expr]):
 		self.name, self.alternatives, self.otherwise = name, alternatives, otherwise
+	def head(self) -> slice:
+		return self.name.head()
+
 
 class WithExpr(Expr):
 	# Represent a block-local scope for a name bound to an expression.

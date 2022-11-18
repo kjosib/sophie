@@ -83,32 +83,21 @@ end.
 """
 
 def _init():
-	from boozetools.support.symtab import NameSpace
-	from . import front_end, compiler
-	from .syntax import PrimitiveType, Module
-	import math
-	NON_WORKING = {"hypot", "log"}
-	primitive_root = NameSpace(place=None)
-	primitive_root['flag'] = PrimitiveType()
-	primitive_root['number'] = PrimitiveType()
-	primitive_root['string'] = PrimitiveType()
-	for name in dir(math):
-		if not (name.startswith("_") or name in NON_WORKING):
-			primitive_root[name] = getattr(math, name)
-	primitive_root['log'] = lambda x:math.log(x)
-	primitive_root['log_base'] = lambda x,b: math.log(x, b)
-	primitive_root['yes'] = True
-	primitive_root['no'] = False
+	from . import front_end, resolution, unification, primitive
+	from .syntax import Module
 	
 	preamble = front_end.parse_text(__doc__, __file__)
 	if isinstance(preamble, Module):
-		issues = compiler.resolve_words(preamble, primitive_root)
+		issues = resolution.resolve_words(preamble, primitive.root_namespace)
 	else:
 		issues = [preamble]
+	if not issues:
+		issues = unification.infer_types(preamble)
 	if issues:
 		front_end.complain(issues)
 		raise ValueError()
 	else:
+		unification.THE_LIST_TYPE = preamble.namespace['list'].typ.value
 		return preamble.namespace
 
 static_root = _init()

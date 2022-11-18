@@ -3,8 +3,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from sophie.front_end import parse_file, complain
-from sophie.compiler import resolve_words
+from sophie.resolution import resolve_words
 from sophie.preamble import static_root
+from sophie.unification import infer_types
 from sophie.simple_evaluator import run_module
 from sophie.syntax import Module
 
@@ -12,6 +13,8 @@ if len(sys.argv) == 2:
 	module = parse_file(sys.argv[1])
 	if isinstance(module, Module):
 		issues = resolve_words(module, static_root)
+		if not issues:
+			issues = infer_types(module)
 		if issues:
 			complain(issues)
 		elif module.main:
