@@ -35,6 +35,7 @@ Other Nice Things to Have
 
 In no particular order:
 
+* An interactive (REPL) mode for Sophie.
 * Concurrency: Declarative and Transparent. (Probably a functional process abstraction seasoned with CSP.)
 * A nice set of (presumably concurrent) I/O facilities.
 * Some pattern for resilience -- likely *Tree-of-Supervisors* .
