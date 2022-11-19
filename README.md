@@ -92,7 +92,7 @@ Sophie can run programs, subject to a few caveats.
 
 * There is not yet any way to take input.
 * The only output is the return value from each expression in the `begin:` section.
-* List comprehensions and range/progression operator(s) do not yet work.
+  If that value happens to be a `drawing` structure, then you get turtle graphics.
 * It is of course not a high-performance experience yet.
 
 ## How do I Learn Sophie?
@@ -109,9 +109,9 @@ and then take notes on how things go.
 ## Current Status
 
 * Sophie has Turtle-graphics! (See [here](https://github.com/kjosib/sophie/blob/main/examples/turtle.sg) for examples.)
-* The evaluator can run programs and display results.
-* It does not check types, so run-time errors are still possible.
-* It does check the validity of identifiers (but not yet field names, which depend on type).
+* The evaluator can run programs and display results, including turtle graphics as mentioned.
+* Type checking is a work in progress. Run-time errors are still possible, but this will soon change.
+* It checks the validity of all identifiers (but not yet field names, which depend on type checking).
 * List comprehension (expressions like `[expr FOR name IN expr]`) are removed from the syntax for now.
   Something will take its place, but it will take some work.
 * There is no interactivity. It will depend on the _Functional Process Abstraction_ which also doesn't exist yet.

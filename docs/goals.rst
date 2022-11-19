@@ -26,8 +26,8 @@ Things on Deck
 
 The next release will probably do one of:
 
-* Some measure of type inference.
-* Better error messages.
+* Type inference. This is key.
+* Better error messages. (I have an idea related to sentential forms.)
 * Preliminary support for shared modules: an export/import mechanism.
 
 Other Nice Things to Have
