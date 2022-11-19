@@ -38,35 +38,36 @@ Sooner or later this will get even easier.
 
     D:\>cd sophie-main\sophie-main
 
-    D:\sophie-main\sophie-main>dir
-     Volume in drive D is Data
-     Volume Serial Number is 54CB-A845
-
-     Directory of D:\sophie-main\sophie-main
-
-    10/23/2022  03:57 PM    <DIR>          .
-    10/23/2022  03:57 PM    <DIR>          ..
-    10/23/2022  03:57 PM             1,833 .gitignore
-    10/23/2022  03:57 PM    <DIR>          examples
-    10/23/2022  03:57 PM             1,065 LICENSE
-    10/23/2022  03:57 PM             5,828 README.md
-    10/23/2022  03:57 PM    <DIR>          sophie
-    10/23/2022  03:57 PM    <DIR>          tests
-    10/23/2022  03:57 PM    <DIR>          zoo_of_fail
-                   3 File(s)          8,726 bytes
-                   6 Dir(s)  253,928,804,352 bytes free
-
-    D:\sophie-main\sophie-main>py -m sophie examples\hello_world.sg
-    Hello, World!
-    All done here.
+    D:\sophie-main\sophie-main>py -m sophie examples\turtle.sg
 
    Mac and Linux have something analogous.
 
-6. Go have a look at the examples.
+   .. note:: The ``turtle.sg`` example will spawn graphical windows.
 
-   If this is your first time, I'd suggest reading them, and then trying them out, in this order:
+
+6. Dive into :doc:`learn`.
+
+   The :doc:`tutorial <learn>` covers things from the ground up.
+   It's written with no assumptions that you know how to program.
+   If you do already know some other language,
+   be prepared to unlearn some of what you have learned.
+
+7. Scrutinize the example code.
+
+   I'd suggest reading and trying the examples in this order:
 
     * hello_world.sg
     * some_arithmetic.sg
+    * newton.sg
     * primes.sg
-    * alias.sg
+    * turtle.sg
+
+8. Teach your kids. Or your colleagues. Or your goldfish.
+
+9. Contribute to the development and publicity efforts.
+
+   Much has yet to be determined.
+
+10. Write conference papers about how awesome Sophie is.
+
+    or will be...

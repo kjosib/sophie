@@ -183,6 +183,26 @@ Making Decisions
 
 Introduce the conditional forms.
 
+Fantastic Lists and Where to Find Them
+--------------------------------------------
+
+Talk about data structures.
+
+Turtle Graphics
+----------------
+
+Build up to all the examples in ``turtle.sg``.
+
+All the other bits
+------------------
+
+that have yet to be designed...
+
+Congratulations
+-----------------
+If you've gotten this far, you have taken a step into a wider world.
+
+You can reach the author at kjosib@gmail.com.
 
 .. _pathname: https://www.google.com/search?q=define+pathname
 .. _command-prompt: https://www.google.com/search?q=define+command+prompt
