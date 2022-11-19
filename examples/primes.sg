@@ -1,4 +1,23 @@
-# This one's a bit more meat on the bones.
+# This program was, in a sense, my initial impetus for creating the Sophie language.
+# It is a riff on one of Knuth's papers on literate programming from 1983.
+#     -- (See http://www.literateprogramming.com/knuthweb.pdf )
+# The paper is mostly about the awesome power of Literate Programming,
+# but it uses for a case-study the algorithm Dijkstra invented to compute prime numbers efficiently.
+# As originally conceived and presented, that algorithm is completely procedural.
+
+# I wanted to learn how to express algorithmic efficiency, but with pure-functional call-by-need semantics.
+# (Most academic writings of efficient algorithms are done with procedural and call-by-value semantics.)
+# But I needed a notation that wouldn't act as a shibboleth keeping out the unbelievers in functional purity.
+# So I wrote my program in the language I wanted, and then I hacked together a formal
+# grammar for that language, and then I coded up the first version of the interpreter.
+# That process, plus debugging `primes.sg`, collectively took about a week.
+
+# The program before you is not quite the same program as in the prior literature:
+# I allow integer division where Knuth and Dijkstra took great pains to avoid it.
+# But it's enough to get the flavor of writing an "efficient" program
+# (in the sense of what theoretical computer-science means by "efficient")
+# while working in what had been an unfamiliar part of the language-design space.
+# Now that I've gotten used to it and applied it to turtle graphics, I'm hooked.
 
 define:
 
