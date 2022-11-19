@@ -61,7 +61,7 @@ Let's break this down:
 Super-Fancy Calculator
 --------------------------
 
-This section starts with  Here's a small excerpt::
+Here's a small program showing how math (and comments) in Sophie appears::
 
     begin:
         3 + 4 * 5;            # Precedence works like you learned in school.
