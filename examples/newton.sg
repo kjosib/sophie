@@ -1,0 +1,10 @@
+define:
+    iterate_four_times(fn, x) = fn( fn( fn( fn( x ) ) ) );
+
+    root(square) = iterate_four_times(newton, 1) where
+        newton(root) = (root + square/root) / 2;
+    end root;
+begin:
+    root(2);
+    root(17);
+end.

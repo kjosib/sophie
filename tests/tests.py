@@ -33,7 +33,7 @@ class ExampleSmokeTests(unittest.TestCase):
 	""" Run all the examples; Test for no smoke. """
 	
 	def test_other_examples(self):
-		for name in ["hello_world", "some_arithmetic", "primes"]:
+		for name in ["hello_world", "some_arithmetic", "primes", "newton"]:
 			with self.subTest(name=name):
 				module = _load_good_example(name)
 				simple_evaluator.run_module(module)
