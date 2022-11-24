@@ -115,6 +115,7 @@ def evaluate(expr:syntax.Expr, dynamic_env:NameSpace) -> LAZY_VALUE:
 def delay(dynamic_env:NameSpace, item) -> LAZY_VALUE:
 	# For two kinds of expression, there is no profit to delay:
 	if isinstance(item, syntax.Literal): return item.value
+	if isinstance(item, syntax.NilValue): return None
 	if isinstance(item, syntax.Lookup): return dynamic_env[item.name.text]
 	# In less trivial cases, make a thunk and pass that instead.
 	if isinstance(item, syntax.Expr): return Thunk(dynamic_env, item)
@@ -127,10 +128,10 @@ class Closure(Procedure):
 	def __init__(self, static_link:NameSpace, udf:syntax.Function):
 		self._udf = udf
 		self._static_link = static_link
-		self._params = [p.name.text for p in udf.signature.params or ()]
+		self._params = [p.name.text for p in udf.params]
 		self._arity = len(self._params)
 	
-	def _name(self): return self._udf.signature.name.text
+	def _name(self): return self._udf.name.text
 
 	def apply(self, caller_env:NameSpace, args:list[syntax.Expr]) -> LAZY_VALUE:
 		if self._arity != len(args):
@@ -144,7 +145,7 @@ class Closure(Procedure):
 		return delay(inner_env, self._udf.expr)
 
 def close_one_function(env:NameSpace, udf:syntax.Function):
-	if isinstance(udf.signature, syntax.FunctionSignature):
+	if udf.params:
 		return Closure(env, udf)
 	elif udf.sub_fns:
 		inner_env = env.new_child(udf)
@@ -204,17 +205,20 @@ def run_module(module: syntax.Module):
 def _prepare_global_scope(dynamic_env:NameSpace, items):
 	for key, entry in items:
 		dfn = entry.dfn
+		if isinstance(dfn, syntax.TypeDecl):
+			dfn = dfn.body
 		if isinstance(dfn, syntax.Function):
 			dynamic_env[key] = close_one_function(dynamic_env, dfn)
-		elif isinstance(dfn, syntax.TypeSummand):
-			if dfn.body:
-				if isinstance(dfn.body, syntax.RecordType):
-					dynamic_env[key] = Constructor(key, dfn.body.field_names())
+		elif isinstance(dfn, syntax.Parameter):
+			if dfn.type_expr:
+				if isinstance(dfn.type_expr, syntax.RecordType):
+					dynamic_env[key] = Constructor(key, dfn.type_expr.field_names())
 				else:
 					raise NotImplementedError(key, "This particular form isn't yet implemented.")
-			elif key != 'NIL':
+			else:
+				assert key is not None
 				dynamic_env[key] = {"":key}
-		elif isinstance(dfn, (syntax.TypeDecl, syntax.RecordType)):
+		elif isinstance(dfn, syntax.RecordType):
 			dynamic_env[key] = Constructor(key, dfn.field_names())
 		elif isinstance(dfn, primitive.NativeFunction):
 			dynamic_root[key] = Primitive(key, dfn)
@@ -226,18 +230,21 @@ def _prepare_global_scope(dynamic_env:NameSpace, items):
 			raise ValueError("Don't know how to deal with %r %r"%(type(dfn), key))
 
 _ignore_these = {
-	type(None),
-	syntax.ArrowType,
+	# type(None),
+	syntax.ArrowSpec,
 	syntax.Name,
 	syntax.TypeCall,
-	syntax.VariantType,
+	syntax.VariantSpec,
+	primitive.PrimitiveType,
 }
 
 def do_turtle_graphics(steps):
 	import turtle, tkinter
 	root = tkinter.Tk()
+	root.focus_force()
 	root.title("Sophie: Turtle Graphics")
 	root.bind("<ButtonRelease>", lambda event: root.destroy())
+	root.bind("<KeyPress>", lambda event: root.destroy())
 	screen = tkinter.Canvas(root, width=1000, height=1000)
 	screen.pack()
 	t = turtle.RawTurtle(screen)
@@ -252,7 +259,7 @@ def do_turtle_graphics(steps):
 		fn = getattr(t, tag)
 		fn(*args.values())  # Insertion-order is assured.
 	t.screen.update()
-	text = str(len(steps))+" turtle steps. Click the drawing to dismiss it."
+	text = str(len(steps))+" turtle steps. Click the drawing or press any key to dismiss it."
 	print(text)
 	label = tkinter.Label(root, text=text)
 	label.pack()

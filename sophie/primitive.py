@@ -1,14 +1,30 @@
 import inspect
 from functools import lru_cache
 from boozetools.support.symtab import NameSpace
-from .ontology import Cell, Product, Arrow, SymbolTableEntry, AtomicType, KIND_TYPE, KIND_VALUE
+from .ontology import SymbolTableEntry, KIND_TYPE, KIND_VALUE
+from .algebra import SophieType, ProductType, Arrow, TypeVariable
 
 class Primitive:
 	""" Superclass of things that can't occur in syntax. """
 
+
+class PrimitiveType(Primitive):
+	""" The numbers, strings, and flags. """
+	
+	def __init__(self, name: str):
+		self.name = name
+	
+	def __str__(self):
+		return self.name
+	
+	def has_value_domain(self): return False
+	pass
+
+
 class NativeValue(Primitive):
 	def __init__(self, value):
 		self.value = value
+	def has_value_domain(self): return True
 
 class NativeFunction(Primitive):
 	""" Distinct from NativeValue in that the runtime needs to deal well with calling native functions. """
@@ -16,21 +32,22 @@ class NativeFunction(Primitive):
 		self.value = native
 		self.arity = len(inspect.signature(native).parameters.keys())
 		self.typ = _arrow_of_math(self.arity)
+	def has_value_domain(self): return True
 
 @lru_cache()
-def _arrow_of_math(arity:int) -> Cell:
+def _arrow_of_math(arity:int) -> SophieType:
 	return _arrow_of(literal_number, arity)
 
-def _arrow_of(typ:Cell, arity:int) -> Cell:
+def _arrow_of(typ:SophieType, arity:int) -> SophieType:
 	assert arity > 0
-	call = Cell(None).assign(Product((typ,) * arity))
-	arrow = Cell(None).assign(Arrow(call, typ))
-	return arrow
+	return Arrow(ProductType((typ,) * arity), typ)
 
 def _built_in_type(name:str):
-	entry = SymbolTableEntry(KIND_TYPE, None, Cell(None))
+	typ = PrimitiveType(name)
+	entry = SymbolTableEntry(KIND_TYPE, typ, typ)
 	root_namespace[name] = entry
-	return entry.typ.assign(AtomicType(name))
+	return entry.typ
+
 
 root_namespace = NameSpace(place=None)
 literal_number = _built_in_type("number")
@@ -58,11 +75,9 @@ def _init():
 	ops["Add"] = operator.add, binary
 	ops["Sub"] = operator.sub, binary
 	
-	variable = Cell(None)
-	pair_of_same = Cell(None)
-	pair_of_same.value = Product((variable, variable))
-	comparison = Cell(None)
-	comparison.value = Arrow(pair_of_same, literal_flag)
+	variable = TypeVariable("_")
+	pair_of_same = ProductType((variable, variable))
+	comparison = Arrow(pair_of_same, literal_flag)
 	ops["EQ"] = operator.eq, comparison
 	ops["NE"] = operator.ne, comparison
 	ops["LE"] = operator.le, comparison
@@ -78,7 +93,8 @@ def _init():
 	ops["LogicalOr"] = True, logical
 	
 	NON_WORKING = {"hypot", "log"}
-	def value(name:str, dfn, typ:Cell): root_namespace[name] = SymbolTableEntry(KIND_VALUE, dfn, typ)
+	def value(name:str, dfn, typ:SophieType):
+		root_namespace[name] = SymbolTableEntry(KIND_VALUE, dfn, typ)
 	def mathfn(name, native):
 		arity = len(inspect.signature(native).parameters.keys())
 		value(name, NativeFunction(native), _arrow_of_math(arity))

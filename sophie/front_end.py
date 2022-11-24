@@ -22,20 +22,21 @@ class SophieParser(TypicalApplication):
 	def scan_ignore(self, yy: IterableScanner): pass
 	def scan_punctuation(self, yy: IterableScanner):
 		punctuation = sys.intern(yy.match())
-		yy.token(punctuation, punctuation)
+		yy.token(punctuation, yy.slice())
 	def scan_integer(self, yy: IterableScanner): yy.token("integer", syntax.Literal(int(yy.match()), yy.slice()))
 	def scan_real(self, yy: IterableScanner): yy.token("real", syntax.Literal(float(yy.match()), yy.slice()))
 	def scan_short_string(self, yy: IterableScanner): yy.token("short_string", syntax.Literal(yy.match()[1:-1], yy.slice()))
 	
 	def scan_word(self, yy: IterableScanner):
 		upper = yy.match().upper()
-		if upper in self.RESERVED: yy.token(upper, yy.slice() if 'NIL'==upper else None)
+		if upper in self.RESERVED: yy.token(upper, yy.slice())
 		else: yy.token("name", syntax.Name(sys.intern(yy.match()), yy.slice()))
 	
 	def scan_relop(self, yy: IterableScanner, op:str):
 		yy.token("relop", op)
 	
 	def parse_nothing(self): return None
+	def parse_empty(self): return ()
 	def parse_first(self, item): return [item]
 	def parse_more(self, some, another):
 		some.append(another)
@@ -46,6 +47,7 @@ class SophieParser(TypicalApplication):
 		
 	def unexpected_token(self, kind, semantic, pds):
 		raise SophieParseError(self.stack_symbols(pds), kind, self.yy.slice())
+	
 	pass
 
 sophie_parser = SophieParser(_tables)

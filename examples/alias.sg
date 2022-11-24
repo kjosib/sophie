@@ -7,7 +7,7 @@ type:
 
 	predicate[A] is function A -> flag;
 	comparator[A] is function A,A -> flag;
-	tree[X] is case
+	tree[X] is case:
 	    leaf(item:X);
 	    node(left:tree[X], right:tree[X]);
     esac;
