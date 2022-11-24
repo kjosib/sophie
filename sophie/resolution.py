@@ -3,12 +3,13 @@ All the definition resolution stuff goes here.
 By the time this pass is finished, every name points to its symbol table entry,
 from which we can find the kind, type, and definition.
 """
-
+from collections import defaultdict
+from boozetools.support.foundation import Visitor, strongly_connected_components_hashable
 from boozetools.support.symtab import NameSpace, NoSuchSymbol, SymbolAlreadyExists
-from boozetools.support.failureprone import Issue, Evidence, Severity
-from boozetools.support.foundation import Visitor
+from boozetools.support.failureprone import Issue
 from . import syntax, diagnostics
-from .ontology import SymbolTableEntry, Cell, KIND_VALUE, KIND_TYPE
+from .ontology import SymbolTableEntry, KIND_VALUE, KIND_TYPE, SyntaxNode
+from .primitive import PrimitiveType
 
 def resolve_words(module:syntax.Module, outside:NameSpace[SymbolTableEntry]) -> list[Issue]:
 	"""
@@ -22,69 +23,78 @@ def resolve_words(module:syntax.Module, outside:NameSpace[SymbolTableEntry]) -> 
 	"""
 	assert isinstance(module, syntax.Module)
 	report = diagnostics.Report()
-	definer = WordDefiner(module, outside)
-	if definer.redef:
-		report.error(
-			definer.redef,
-			"Defining Words",
-			"I see the same name defined earlier in the same scope:"
-		)
-	resolver = WordResolver(module)
-	if resolver.undef:
-		report.error(
-			resolver.undef,
-			"Finding Definitions",
-			"I do not see an available definition for:",
-		)
-	for guilty in resolver.duptags:
-		report.error(
-			guilty,
-			"Checking type-match expressions",
-			"The same type-case appears more than once in a single type-matching expression."
-		)
+	if not report.issues:
+		WordDefiner(module, outside, report.on_error("Defining words"))
+	if not report.issues:
+		WordResolver(module, report)
+	if not report.issues:
+		AliasChecker(module, report.on_error("Circular reasoning"))
 	return report.issues
 
 class WordDefiner(Visitor):
 	"""
+	At the end of this phase:
+		Names used in declarations have an attached symbol table entry.
+		The entry is installed in all appropriate namespaces.
+		
 	Attaches NameSpace objects in key places and install definitions.
 	Takes note of names with more than one definition in the same scope.
 	"""
-	def __init__(self, module:syntax.Module, outer:NameSpace):
+	globals : NameSpace
+	
+	def __init__(self, module:syntax.Module, outer:NameSpace, on_error):
 		self.redef = []
 		self.globals = module.namespace = outer.new_child(module)
 		for td in module.types:
-			assert isinstance(td, syntax.TypeDecl)
 			self.visit(td)
 		for fn in module.functions:
-			self.visit(fn, self.globals)
+			self.visit(fn, module.namespace)
+		if self.redef:
+			on_error(self.redef, "I see the same name defined earlier in the same scope:")
+		
+		
+		del self.redef
 
-	def _install(self, namespace:NameSpace, name:syntax.Key, dfn, kind:str):
-		cell = Cell(name)
-		name.entry = SymbolTableEntry(kind, dfn, cell)
+	def _install(self, namespace:NameSpace, name:syntax.Name, dfn, kind:str):
+		name.entry = SymbolTableEntry(kind, dfn)
 		try: namespace[name.text] = name.entry
-		except SymbolAlreadyExists: self.redef.append(name.slice)
-	
-	def visit_TypeDecl(self, td:syntax.TypeDecl):
-		self._install(self.globals, td.name, td.body, KIND_TYPE)
-		if not td.parameters:
-			td.namespace = self.globals
+		except SymbolAlreadyExists: self.redef.append(name.head())
+		
+	def _install_type(self, name:syntax.Name, dfn):
+		self._install(self.globals, name, dfn, KIND_TYPE)
+		
+	def visit_TypeDecl(self, it:syntax.TypeDecl):
+		self._install_type(it.name, it)
+		if not it.parameters:
+			it.namespace = self.globals
 		else:
-			td.namespace = self.globals.new_child(td)
-			for param_name in td.parameters:
-				self._install(td.namespace, param_name, None, KIND_TYPE)
-		self.visit(td.body)
-	
-	def visit_VariantType(self, it:syntax.VariantType):
+			it.namespace = self.globals.new_child(it)
+			for param in it.parameters:
+				self._install(it.namespace, param.name, param, KIND_TYPE)
+		self.visit(it.body)
+		
+	def visit_VariantSpec(self, it:syntax.VariantSpec):
 		for summand in it.alternatives:
-			self._install(self.globals, summand.tag, summand, KIND_TYPE)
-	
+			if isinstance(summand, syntax.NilMember):
+				if None in it.index:
+					self.redef.append(summand.head())
+				else:
+					it.index[None] = summand
+			else:
+				assert isinstance(summand, syntax.Parameter)
+				self._install_type(summand.name, summand)
+				if summand.type_expr is not None:
+					self.visit(summand.type_expr)
+		return
+
 	def visit_RecordType(self, it:syntax.RecordType):
-		# This only checks for overlapping field names.
-		seen = NameSpace(place=it)
+		# Ought to have a local name-space with names having types.
+		it.namespace = NameSpace(place=it)
 		for name, factor in it.fields:
-			self._install(seen, name, factor, KIND_TYPE)
-	
-	def visit_ArrowType(self, it:syntax.ArrowType):
+			self._install(it.namespace, name, factor, KIND_TYPE)
+		return
+
+	def visit_ArrowSpec(self, it:syntax.ArrowSpec):
 		pass
 
 	def visit_Name(self, it:syntax.Name):
@@ -96,55 +106,67 @@ class WordDefiner(Visitor):
 	def visit_Function(self, fn:syntax.Function, env:NameSpace):
 		self._install(env, fn.name, fn, KIND_VALUE)
 		inner = fn.namespace = env.new_child(fn)
-		self.visit(fn.signature, inner)
+		for param in fn.params:
+			self._install(inner, param.name, param, KIND_VALUE)
 		fn.sub_fns = {}  # for simple evaluator
 		for sub_fn in fn.where:
 			sub_name = sub_fn.name
 			self.visit(sub_fn, inner)
 			fn.sub_fns[sub_name.text] = sub_fn
 		del fn.where  # Don't need this anymore.
-	
-	def visit_FunctionSignature(self, sig:syntax.FunctionSignature, inner:NameSpace):
-		for param in sig.params:
-			self._install(inner, param.name, param, KIND_VALUE)
-	
-	def visit_AbsentSignature(self, sig:syntax.AbsentSignature, inner:NameSpace):
-		pass
+
 
 class WordResolver(Visitor):
 	"""
 	Walk the tree looking for undefined words in each static scope.
 	Report on every such occurrence.
+	If this pass succeeds, every syntax.Name object is connected to its corresponding symbol table entry.
+	Otherwise, self.duptags or self.undef
 	"""
-	def __init__(self, module:syntax.Module):
+	def __init__(self, module:syntax.Module, report):
 		self.undef = []
-		self.duptags = []
+		self.duptags = defaultdict(list)
 		self.globals = module.namespace
 		for td in module.types:
-			assert isinstance(td, syntax.TypeDecl)
 			self.visit(td.body, td.namespace)
 		for fn in module.functions:
 			self.visit(fn)
 		for expr in module.main:
 			self.visit(expr, module.namespace)
-		
-	def visit_VariantType(self, it:syntax.VariantType, env:NameSpace):
+		if self.undef:
+			report.error(
+				self.undef,
+				"Finding Definitions",
+				"I do not see an available definition for:",
+			)
+		for guilty in self.duptags:
+			report.error(
+				guilty,
+				"Checking type-match expressions",
+				"The same type-case appears more than once in a single type-matching expression."
+			)
+
+	def visit_VariantSpec(self, it:syntax.VariantSpec, env:NameSpace):
+		it.index = {}
 		for alt in it.alternatives:
-			self.visit(alt, env)
+			if isinstance(alt, syntax.NilMember):
+				pass
+			else:
+				assert isinstance(alt, syntax.Parameter)
+				typ = env[alt.name.text].typ
+				if alt.type_expr is not None:
+					self.visit(alt.type_expr, env)
+				it.index[alt.key()] = typ
 	
 	def visit_RecordType(self, it:syntax.RecordType, env:NameSpace):
-		for name, factor in it.fields:
-			self.visit(factor, env)
+		for name, type_expr in it.fields:
+			self.visit(type_expr, env)
 			
-	def visit_TypeSummand(self, it:syntax.TypeSummand, env:NameSpace):
-		if it.body is not None:
-			self.visit(it.body, env)
-	
 	def visit_Name(self, name:syntax.Name, env:NameSpace):
 		try:
 			name.entry = env[name.text]
 		except NoSuchSymbol:
-			self.undef.append(name.slice)
+			self.undef.append(name.head())
 	
 	def visit_TypeCall(self, it:syntax.TypeCall, env:NameSpace):
 		self.visit(it.name, env)
@@ -152,29 +174,19 @@ class WordResolver(Visitor):
 			self.visit(p, env)
 
 	def visit_Function(self, fn:syntax.Function):
-		self.visit(fn.signature)
-		inner = fn.namespace
-		for key, item in inner.local.items():
-			self.visit(item.dfn)
-		self.visit(fn.expr, inner)
-	
-	def visit_FunctionSignature(self, sig:syntax.FunctionSignature):
-		for p in sig.params:
-			self.visit(p)
-		if sig.return_type is not None:
-			self.visit(sig.return_type, self.globals)
-	
-	def visit_AbsentSignature(self, sig:syntax.AbsentSignature):
-		pass
-	
-	def visit_Parameter(self, param:syntax.Parameter):
-		if param.type_expr is not None:
-			self.visit(param.type_expr, self.globals)
+		for param in fn.params:
+			if param.type_expr is not None:
+				self.visit(param.type_expr, self.globals)
+		if fn.expr_type is not None:
+			self.visit(fn.expr_type, self.globals)
+		self.visit(fn.expr, fn.namespace)
+		for item in fn.sub_fns.values():
+			self.visit(item)
 	
 	def visit_Literal(self, it:syntax.Literal, env:NameSpace):
 		pass
 	
-	def visit_ArrowType(self, it:syntax.ArrowType, env:NameSpace):
+	def visit_ArrowSpec(self, it:syntax.ArrowSpec, env:NameSpace):
 		for a in it.lhs:
 			self.visit(a, env)
 		self.visit(it.rhs, env)
@@ -217,18 +229,148 @@ class WordResolver(Visitor):
 		self.visit(expr.name, env)
 		expr.dispatch = {}
 		seen = {}
-		for item in expr.alternatives:
-			assert isinstance(item, syntax.Alternative)
-			tag = item.pattern.tag()
-			if tag in seen:
-				self.duptags.append((seen[tag], item.pattern.slice))
+		for pattern, sub_expr in expr.alternatives:
+			self.visit(pattern, self.globals)
+			key = pattern.key()
+			if key in seen:
+				self.duptags[seen[key]].append(pattern.head())
 			else:
-				seen[tag] = item.pattern.slice
-				expr.dispatch[tag] = item.expr
-			self.visit(item.pattern, env)
-			self.visit(item.expr, env)
+				seen[key] = pattern.head()
+				expr.dispatch[key] = sub_expr
+			self.visit(sub_expr, env)
 		if expr.otherwise is not None:
 			self.visit(expr.otherwise, env)
 	
 	def visit_NilToken(self, nil:syntax.NilToken, env:NameSpace):
+		pass
+
+
+########################################################
+
+class AliasChecker(Visitor):
+	"""
+	Check for aliases being well-founded, up front before getting caught in a loop later:
+	There should be no cycles in the aliasing dependency graph, and no wrong-kind references.
+	"""
+	
+	def __init__(self, module: syntax.Module, on_error):
+		self.on_error = on_error
+		self.non_types = []
+		self.non_values = []
+		self.graph : dict[SyntaxNode:list[SyntaxNode]] = defaultdict(list)
+		for td in module.types:
+			self.visit(td)
+		for fn in module.functions:
+			self.visit(fn)
+		for expr in module.main:
+			self.visit(expr)
+		if self.non_types:
+			self.on_error(self.non_types, "Need a type-name here; found this instead.")
+		if self.non_values:
+			self.on_error(self.non_values, "Need a value-name or constructor here; found this type-name instead.")
+		for scc in strongly_connected_components_hashable(self.graph):
+			if len(scc) == 1:
+				node = scc[0]
+				if node in self.graph[node]:
+					self.on_error([node], "This is a circular.")
+			else:
+				self.on_error(scc, "These make a circular definition.")
+	
+	def visit_TypeDecl(self, td:syntax.TypeDecl):
+		assert td.name.entry.dfn == td
+		self.graph[td].append(td.body)
+		self.visit(td.body)
+	
+	def visit_Parameter(self, param:syntax.Parameter):
+		if param.type_expr is not None:
+			self.visit(param.type_expr)
+	
+	def visit_NilMember(self, expr:syntax.NilMember):
+		pass
+		
+	def visit_TypeCall(self, expr:syntax.TypeCall):
+		referent = expr.name.entry.dfn
+		arg_arity = len(expr.arguments)
+		if isinstance(referent, syntax.TypeDecl):
+			param_arity = len(referent.parameters)
+			self.graph[expr].append(referent)
+		elif isinstance(referent, (PrimitiveType, syntax.TypeParameter)):
+			param_arity = 0
+		else:
+			self.non_types.append(expr)
+			return
+		self.graph[expr].extend(expr.arguments)
+		# a. Do we have the correct arity?
+		if arg_arity != param_arity:
+			pattern = "%d type-arguments were given; %d are needed."
+			self.on_error([expr], pattern % (arg_arity, param_arity))
+		for arg in expr.arguments:
+			self.visit(arg)
+			
+
+	def visit_VariantSpec(self, expr: syntax.VariantSpec):
+		for alt in expr.alternatives:
+			self.visit(alt)
+	def visit_RecordType(self, expr: syntax.RecordType):
+		for f in expr.fields:
+			self.visit(f)
+	def visit_ArrowSpec(self, expr:syntax.ArrowSpec):
+		self.graph[expr].extend(expr.lhs)
+		for p in expr.lhs:
+			self.visit(p)
+		if expr.rhs is not None:
+			self.graph[expr].append(expr.rhs)
+			self.visit(expr.rhs)
+
+
+
+	def visit_Function(self, fn:syntax.Function):
+		for p in fn.params:
+			self.visit(p)
+		if fn.expr_type:
+			self.visit(fn.expr_type)
+		self.graph[fn].append(fn.expr)
+		self.visit(fn.expr)
+
+
+
+	def visit_MatchExpr(self, expr: syntax.MatchExpr):
+		self.graph[expr].append(expr.name.entry.dfn)
+	
+	def visit_Cond(self, expr: syntax.Cond):
+		self.graph[expr].append(expr.if_part)
+		self.visit(expr.if_part)
+	
+	
+	
+	def visit_Call(self, expr: syntax.Call):
+		self.graph[expr].append(expr.fn_exp)
+		self.visit(expr.fn_exp)
+	
+	def visit_BinExp(self, expr: syntax.BinExp):
+		for s in expr.lhs, expr.rhs:
+			self.graph[expr].append(s)
+			self.visit(s)
+	
+	def visit_ShortCutExp(self, expr: syntax.ShortCutExp):
+		self.graph[expr].append(expr.lhs)
+		self.visit(expr.lhs)
+	
+	def visit_UnaryExp(self, expr: syntax.UnaryExp):
+		self.graph[expr].append(expr.arg)
+		self.visit(expr.arg)
+	
+	
+	def visit_Lookup(self, lu: syntax.Lookup):
+		dfn = lu.name.entry.dfn
+		# Allow functions, parameters, and proper constructors.
+		if dfn.has_value_domain():
+			self.graph[lu].append(dfn)
+		else:
+			self.non_values.append(lu.name)
+	
+	def visit_Literal(self, l:syntax.Literal):
+		pass
+	
+	def visit_ExplicitList(self, l:syntax.ExplicitList):
 		pass

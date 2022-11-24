@@ -4,14 +4,14 @@
 # Also for the moment, I import (most of) Python's math library directly into the primitive-root namespace.
 
 type:
-	list[x] is CASE
+	list[x] is CASE:
 		 cons(head:x, tail:list[x]);
 		 nil;
 	ESAC;
 	
 	drawing is (steps: list[turtle_step]);
 	
-	turtle_step is case
+	turtle_step is case:
 		forward(distance:number);
 		backward(distance:number);
 		right(angle:number);
@@ -83,7 +83,7 @@ end.
 """
 
 def _init():
-	from . import front_end, resolution, unification, primitive
+	from . import front_end, resolution, primitive
 	from .syntax import Module
 	
 	preamble = front_end.parse_text(__doc__, __file__)
@@ -91,13 +91,10 @@ def _init():
 		issues = resolution.resolve_words(preamble, primitive.root_namespace)
 	else:
 		issues = [preamble]
-	if not issues:
-		issues = unification.infer_types(preamble)
 	if issues:
 		front_end.complain(issues)
 		raise ValueError()
 	else:
-		unification.THE_LIST_TYPE = preamble.namespace['list'].typ.value
 		return preamble.namespace
 
 static_root = _init()

@@ -6,7 +6,6 @@ from boozetools.support.failureprone import Issue
 from sophie.front_end import parse_file, parse_text, complain
 from sophie.resolution import resolve_words
 from sophie.preamble import static_root
-from sophie.unification import infer_types, PHASE_ASSIGN
 from sophie import syntax, simple_evaluator
 
 base_folder = Path(__file__).parent.parent
@@ -20,8 +19,8 @@ def _load_good_example(which) -> syntax.Module:
 	else:
 		assert isinstance(module, Issue)
 		errors = [module]
-	if not errors:
-		errors = infer_types(module)
+	# if not errors:
+	# 	errors = unification.infer_types(module)
 	if errors:
 		complain(errors)
 		assert False
@@ -40,7 +39,7 @@ class ExampleSmokeTests(unittest.TestCase):
 	
 	def test_alias(self):
 		module = _load_good_example("alias")
-		self.assertIsInstance(module.namespace["album_tree"].dfn, syntax.TypeCall)
+		self.assertIsInstance(module.namespace["album_tree"].dfn.body, syntax.TypeCall)
 		self.assertEqual(7, simple_evaluator.run_module(module))
 	
 	def test_turtle_compiles(self):
@@ -73,37 +72,40 @@ class ZooOfFailTests(unittest.TestCase):
 			with self.subTest(fn):
 				sut = parse_file(zoo_folder/(fn+".sg"))
 				errors = resolve_words(sut, static_root)
-				self.assertTrue(errors)
+				assert len(errors)
 				
-	def test_01_things_type_assignment_should_reject(self):
+	def test_01_well_founded(self):
 		for bogon in [
 			"define: bogus(arg:yes) = arg; end.",  # "yes" is not a type.
 			"type: a is a; end.",
 			"type: a is b; b is a; end.",
 			"type: a is list[a]; end.",
-			# "type: a[x] is x; end.",  # I'm not sure if this is erroneous.
+			# "type: a[x] is x; end.",  # Strange, but not strictly erroneous.
 			"type: a[x] is x[a]; end.",  # This definitely is.
 			"type: a[x] is x[list]; end.",  # This would imply second-order types, which .. no. Not now, anyway.
+			"define: i = i; end.",
+			"define: i = 1 + i; end.",
+			"define: i = j; j=k; k=i; end.",
+			"type: L is list[number]; begin: L; end.",
+			"begin: number; end.",
 		]:
 			with self.subTest(bogon):
 				module = parse_text(bogon, __file__)
 				assert isinstance(module, syntax.Module)
 				issues = resolve_words(module, static_root)
-				assert not issues, "The problem should be more subtle than what name resolution can find."
-				issues = infer_types(module)
-				assert any(i.phase == PHASE_ASSIGN for i in issues), issues
+				assert issues
 		
 	def test_02_does_not_type(self):
 		for fn in ("num_plus_string", "wrong_arity"):
 			with self.subTest(fn):
 				# Given
 				sut = parse_file(zoo_folder/(fn+".sg"))
-				errors = resolve_words(sut, static_root)
-				self.assertFalse(errors)
+				reference_errors = resolve_words(sut, static_root)
+				assert not reference_errors
 				# When
-				type_errors = infer_types(sut)
+				type_errors = ()  #  unification.infer_types(sut)
 				# Then
-				self.assertTrue(len(type_errors))
+				assert len(type_errors)
 
 if __name__ == '__main__':
 	unittest.main()
