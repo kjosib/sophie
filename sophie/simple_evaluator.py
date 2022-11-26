@@ -60,15 +60,15 @@ def _eval_lookup(expr:syntax.Lookup, dynamic_env:NameSpace):
 	return dynamic_env[expr.name.text]
 
 def _eval_bin_exp(expr:syntax.BinExp, dynamic_env:NameSpace):
-	return expr.op(strict(expr.lhs, dynamic_env), strict(expr.rhs, dynamic_env))
+	return OPS[expr.glyph](strict(expr.lhs, dynamic_env), strict(expr.rhs, dynamic_env))
 
 def _eval_unary_exp(expr:syntax.UnaryExp, dynamic_env:NameSpace):
-	return expr.op(strict(expr.arg, dynamic_env))
+	return OPS[expr.glyph](strict(expr.arg, dynamic_env))
 
 def _eval_shortcut_exp(expr:syntax.ShortCutExp, dynamic_env:NameSpace):
 	lhs = strict(expr.lhs, dynamic_env)
 	assert isinstance(lhs, bool)
-	return lhs if lhs == expr.keep else strict(expr.rhs, dynamic_env)
+	return lhs if lhs == OPS[expr.glyph] else strict(expr.rhs, dynamic_env)
 
 def _eval_call(expr:syntax.Call, dynamic_env:NameSpace):
 	procedure = strict(expr.fn_exp, dynamic_env)
@@ -209,7 +209,7 @@ def _prepare_global_scope(dynamic_env:NameSpace, items):
 			dfn = dfn.body
 		if isinstance(dfn, syntax.Function):
 			dynamic_env[key] = close_one_function(dynamic_env, dfn)
-		elif isinstance(dfn, syntax.Parameter):
+		elif isinstance(dfn, syntax.FormalParameter):
 			if dfn.type_expr:
 				if isinstance(dfn.type_expr, syntax.RecordType):
 					dynamic_env[key] = Constructor(key, dfn.type_expr.field_names())
@@ -243,8 +243,6 @@ def do_turtle_graphics(steps):
 	root = tkinter.Tk()
 	root.focus_force()
 	root.title("Sophie: Turtle Graphics")
-	root.bind("<ButtonRelease>", lambda event: root.destroy())
-	root.bind("<KeyPress>", lambda event: root.destroy())
 	screen = tkinter.Canvas(root, width=1000, height=1000)
 	screen.pack()
 	t = turtle.RawTurtle(screen)
@@ -263,6 +261,8 @@ def do_turtle_graphics(steps):
 	print(text)
 	label = tkinter.Label(root, text=text)
 	label.pack()
+	root.bind("<ButtonRelease>", lambda event: root.destroy())
+	root.bind("<KeyPress>", lambda event: root.destroy())
 	tkinter.mainloop()
 
 def dethunk(result:dict):
@@ -298,4 +298,4 @@ for _k, _v in list(globals().items()):
 		_t = _v.__annotations__["expr"]
 		assert isinstance(_t, type), (_k, _t)
 		EVALUATE[_t] = _v
-
+OPS = {glyph:op for glyph, (op, typ) in primitive.ops.items()}

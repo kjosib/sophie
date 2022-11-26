@@ -1,103 +1,154 @@
-from typing import Optional, Sequence
-from .ontology import SophieType
+"""
+Types are functions.
+For now, Sophie evaluates types in (a version of) the simply-typed lambda calculus.
 
-class Arrow(SophieType):
-	def __init__(self, argument: SophieType, reply: SophieType):
-		self.argument, self.reply = argument, reply
-	
-	def for_expression_context(self, stem):
-		pass
+"""
+from typing import Sequence, Mapping
+from collections import deque
 
+#########################
 
-class DuckType(SophieType):
-	""" Inferred composite with inferred fields. Yes, static duck-typing is a thing. """
-	def __init__(self, fields:dict[str:SophieType]):
-		self.fields = fields
-	
-	def for_expression_context(self, stem):
-		assert False
+#########################
 
 
-class ProductType(SophieType):
-	""" Type consisting of a tuple of values; commonly found at function call sites. """
-	def __init__(self, fields: Sequence[SophieType]):
-		self.fields = fields
-	
-	def for_expression_context(self, stem):
-		assert False
+class Term:
+	""" It's a term re-writing system to compute types. """
+	rank = 0   # Rank for all structural types.
+	def rewrite(self, gamma:Mapping): raise NotImplementedError(type(self))
+	def instantiate(self, gamma:dict): raise NotImplementedError(type(self))
+
+class TypeVariable(Term):
+	_counter = 0   # Each is distinct; there is thus no such thing as capture.
+	def __init__(self):
+		self.nr = TypeVariable._counter
+		TypeVariable._counter += 1
+	def __repr__(self): return "<%s>"%self.nr
+	def rewrite(self, gamma:Mapping): return gamma.get(self, self)
+	def instantiate(self, gamma:dict):
+		if self not in gamma:
+			gamma[self] = TypeVariable()
+		return gamma[self]
 
 
-class RecordType(SophieType):
-	""" Declared fixed set of named fields. """
-	def __init__(self, fields:dict[str:SophieType]):
-		self.fields = fields
-		self._product = ProductType(list(fields.values()))
-	
-	def for_expression_context(self, stem):
-		return self._product
+#########################
 
-class JustNil(SophieType):
-	"""The type of a lexical nil. Intersection with a variant is that variant's own nil case."""
-	
-	def intersect(self, other: "SophieType"):
-		if isinstance(other, JustNil):
-			return self
-		if isinstance(other, SumType):
-			return other.cases.get(None)
-		
-	def for_expression_context(self, stem):
-		assert False
-
-just_nil = JustNil()
-
-
-class TypeVariable(SophieType):
-	def __init__(self, text: str):
-		self.text = text
+class Alias(Term):
+	""" Think of this as essentially a pending function-call. """
+	def __init__(self, ctor:Term, mapping: Mapping[TypeVariable, Term]):
+		# Keys are formal params used by constructor.
+		self.ctor = ctor
+		self.mapping = mapping
+		self.rank = 1 + ctor.rank
+	def __repr__(self):
+		mapping = ";  ".join("%s:=%s"%i for i in self.mapping.items() )
+		return "%s[%s]"%(self.ctor, mapping)
+	def rewrite(self, gamma:Mapping):
+		# This is just a change-of-variables.
+		# Can do this without losing information
+		new_mapping = { k:gamma.get(v,v) for k,v in self.mapping.items() }
+		return Alias(self.ctor, new_mapping)
+	def demote(self):
+		# Return a less-aliased form of the same type.
+		# If you want to know whether two aliases are compatible,
+		# Demote the higher-ranking one repeatedly until you get items of the same rank.
+		# Then compare the resulting items.
+		return self.ctor.rewrite(self.mapping)
 
 
-class Constructor(SophieType):
-	def __init__(self, symbol:str, argument:Optional[SophieType], params:Sequence[TypeVariable], extends:Optional["SumType"]):
-		assert isinstance(symbol, str)
-		assert argument is None or isinstance(argument, SophieType)
+class PrimitiveType(Term):
+	""" Presumably add clerical details here. """
+	def __init__(self, name): self.name = name
+	def __repr__(self): return "<%s>"%self.name
+	def rewrite(self, gamma:Mapping): return self
+	def has_value_domain(self): return False  # .. HACK ..
+	def instantiate(self, gamma:dict): return self
+
+class Arrow(Term):
+	def __init__(self, arg: Term, res: Term): self.arg, self.res = arg, res
+	def __repr__(self): return "%s -> %s"%(self.arg, self.res)
+	def rewrite(self, gamma:Mapping): return Arrow(self.arg.rewrite(gamma), self.res.rewrite(gamma))
+	def instantiate(self, gamma:dict):
+		arg, res = self.arg.instantiate(gamma), self.res.instantiate(gamma)
+		if self.arg is arg and self.res is res: return self
+		else: return Arrow(arg, res)
+
+
+class Product(Term):
+	# The proper "destructor" is an indexed-access operation.
+	# That's not accessible idiomatically; it's an internal thing.
+	def __init__(self, fields: Sequence[Term]): self.fields = fields
+	def __repr__(self): return "(%s)"%(",".join(map(str, self.fields)))
+	def rewrite(self, gamma:Mapping): return Product(tuple(t.rewrite(gamma) for t in self.fields))
+	def instantiate(self, gamma:dict):
+		fields = tuple(t.instantiate(gamma) for t in self.fields)
+		if all(a is b for a,b in zip(fields, self.fields)): return self
+		else: return Product(fields)
+
+class Record(Term):
+	# The proper destructor is a field-access operation.
+	def __init__(self, symbol:str, index, product:Product):
 		self.symbol = symbol
-		self.argument = argument
-		self.params = params
-		self.extends = extends
-		
-	def for_expression_context(self, stem):
-		if self.argument is None:
-			instance = self
+		self.index = index
+		self.product = product
+	def __repr__(self): return "<record %s>"%self.symbol
+	def rewrite(self, gamma:Mapping):
+		return Record(self.symbol, self.index, self.product.rewrite(gamma))
+
+class Tagged(Term):
+	# The proper destructor here is pattern-matching.
+	def __init__(self, symbol:str, body:Term):
+		self.symbol = symbol
+		self.body = body
+	def __repr__(self): return "%s %s"%(self.symbol, self.body)
+	def rewrite(self, gamma:Mapping): return Tagged(self.symbol, self.body.rewrite(gamma))
+
+#########################
+
+class Incompatible(TypeError):
+	pass
+
+def unify(peas:Term, carrots:Term) -> dict[TypeVariable:Term]:
+	def proxy(term):
+		while term in gamma: term = gamma[term]
+		return term
+	def enq(a,b): queue.append((a,b))
+	def U(A, B):
+		A, B = proxy(A), proxy(B)
+		if A is B: return
+		elif type(A) is TypeVariable: gamma[A] = B
+		elif type(B) is TypeVariable: gamma[B] = A
 		else:
-			argument = self.argument.for_expression_context(stem)
-			reply = self
-			instance = Arrow(argument, reply)
-		if self.params:
-			instance = Bind(instance, {p:SophieType(stem) for p in self.params})
-		return instance
-
-class SumType(SophieType):
-	cases: dict[Optional[str]:"Constructor|NilCase"]
+			while A.rank != B.rank:
+				if A.rank > B.rank:
+					A = A.demote()
+				else:
+					B = B.demote()
+			T = type(A)
+			if T is not type(B):
+				raise Incompatible(A,B)
+			elif T is Alias:
+				if A.symbol == B.symbol:
+					pass
+				else:
+					raise Incompatible(A,B)
+			elif T is PrimitiveType:
+				# Nominal Equivalence
+				if A is not B:
+					raise Incompatible(A,B)
+			elif T is Arrow:
+				# Structural Equivalence
+				enq(A.arg, B.arg)
+				enq(A.res, B.res)
+			elif T is Product:
+				# Structural Equivalence
+				if len(A.fields) != len(B.fields):
+					raise Incompatible(A,B)
+				for x,y in zip(A.fields,B.fields):
+					enq(x,y)
 	
-	def __init__(self, name:str):
-		self.atom = PrimitiveType(name)
-		self.cases = {}
-
-	def for_expression_context(self, stem):
-		pass
-
-
-class NilCase(SophieType):
-	def __init__(self, extends:SumType):
-		self.extends = extends
-		extends.cases[None] = self
-		
-	def for_expression_context(self, stem):
-		assert False, "These things have no names, and so can't be looked up."
-
-
-class Bind(SophieType):
-	def __init__(self, instance:SophieType, binding:dict[TypeVariable:SophieType]):
-		self.instance = instance
-		self.binding = binding
-		
+	gamma = {}
+	queue = deque()
+	enq(peas, carrots)
+	while queue:
+		U(*queue.popleft())
+	return gamma

@@ -10,6 +10,7 @@ from boozetools.parsing.interface import ParseError
 from boozetools.support.failureprone import Issue, Evidence, Severity
 from boozetools.support.pretty import DOT
 from . import syntax
+from .diagnostics import Report
 
 class SophieParseError(ParseError):
 	pass
@@ -52,32 +53,23 @@ class SophieParser(TypicalApplication):
 
 sophie_parser = SophieParser(_tables)
 
-def parse_file(pathname):
+def parse_file(pathname, report:Report):
 	"""Read file given by name; pass contents to next phase."""
 	with open(pathname, "r") as fh:
 		text = fh.read()
-	return parse_text(text, pathname)
+	return parse_text(text, pathname, report)
 
-def parse_text(text:str, pathname:Path) -> Union[syntax.Module, Issue]:
+def parse_text(text:str, pathname:Path, report:Report) -> Union[syntax.Module, Issue]:
 	""" Submit text to parser; submit the resulting tree to subsequent pass """
 	try:
 		return sophie_parser.parse(text, filename=str(pathname))
 	except syntax.MismatchedBookendsError as ex:
-		return Issue(
-			phase="Checking Bookends",
-			severity=Severity.ERROR,
-			description="Mismatched where-clause end needs to match",
-			evidence={"": [Evidence(where) for where in ex.args]}
-		)
+		report.error("Checking Bookends", ex.args, "Mismatched where-clause end needs to match")
 	except ParseError as ex:
 		stack_symbols, kind, where = ex.args
-		return Issue(
-			phase="Parsing",
-			severity=Severity.ERROR,
-			description="Unexpected token at %r %s %r" % (stack_symbols, DOT, kind),
-			evidence={"": [Evidence(where)]},
-		)
+		description = "Unexpected token at %r %s %r" % (stack_symbols, DOT, kind)
+		report.error("Parsing", [where], description)
 
-def complain(issues:list[Issue]):
-	for i in issues:
+def complain(report:Report):
+	for i in report.issues:
 		i.emit(lambda x:sophie_parser.source)

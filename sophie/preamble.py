@@ -1,6 +1,6 @@
 """
 # Built-in / primitive definitions and types are in the docstring of this Python file.
-# Native types flag, number, and string are installed separately in native Python.
+# Native types flag, number, and string are installed separately in "native" Python.
 # Also for the moment, I import (most of) Python's math library directly into the primitive-root namespace.
 
 type:
@@ -83,17 +83,16 @@ end.
 """
 
 def _init():
-	from . import front_end, resolution, primitive
-	from .syntax import Module
-	
-	preamble = front_end.parse_text(__doc__, __file__)
-	if isinstance(preamble, Module):
-		issues = resolution.resolve_words(preamble, primitive.root_namespace)
-	else:
-		issues = [preamble]
-	if issues:
-		front_end.complain(issues)
-		raise ValueError()
+	from . import front_end, resolution, primitive, diagnostics, partial_evaluator
+	report = diagnostics.Report()
+	preamble = front_end.parse_text(__doc__, __file__, report)
+	if not report.issues:
+		resolution.resolve_words(preamble, primitive.root_namespace, report)
+	if not report.issues:
+		partial_evaluator.type_module(preamble, report)
+	if report.issues:
+		front_end.complain(report)
+		raise RuntimeError()
 	else:
 		return preamble.namespace
 

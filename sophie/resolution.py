@@ -5,13 +5,12 @@ from which we can find the kind, type, and definition.
 """
 from collections import defaultdict
 from boozetools.support.foundation import Visitor, strongly_connected_components_hashable
-from boozetools.support.symtab import NameSpace, NoSuchSymbol, SymbolAlreadyExists
-from boozetools.support.failureprone import Issue
-from . import syntax, diagnostics
-from .ontology import SymbolTableEntry, KIND_VALUE, KIND_TYPE, SyntaxNode
+from boozetools.support.symtab import NoSuchSymbol, SymbolAlreadyExists
+from . import syntax, algebra
+from .ontology import SymbolTableEntry, SyntaxNode, NS
 from .primitive import PrimitiveType
 
-def resolve_words(module:syntax.Module, outside:NameSpace[SymbolTableEntry]) -> list[Issue]:
+def resolve_words(module: syntax.Module, outside: NS, report):
 	"""
 	At the end of this action, every name-reference in the source text is visible where it's used.
 	That is, a corresponding definition-object is in scope. It may not make sense,
@@ -22,14 +21,12 @@ def resolve_words(module:syntax.Module, outside:NameSpace[SymbolTableEntry]) -> 
 	I'm going to worry about that part in a separate pass.
 	"""
 	assert isinstance(module, syntax.Module)
-	report = diagnostics.Report()
 	if not report.issues:
 		WordDefiner(module, outside, report.on_error("Defining words"))
 	if not report.issues:
 		WordResolver(module, report)
 	if not report.issues:
 		AliasChecker(module, report.on_error("Circular reasoning"))
-	return report.issues
 
 class WordDefiner(Visitor):
 	"""
@@ -40,9 +37,9 @@ class WordDefiner(Visitor):
 	Attaches NameSpace objects in key places and install definitions.
 	Takes note of names with more than one definition in the same scope.
 	"""
-	globals : NameSpace
+	globals : NS
 	
-	def __init__(self, module:syntax.Module, outer:NameSpace, on_error):
+	def __init__(self, module:syntax.Module, outer:NS, on_error):
 		self.redef = []
 		self.globals = module.namespace = outer.new_child(module)
 		for td in module.types:
@@ -51,17 +48,14 @@ class WordDefiner(Visitor):
 			self.visit(fn, module.namespace)
 		if self.redef:
 			on_error(self.redef, "I see the same name defined earlier in the same scope:")
-		
-		
-		del self.redef
 
-	def _install(self, namespace:NameSpace, name:syntax.Name, dfn, kind:str):
-		name.entry = SymbolTableEntry(kind, dfn)
+	def _install(self, namespace: NS, name: syntax.Name, dfn):
+		name.entry = SymbolTableEntry(dfn)
 		try: namespace[name.text] = name.entry
-		except SymbolAlreadyExists: self.redef.append(name.head())
+		except SymbolAlreadyExists: self.redef.append(name)
 		
 	def _install_type(self, name:syntax.Name, dfn):
-		self._install(self.globals, name, dfn, KIND_TYPE)
+		self._install(self.globals, name, dfn)
 		
 	def visit_TypeDecl(self, it:syntax.TypeDecl):
 		self._install_type(it.name, it)
@@ -70,18 +64,18 @@ class WordDefiner(Visitor):
 		else:
 			it.namespace = self.globals.new_child(it)
 			for param in it.parameters:
-				self._install(it.namespace, param.name, param, KIND_TYPE)
+				self._install(it.namespace, param.name, param)
 		self.visit(it.body)
 		
 	def visit_VariantSpec(self, it:syntax.VariantSpec):
 		for summand in it.alternatives:
 			if isinstance(summand, syntax.NilMember):
 				if None in it.index:
-					self.redef.append(summand.head())
+					self.redef.append(summand)
 				else:
 					it.index[None] = summand
 			else:
-				assert isinstance(summand, syntax.Parameter)
+				assert isinstance(summand, syntax.FormalParameter)
 				self._install_type(summand.name, summand)
 				if summand.type_expr is not None:
 					self.visit(summand.type_expr)
@@ -89,9 +83,9 @@ class WordDefiner(Visitor):
 
 	def visit_RecordType(self, it:syntax.RecordType):
 		# Ought to have a local name-space with names having types.
-		it.namespace = NameSpace(place=it)
-		for name, factor in it.fields:
-			self._install(it.namespace, name, factor, KIND_TYPE)
+		it.namespace = NS(place=it)
+		for f in it.fields:
+			self._install(it.namespace, f.name, f.type_expr)
 		return
 
 	def visit_ArrowSpec(self, it:syntax.ArrowSpec):
@@ -103,11 +97,11 @@ class WordDefiner(Visitor):
 	def visit_TypeCall(self, it:syntax.TypeCall):
 		pass
 
-	def visit_Function(self, fn:syntax.Function, env:NameSpace):
-		self._install(env, fn.name, fn, KIND_VALUE)
+	def visit_Function(self, fn:syntax.Function, env:NS):
+		self._install(env, fn.name, fn)
 		inner = fn.namespace = env.new_child(fn)
 		for param in fn.params:
-			self._install(inner, param.name, param, KIND_VALUE)
+			self._install(inner, param.name, param)
 		fn.sub_fns = {}  # for simple evaluator
 		for sub_fn in fn.where:
 			sub_name = sub_fn.name
@@ -134,41 +128,34 @@ class WordResolver(Visitor):
 		for expr in module.main:
 			self.visit(expr, module.namespace)
 		if self.undef:
-			report.error(
-				self.undef,
-				"Finding Definitions",
-				"I do not see an available definition for:",
-			)
+			report.error("Finding Definitions", self.undef, "I do not see an available definition for:")
 		for guilty in self.duptags:
-			report.error(
-				guilty,
-				"Checking type-match expressions",
-				"The same type-case appears more than once in a single type-matching expression."
-			)
+			report.error("Checking type-match expressions", guilty,
+						 "The same type-case appears more than once in a single type-matching expression.")
 
-	def visit_VariantSpec(self, it:syntax.VariantSpec, env:NameSpace):
+	def visit_VariantSpec(self, it:syntax.VariantSpec, env:NS):
 		it.index = {}
 		for alt in it.alternatives:
 			if isinstance(alt, syntax.NilMember):
 				pass
 			else:
-				assert isinstance(alt, syntax.Parameter)
+				assert isinstance(alt, syntax.FormalParameter)
 				typ = env[alt.name.text].typ
 				if alt.type_expr is not None:
 					self.visit(alt.type_expr, env)
 				it.index[alt.key()] = typ
 	
-	def visit_RecordType(self, it:syntax.RecordType, env:NameSpace):
-		for name, type_expr in it.fields:
-			self.visit(type_expr, env)
+	def visit_RecordType(self, it:syntax.RecordType, env:NS):
+		for f in it.fields:
+			self.visit(f.type_expr, env)
 			
-	def visit_Name(self, name:syntax.Name, env:NameSpace):
+	def visit_Name(self, name:syntax.Name, env:NS):
 		try:
 			name.entry = env[name.text]
 		except NoSuchSymbol:
-			self.undef.append(name.head())
+			self.undef.append(name)
 	
-	def visit_TypeCall(self, it:syntax.TypeCall, env:NameSpace):
+	def visit_TypeCall(self, it:syntax.TypeCall, env:NS):
 		self.visit(it.name, env)
 		for p in it.arguments:
 			self.visit(p, env)
@@ -183,47 +170,47 @@ class WordResolver(Visitor):
 		for item in fn.sub_fns.values():
 			self.visit(item)
 	
-	def visit_Literal(self, it:syntax.Literal, env:NameSpace):
+	def visit_Literal(self, it:syntax.Literal, env:NS):
 		pass
 	
-	def visit_ArrowSpec(self, it:syntax.ArrowSpec, env:NameSpace):
+	def visit_ArrowSpec(self, it:syntax.ArrowSpec, env:NS):
 		for a in it.lhs:
 			self.visit(a, env)
 		self.visit(it.rhs, env)
 
-	def visit_ShortCutExp(self, it:syntax.ShortCutExp, env:NameSpace):
+	def visit_ShortCutExp(self, it:syntax.ShortCutExp, env:NS):
 		self.visit(it.lhs, env)
 		self.visit(it.rhs, env)
 
-	def visit_BinExp(self, it:syntax.BinExp, env:NameSpace):
+	def visit_BinExp(self, it:syntax.BinExp, env:NS):
 		self.visit(it.lhs, env)
 		self.visit(it.rhs, env)
 
-	def visit_UnaryExp(self, expr:syntax.UnaryExp, env:NameSpace):
+	def visit_UnaryExp(self, expr:syntax.UnaryExp, env:NS):
 		self.visit(expr.arg, env)
 	
-	def visit_Lookup(self, expr:syntax.Lookup, env:NameSpace):
+	def visit_Lookup(self, expr:syntax.Lookup, env:NS):
 		self.visit(expr.name, env)
 	
-	def visit_FieldReference(self, expr:syntax.FieldReference, env:NameSpace):
+	def visit_FieldReference(self, expr:syntax.FieldReference, env:NS):
 		self.visit(expr.lhs, env)
 		# Save expr.field_name for once types are more of a thing.
 	
-	def visit_Call(self, expr:syntax.Call, env:NameSpace):
+	def visit_Call(self, expr:syntax.Call, env:NS):
 		self.visit(expr.fn_exp, env)
 		for a in expr.args:
 			self.visit(a, env)
 	
-	def visit_Cond(self, expr:syntax.Cond, env:NameSpace):
+	def visit_Cond(self, expr:syntax.Cond, env:NS):
 		self.visit(expr.if_part, env)
 		self.visit(expr.then_part, env)
 		self.visit(expr.else_part, env)
 
-	def visit_ExplicitList(self, expr:syntax.ExplicitList, env:NameSpace):
+	def visit_ExplicitList(self, expr:syntax.ExplicitList, env:NS):
 		for e in expr.elts:
 			self.visit(e, env)
 	
-	def visit_MatchExpr(self, expr:syntax.MatchExpr, env:NameSpace):
+	def visit_MatchExpr(self, expr:syntax.MatchExpr, env:NS):
 		# Maybe ought to be in a separate pass,
 		# but it seems sensible to check for duplicate tags here.
 		self.visit(expr.name, env)
@@ -233,15 +220,15 @@ class WordResolver(Visitor):
 			self.visit(pattern, self.globals)
 			key = pattern.key()
 			if key in seen:
-				self.duptags[seen[key]].append(pattern.head())
+				self.duptags[seen[key]].append(pattern)
 			else:
-				seen[key] = pattern.head()
+				seen[key] = pattern
 				expr.dispatch[key] = sub_expr
 			self.visit(sub_expr, env)
 		if expr.otherwise is not None:
 			self.visit(expr.otherwise, env)
 	
-	def visit_NilToken(self, nil:syntax.NilToken, env:NameSpace):
+	def visit_NilToken(self, nil:syntax.NilToken, env:NS):
 		pass
 
 
@@ -281,7 +268,7 @@ class AliasChecker(Visitor):
 		self.graph[td].append(td.body)
 		self.visit(td.body)
 	
-	def visit_Parameter(self, param:syntax.Parameter):
+	def visit_FormalParameter(self, param:syntax.FormalParameter):
 		if param.type_expr is not None:
 			self.visit(param.type_expr)
 	

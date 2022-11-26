@@ -51,12 +51,12 @@ type_parameters -> '[' comma_terminated_list(name) ']'
 type_body -> simple_type | record_type | variant_type
 record_type -> '(' comma_terminated_list(field) ')'   :RecordType
 variant_type -> .CASE ':' .semicolon_terminated_list(subtype) ESAC  :VariantSpec
-subtype  -> name record_type    :Parameter
-          | name simple_type     :Parameter
+subtype  -> name record_type    :FormalParameter
+          | name simple_type     :FormalParameter
           | name                :ordinal_member
           | .NIL                :NilMember
 
-field -> name ':' simple_type :Parameter
+field -> name ':' simple_type :FormalParameter
 simple_type -> named_type | arrow_type
 
 named_type -> name '[' comma_terminated_list(simple_type) ']' :TypeCall
@@ -77,7 +77,7 @@ or use a question-mark anywhere a type-name would normally go,
 and the system will deal with it sensibly.
 ```
 parameter_list -> '(' comma_terminated_list(parameter) ')'
-parameter   ->   name optional(type_annotation)   :Parameter
+parameter   ->   name optional(type_annotation)   :FormalParameter
 type_annotation -> ':' param_type
 
 param_type -> name    :type_name
