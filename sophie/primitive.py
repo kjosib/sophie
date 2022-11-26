@@ -1,59 +1,42 @@
 import inspect
 from functools import lru_cache
-from boozetools.support.symtab import NameSpace
-from .ontology import SymbolTableEntry, KIND_TYPE, KIND_VALUE
-from .algebra import SophieType, ProductType, Arrow, TypeVariable
+from .ontology import SymbolTableEntry, NS
+from .algebra import Term, Product, Arrow, TypeVariable, PrimitiveType
 
-class Primitive:
-	""" Superclass of things that can't occur in syntax. """
-
-
-class PrimitiveType(Primitive):
-	""" The numbers, strings, and flags. """
-	
-	def __init__(self, name: str):
-		self.name = name
-	
-	def __str__(self):
-		return self.name
-	
-	def has_value_domain(self): return False
-	pass
+root_namespace = NS(place=None)
+ops = {}
 
 
-class NativeValue(Primitive):
-	def __init__(self, value):
-		self.value = value
+class Native:
+	""" Superclass of built-in run-time things. """
 	def has_value_domain(self): return True
 
-class NativeFunction(Primitive):
+class NativeValue(Native):
+	def __init__(self, value):
+		self.value = value
+
+class NativeFunction(Native):
 	""" Distinct from NativeValue in that the runtime needs to deal well with calling native functions. """
 	def __init__(self, native):
 		self.value = native
 		self.arity = len(inspect.signature(native).parameters.keys())
 		self.typ = _arrow_of_math(self.arity)
-	def has_value_domain(self): return True
 
-@lru_cache()
-def _arrow_of_math(arity:int) -> SophieType:
-	return _arrow_of(literal_number, arity)
-
-def _arrow_of(typ:SophieType, arity:int) -> SophieType:
-	assert arity > 0
-	return Arrow(ProductType((typ,) * arity), typ)
-
-def _built_in_type(name:str):
+def _built_in_type(name:str) -> Term:
 	typ = PrimitiveType(name)
-	entry = SymbolTableEntry(KIND_TYPE, typ, typ)
-	root_namespace[name] = entry
-	return entry.typ
-
-
-root_namespace = NameSpace(place=None)
+	root_namespace[name] = SymbolTableEntry(typ, typ)
+	return typ
 literal_number = _built_in_type("number")
 literal_string = _built_in_type("string")
 literal_flag = _built_in_type("flag")
-ops = {}
+
+@lru_cache()
+def _arrow_of_math(arity:int) -> Arrow:
+	return _arrow_of(literal_number, arity)
+
+def _arrow_of(typ:Term, arity:int) -> Arrow:
+	assert arity > 0
+	return Arrow(Product((typ,) * arity), typ)
 
 def _init():
 	"""
@@ -62,9 +45,7 @@ def _init():
 	
 	It's special because it's pre-typed.
 	"""
-	
 	import math, operator
-	
 	binary = _arrow_of_math(2)
 	ops["PowerOf"] = operator.pow, binary
 	ops["Mul"] = operator.mul, binary
@@ -75,8 +56,8 @@ def _init():
 	ops["Add"] = operator.add, binary
 	ops["Sub"] = operator.sub, binary
 	
-	variable = TypeVariable("_")
-	pair_of_same = ProductType((variable, variable))
+	variable = TypeVariable()
+	pair_of_same = Product((variable, variable))
 	comparison = Arrow(pair_of_same, literal_flag)
 	ops["EQ"] = operator.eq, comparison
 	ops["NE"] = operator.ne, comparison
@@ -93,12 +74,11 @@ def _init():
 	ops["LogicalOr"] = True, logical
 	
 	NON_WORKING = {"hypot", "log"}
-	def value(name:str, dfn, typ:SophieType):
-		root_namespace[name] = SymbolTableEntry(KIND_VALUE, dfn, typ)
+	def value(name:str, dfn, typ:Term):
+		root_namespace[name] = SymbolTableEntry(dfn, typ)
 	def mathfn(name, native):
 		arity = len(inspect.signature(native).parameters.keys())
 		value(name, NativeFunction(native), _arrow_of_math(arity))
-	
 	for name in dir(math):
 		if not (name.startswith("_") or name in NON_WORKING):
 			native = getattr(math, name)

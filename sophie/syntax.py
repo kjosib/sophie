@@ -6,9 +6,7 @@ Class-level type annotations make peace with pycharm wherever later passes add f
 """
 from typing import Optional, Any, Sequence, NamedTuple, Union
 from boozetools.parsing.interface import SemanticError
-from boozetools.support.symtab import NameSpace
-from .ontology import SymbolTableEntry, SyntaxNode
-from .primitive import ops
+from .ontology import SymbolTableEntry, SyntaxNode, NS
 
 class Name(SyntaxNode):
 	entry: SymbolTableEntry  # The name-resolution pass fills this in.
@@ -63,7 +61,6 @@ class TypeCall(SyntaxNode):
 		self.name, self.arguments = name, arguments
 	
 	def head(self) -> slice: return self.name.head()
-	def has_value_domain(self): return False
 
 
 def type_name(name: Name):
@@ -72,7 +69,7 @@ def type_name(name: Name):
 
 class TypeParameter(NamedTuple):
 	name: Name
-	
+
 	def head(self) -> slice: return self.name.head()
 
 
@@ -80,23 +77,21 @@ class ImplicitType(SyntaxNode):
 	""" Stand-in as the relevant type-expression for when the syntax doesn't bother. """
 
 
-class Parameter(NamedTuple):
-	name: Name
-	type_expr: Optional[SIMPLE_TYPE]
+class FormalParameter(SyntaxNode):
 	def has_value_domain(self): return True
+	def __init__(self, name:Name, type_expr: Optional[SIMPLE_TYPE]):
+		self.name, self.type_expr = name, type_expr
 	def head(self) -> slice: return self.name.head()
-	
 	def key(self): return self.name.key()
 
 
-def ordinal_member(name: Name): return Parameter(name, None)
+def ordinal_member(name: Name): return FormalParameter(name, None)
 
 
 class RecordType:
-	namespace: NameSpace
-	def has_value_domain(self): return True
+	namespace: NS
 
-	def __init__(self, fields: list[Parameter]):
+	def __init__(self, fields: list[FormalParameter]):
 		self.fields = fields
 	
 	def field_names(self):
@@ -106,37 +101,28 @@ class RecordType:
 class NilMember(NilToken): pass
 
 
-class SingletonMember(NamedTuple):
-	name: Name
-	type_expr: Union[TypeCall, ArrowSpec]
-	
-	def head(self) -> slice: return self.name.head()
-
-
 class VariantSpec:
 	_kw: slice
-	def has_value_domain(self): return False
-	def __init__(self, _kw: slice, alternatives: list[Union[Parameter, NilMember]]):
+	def __init__(self, _kw: slice, alternatives: list[Union[FormalParameter, NilMember]]):
 		self._kw = _kw
 		self.alternatives = alternatives
 		self.index = {}
 
 
 class TypeDecl(SyntaxNode):
-	namespace: NameSpace
+	namespace: NS
 	name: Name
 	parameters: Sequence[TypeParameter]
 	body: Union[TypeCall, VariantSpec, RecordType]
+	
 	
 	def __init__(self, name, parameters: Sequence[Name], body) -> None:
 		self.name = name
 		self.parameters = [TypeParameter(p) for p in parameters or ()]
 		self.body = body
-	
 	def head(self) -> slice:
 		return self.name.head()
-
-	def has_value_domain(self): return self.body.has_value_domain()
+	def has_value_domain(self): return isinstance(self.body, RecordType)
 
 class MismatchedBookendsError(SemanticError):
 	# The one semantic error we catch early enough to interrupt the parse.
@@ -154,14 +140,16 @@ class Function(SyntaxNode):
 	# This serves as either a function in the ordinary sense, or as a (local) constant.
 	# It's a constant specifically when there are no params.
 	# It's local because the expr closes over local names.
-	namespace: NameSpace
+	namespace: NS
 	sub_fns: dict[str:"Function"]  # for simple evaluator
 	where: list["Function"]
+	
+	def has_value_domain(self): return True
 	
 	def __init__(
 			self,
 			name: Name,
-			params: Sequence[Parameter],
+			params: Sequence[FormalParameter],
 			expr_type: Optional[SIMPLE_TYPE],
 			expr: Expr,
 			where: Optional["WhereClause"]
@@ -177,8 +165,6 @@ class Function(SyntaxNode):
 			self.where = ()
 	
 	def head(self) -> slice: return self.name.head()
-	def has_value_domain(self): return True
-
 
 class WhereClause(NamedTuple):
 	sub_fns: list[Function]
@@ -219,7 +205,6 @@ class FieldReference(Expr):
 class BinExp(Expr):
 	def __init__(self, glyph: str, lhs: Expr, o:slice, rhs: Expr):
 		self.glyph, self.lhs, self.rhs = glyph, lhs, rhs
-		self.op, self.op_typ = ops[glyph]
 		self._head = o
 	
 	def head(self) -> slice:
@@ -248,9 +233,7 @@ GT = _be("GT")
 
 class ShortCutExp(Expr):
 	def __init__(self, glyph: str, lhs: Expr, o:slice, rhs: Expr):
-		self.keep, self.op_typ = ops[glyph]
-		self.lhs, self.rhs = lhs, rhs
-		self._head = o
+		self.glyph, self.lhs, self._head, self.rhs = glyph, lhs, o, rhs
 	
 	def head(self) -> slice:
 		return self._head
@@ -263,7 +246,6 @@ def LogicalOr(a, o, b): return ShortCutExp("LogicalOr", a, o, b)
 class UnaryExp(Expr):
 	def __init__(self, glyph: str, o:slice, arg: Expr):
 		self.glyph, self.arg = glyph, arg
-		self.op, self.op_typ = ops[glyph]
 		self._head = o
 
 	def head(self) -> slice: return self._head
@@ -297,6 +279,8 @@ class Call(Expr):
 	
 	def __str__(self):
 		return "%s(%s)" % (self.fn_exp, ', '.join(map(str, self.args)))
+	
+	def head(self) -> slice: return self.fn_exp.head()
 
 
 def call_upon_list(fn_exp: Expr, list_arg: Expr):
@@ -345,7 +329,7 @@ def match_expr(subject, alternatives: list[Alternative], otherwise: Optional[Exp
 		return WithExpr(subject.expr, subject.name, MatchExpr(subject.name, alternatives, otherwise))
 
 class Module:
-	namespace: NameSpace[SymbolTableEntry]
+	namespace: NS
 	constructors: dict[str:]
 	def __init__(self, exports:list, imports:list, types:list, functions:list, main:list):
 		self.exports = exports

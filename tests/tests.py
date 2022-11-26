@@ -6,23 +6,21 @@ from boozetools.support.failureprone import Issue
 from sophie.front_end import parse_file, parse_text, complain
 from sophie.resolution import resolve_words
 from sophie.preamble import static_root
-from sophie import syntax, simple_evaluator
+from sophie import syntax, simple_evaluator, partial_evaluator, diagnostics
 
 base_folder = Path(__file__).parent.parent
 example_folder = base_folder/"examples"
 zoo_folder = base_folder/"zoo_of_fail"
 
 def _load_good_example(which) -> syntax.Module:
-	module = parse_file(example_folder / (which+".sg"))
-	if isinstance(module, syntax.Module):
-		errors = resolve_words(module, static_root)
-	else:
-		assert isinstance(module, Issue)
-		errors = [module]
-	# if not errors:
-	# 	errors = unification.infer_types(module)
-	if errors:
-		complain(errors)
+	report = diagnostics.Report()
+	module = parse_file(example_folder / (which+".sg"), report)
+	if not report.issues:
+		resolve_words(module, static_root, report)
+	# if not report.issues:
+	# 	partial_evaluator.type_module(module, report)
+	if report.issues:
+		complain(report)
 		assert False
 	else:
 		return module
@@ -49,30 +47,34 @@ class ZooOfFailTests(unittest.TestCase):
 	""" Tests that assert about failure modes. """
 	
 	def test_mismatched_where(self):
-		sut = parse_file(zoo_folder/"mismatched_where.sg")
-		self.assertIsInstance(sut, Issue)
-		self.assertIn("Mismatched", sut.description)
+		report = diagnostics.Report()
+		parse_file(zoo_folder/"mismatched_where.sg", report)
+		self.assertIn("Mismatched", report.issues[0].description)
 		
 		
-	@mock.patch("boozetools.support.failureprone.SourceText.complain")
-	def test_defined_twice(self, complain):
-		module = parse_file(zoo_folder/"defined_twice.sg")
-		self.assertEqual(complain.call_count, 0)
-		errors = resolve_words(module, static_root)
-		assert errors
+	def test_defined_twice(self):
+		report = diagnostics.Report()
+		module = parse_file(zoo_folder/"defined_twice.sg", report)
+		assert not report.issues
+		resolve_words(module, static_root, report)
+		assert len(report.issues)
 
 	@mock.patch("boozetools.macroparse.runtime.print", lambda *x,file=None:None)
 	@mock.patch("boozetools.support.failureprone.SourceText.complain")
 	def test_syntax_error(self, complain):
-		self.assertIsInstance(parse_file(zoo_folder/"syntax_error.sg"), Issue)
+		report = diagnostics.Report()
+		parse_file(zoo_folder / "syntax_error.sg", report)
+		assert len(report.issues)
 		self.assertEqual(complain.call_count, 0)
 
 	def test_00_unresolved_names(self):
 		for fn in ("undefined_symbol", "bad_typecase_name", ):
 			with self.subTest(fn):
-				sut = parse_file(zoo_folder/(fn+".sg"))
-				errors = resolve_words(sut, static_root)
-				assert len(errors)
+				report = diagnostics.Report()
+				sut = parse_file(zoo_folder/(fn+".sg"), report)
+				assert not report.issues
+				resolve_words(sut, static_root, report)
+				assert len(report.issues)
 				
 	def test_01_well_founded(self):
 		for bogon in [
@@ -90,22 +92,25 @@ class ZooOfFailTests(unittest.TestCase):
 			"begin: number; end.",
 		]:
 			with self.subTest(bogon):
-				module = parse_text(bogon, __file__)
-				assert isinstance(module, syntax.Module)
-				issues = resolve_words(module, static_root)
-				assert issues
+				report = diagnostics.Report()
+				module = parse_text(bogon, __file__, report)
+				assert not report.issues
+				resolve_words(module, static_root, report)
+				assert len(report.issues)
 		
 	def test_02_does_not_type(self):
 		for fn in ("num_plus_string", "wrong_arity"):
 			with self.subTest(fn):
 				# Given
-				sut = parse_file(zoo_folder/(fn+".sg"))
-				reference_errors = resolve_words(sut, static_root)
-				assert not reference_errors
+				report = diagnostics.Report()
+				sut = parse_file(zoo_folder/(fn+".sg"), report)
+				assert not report.issues
+				resolve_words(sut, static_root, report)
+				assert not report.issues
 				# When
-				type_errors = ()  #  unification.infer_types(sut)
+				partial_evaluator.type_module(sut, report)
 				# Then
-				assert len(type_errors)
+				assert len(report.issues)
 
 if __name__ == '__main__':
 	unittest.main()
