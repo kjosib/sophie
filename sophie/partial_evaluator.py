@@ -11,14 +11,65 @@ The second is necessary for inference.
 	It seems efficient to orchestrate this flow as parameters to a recursion.
 """
 from boozetools.support.foundation import Visitor
-from .ontology import NS
 from . import syntax, primitive, algebra
 
 
 def type_module(module: syntax.Module, report):
 	if not report.issues:
+		DefineNamedTypes(module, report.on_error("Defining Types"))
+	if not report.issues:
 		Experiment(module, report.on_error("Checking Types"))
 	pass
+
+
+class DefineNamedTypes(Visitor):
+	"""
+	After this pass:
+		1. All the typedef symbols have an algebraic type.
+		2. These types are properly inter-connected by reference.
+	"""
+	def __init__(self, module, on_error):
+		self.on_error = on_error
+		for td in module.types:
+			self.visit(td)
+		pass
+	
+	def visit_TypeDecl(self, td:syntax.TypeDecl):
+		typ = self.visit(td.body)
+		entry = td.name.entry
+		assert typ.free.issubset(entry.quantifiers)
+		entry.typ = typ
+		if isinstance(typ, algebra.Apply):
+			entry.echelon = 1 + typ.symbol.echelon
+		else:
+			entry.echelon = 0
+	
+	def visit_VariantSpec(self, vs:syntax.VariantSpec):
+		members = {}
+		for alt in vs.alternatives:
+			key = alt.key()
+			if alt.type_expr is None:
+				body = algebra.the_unit
+			else:
+				body = self.visit(alt.type_expr)
+			tag = algebra.Tagged(vs, key, body)
+			alt.name.entry.typ = members[key] = tag
+		return algebra.Sum(vs, members)
+	
+	def visit_RecordSpec(self, rs:syntax.RecordSpec):
+		product = algebra.Product(tuple(
+			self.visit(f.type_expr)
+			for f in rs.fields
+		))
+		index = {f.name.text:i for i,f in enumerate(rs.fields)}
+		return algebra.Record(rs, index, product)
+	
+	def visit_TypeCall(self, tc:syntax.TypeCall):
+		symbol = tc.name.entry
+		mapping = {Q:self.visit(arg) for Q,arg in zip(symbol.quantifiers, tc.arguments)}
+		return algebra.Apply(symbol, mapping)
+		
+		
 
 OPS = {glyph:typ for glyph, (op, typ) in primitive.ops.items()}
 
@@ -64,7 +115,6 @@ class Experiment(Visitor):
 
 	def visit_Lookup(self, expr: syntax.Lookup):
 		entry = expr.name.entry
-		assert entry.dfn.has_value_domain()
 		typ = entry.typ
 		if isinstance(typ, algebra.Term):
 			gamma = {}

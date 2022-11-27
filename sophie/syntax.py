@@ -24,22 +24,6 @@ class Name(SyntaxNode):
 		return self.text
 
 
-class NilToken(SyntaxNode):
-	def __init__(self, a_slice):
-		self.text = "NIL"
-		self._slice = a_slice
-	
-	def head(self) -> slice:
-		return self._slice
-	
-	def __str__(self):
-		return "NIL"
-	
-	@staticmethod
-	def key():
-		return None
-
-
 class Expr(SyntaxNode):
 	pass
 
@@ -49,25 +33,25 @@ SIMPLE_TYPE = Union["TypeCall", "ArrowSpec", "ImplicitType"]
 
 class ArrowSpec(SyntaxNode):
 	lhs: Sequence["SIMPLE_TYPE"]
+	_head: slice
 	rhs: Optional["SIMPLE_TYPE"]
 	
-	def __init__(self, lhs, rhs):
+	def __init__(self, lhs, _head, rhs):
 		self.lhs = lhs
+		self._head = _head
 		self.rhs = rhs
+	def head(self) -> slice:
+		return self._head
 		
 
 class TypeCall(SyntaxNode):
-	def __init__(self, name: Name, arguments: Sequence[SIMPLE_TYPE]):
-		self.name, self.arguments = name, arguments
+	def __init__(self, name: Name, arguments: Sequence[SIMPLE_TYPE] = ()):
+		self.name, self.arguments = name, arguments or ()
 	def __repr__(self):
 		p = "[%s]"%",".join(map(str, self.arguments)) if self.arguments else ""
 		return "{tc:%s%s}"%(self.name.text,p)
 	
 	def head(self) -> slice: return self.name.head()
-
-
-def type_name(name: Name):
-	return TypeCall(name, ())
 
 
 class TypeParameter(NamedTuple):
@@ -91,7 +75,7 @@ class FormalParameter(SyntaxNode):
 def ordinal_member(name: Name): return FormalParameter(name, None)
 
 
-class RecordType:
+class RecordSpec:
 	namespace: NS
 
 	def __init__(self, fields: list[FormalParameter]):
@@ -101,22 +85,19 @@ class RecordType:
 		return [f.name.text for f in self.fields]
 
 
-class NilMember(NilToken): pass
-
-
 class VariantSpec:
 	_kw: slice
-	def __init__(self, _kw: slice, alternatives: list[Union[FormalParameter, NilMember]]):
+	namespace: NS
+	def __init__(self, _kw: slice, alternatives: list[FormalParameter]):
 		self._kw = _kw
 		self.alternatives = alternatives
-		self.index = {}
 
 
 class TypeDecl(SyntaxNode):
 	namespace: NS
 	name: Name
 	parameters: Sequence[TypeParameter]
-	body: Union[TypeCall, VariantSpec, RecordType]
+	body: Union[TypeCall, VariantSpec, RecordSpec]
 	def __repr__(self):
 		p = "[%s] "%",".join(map(str, self.parameters)) if self.parameters else ""
 		return "{td:%s%s = %s}"%(self.name.text, p, self.body)
@@ -127,7 +108,7 @@ class TypeDecl(SyntaxNode):
 		self.body = body
 	def head(self) -> slice:
 		return self.name.head()
-	def has_value_domain(self): return isinstance(self.body, RecordType)
+	def has_value_domain(self): return isinstance(self.body, RecordSpec)
 
 class MismatchedBookendsError(SemanticError):
 	# The one semantic error we catch early enough to interrupt the parse.
@@ -173,13 +154,6 @@ class Function(SyntaxNode):
 class WhereClause(NamedTuple):
 	sub_fns: Sequence[Function]
 	end_name: Name
-
-
-class NilValue(NilToken): pass
-
-
-class NilPattern(NilToken): pass
-
 
 class Literal(Expr):
 	def __init__(self, value: Any, a_slice: slice):
@@ -304,7 +278,7 @@ class SubjectWithExpr(NamedTuple):
 
 
 class Alternative(NamedTuple):
-	pattern: Union[Name, NilPattern]
+	pattern: Name
 	sub_expr: Expr
 
 
@@ -333,8 +307,9 @@ def match_expr(subject, alternatives: list[Alternative], otherwise: Optional[Exp
 		return WithExpr(subject.expr, subject.name, MatchExpr(subject.name, alternatives, otherwise))
 
 class Module:
-	namespace: NS
+	namespace: NS  # WordDefiner pass creates this.
 	constructors: dict[str:]
+	all_match_expressions: list[MatchExpr]  # WordResolver pass creates this.
 	def __init__(self, exports:list, imports:list, types:list, functions:list, main:list):
 		self.exports = exports
 		self.imports = imports

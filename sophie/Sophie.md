@@ -24,7 +24,7 @@ Quick primer on reading the grammar:
 * Things like `:foo` (words beginning with a colon) refer to parse actions, defined elsewhere. You can ignore them.
 * The vertical-bar character `|` sits between equally-valid alternatives.
 * Something like `optional(foo)` means a reference to the `optional` macro. These are defined later on in this file.
-* You occasionally see a dot before a symbol, as in `NIL`. You can ignore these dots.
+* You occasionally see a dot before a symbol, as in `.CASE`. You can ignore these dots.
 
 ```
 start -> export_section import_section typedef_section define_section main_section END '.' :Module
@@ -41,32 +41,41 @@ one_import -> short_string AS name
 **The grammar of type declarations**
 
 At the moment, the intended semantics are typical of Hindley-Milner type algebras,
-with one quirk: the NIL symbol can be a member of any club that will have it.
+but with some niceties around variants / sum-types.
+
+I've decided to do without nil as a special-case key-word for the time being.
+That makes the type engine easier to work on.
 
 ```
 
 type_declaration -> name optional(type_parameters) IS type_body :TypeDecl
+
 type_parameters -> '[' comma_terminated_list(name) ']'
+
 type_body -> simple_type | record_type | variant_type
-record_type -> '(' comma_terminated_list(field) ')'   :RecordType
+
+record_type -> '(' comma_terminated_list(field) ')'   :RecordSpec
+
 variant_type -> .CASE ':' .semicolon_terminated_list(subtype) ESAC  :VariantSpec
+
 subtype  -> name record_type    :FormalParameter
           | name simple_type    :FormalParameter
           | name                :ordinal_member
-          | .NIL                :NilMember
 
 field -> name ':' simple_type   :FormalParameter
+
 simple_type -> named_type | arrow_type
 
-named_type -> name '[' comma_terminated_list(simple_type) ']' :TypeCall
-named_type -> name    :type_name
-arrow_type -> FUNCTION comma_terminated_list(simple_type) '->' simple_type :ArrowSpec
+named_type     -> name optional(type_argument)                   :TypeCall
+arrow_type     -> .type_argument .'->' .simple_type              :ArrowSpec
+
+type_argument  -> '[' comma_terminated_list(simple_type) ']'
 
 ```
 
 **The general structure of a function:**
 ```
-function -> name optional(parameter_list) optional(type_annotation) '=' expr optional(where_clause) :Function
+function -> name optional(parameter_list) annotation '=' expr optional(where_clause) :Function
 where_clause -> WHERE semicolon_terminated_list(function) END name :WhereClause
 ```
 
@@ -75,22 +84,23 @@ You can leave off the type for a name,
 or use a question-mark anywhere a type-name would normally go,
 and the system will deal with it sensibly.
 ```
-parameter_list -> '(' comma_terminated_list(parameter) ')'
-parameter   ->   name optional(type_annotation)   :FormalParameter
-type_annotation -> ':' param_type
+parameter_list  -> '(' comma_terminated_list(parameter) ')'
+parameter       ->   name annotation   :FormalParameter
+annotation ->  :nothing |  ':' param_type
 
-param_type -> name    :type_name
-| .'?'     :anonymous_type_variable
-| '?' name :TypeParameter
-| name '[' comma_terminated_list(param_type) ']' :TypeCall
-| .FUNCTION .comma_terminated_list(param_type) '->' .param_type :ArrowType
+param_type -> name                  :TypeCall
+| .'?'                              :anonymous_type_variable
+| '?' name                          :TypeParameter
+| name param_type_arg               :TypeCall
+| .param_type_arg .'->' .param_type :ArrowSpec
+
+param_type_arg = '[' comma_terminated_list(param_type) ']'
 ```
 
 **The Expression Grammar:**
 
 ```
 expr -> integer | real | short_string | list_expr | case_expr | match_expr
-| .NIL :NilValue
 | '(' expr ')'
 | expr '.' name :FieldReference
 | .expr .IF .expr ELSE .expr :Cond
@@ -127,7 +137,7 @@ else_clause -> ELSE expr ';'
 match_expr -> CASE .subject ':' .semicolon_terminated_list(alternative) .optional(else_clause) ESAC  :match_expr
 subject -> name | expr AS name :SubjectWithExpr
 alternative -> pattern '->' expr  :Alternative
-pattern -> name  | .NIL :NilPattern
+pattern -> name
 ```
 Experience may later suggest expanding the `pattern` grammar, but this will do for now.
 

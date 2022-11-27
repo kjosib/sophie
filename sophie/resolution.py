@@ -6,7 +6,7 @@ from which we can find the kind, type, and definition.
 from collections import defaultdict
 from boozetools.support.foundation import Visitor, strongly_connected_components_hashable
 from boozetools.support.symtab import NoSuchSymbol, SymbolAlreadyExists
-from . import syntax
+from . import syntax, algebra
 from .ontology import SymbolTableEntry, SyntaxNode, NS
 from .primitive import PrimitiveType
 
@@ -24,7 +24,9 @@ def resolve_words(module: syntax.Module, outside: NS, report):
 	if not report.issues:
 		WordDefiner(module, outside, report.on_error("Defining words"))
 	if not report.issues:
-		WordResolver(module, report)
+		WordResolver(module, report.on_error("Finding Definitions"))
+	if not report.issues:
+		build_match_dispatch_tables(module, report.on_error("Validating Match Cases"))
 	if not report.issues:
 		AliasChecker(module, report.on_error("Circular reasoning"))
 
@@ -49,43 +51,41 @@ class WordDefiner(Visitor):
 		if self.redef:
 			on_error(self.redef, "I see the same name defined earlier in the same scope:")
 
-	def _install(self, namespace: NS, name: syntax.Name, dfn):
-		name.entry = SymbolTableEntry(dfn)
-		try: namespace[name.text] = name.entry
+	def _install(self, namespace: NS, name: syntax.Name, dfn, typ=None):
+		name.entry = SymbolTableEntry(name.key(), dfn, typ)
+		self._import(namespace, name)
+	
+	def _import(self, namespace: NS, name: syntax.Name):
+		try: namespace[name.key()] = name.entry
 		except SymbolAlreadyExists: self.redef.append(name)
-		
-	def _install_type(self, name:syntax.Name, dfn):
-		self._install(self.globals, name, dfn)
-		
-	def visit_TypeDecl(self, it:syntax.TypeDecl):
-		self._install_type(it.name, it)
-		if not it.parameters:
-			it.namespace = self.globals
-		else:
-			it.namespace = self.globals.new_child(it)
-			for param in it.parameters:
-				self._install(it.namespace, param.name, param)
-		self.visit(it.body)
-		
-	def visit_VariantSpec(self, it:syntax.VariantSpec):
-		for summand in it.alternatives:
-			if isinstance(summand, syntax.NilMember):
-				if None in it.index:
-					self.redef.append(summand)
-				else:
-					it.index[None] = summand
-			else:
-				assert isinstance(summand, syntax.FormalParameter)
-				self._install_type(summand.name, summand)
-				if summand.type_expr is not None:
-					self.visit(summand.type_expr)
+	
+	def visit_TypeDecl(self, td:syntax.TypeDecl):
+		td.namespace = self.globals.new_child(td)
+		quantifiers = []
+		for param in td.parameters:
+			typ = algebra.TypeVariable()
+			self._install(td.namespace, param.name, param, typ)
+			param.name.entry.quantifiers = ()
+			quantifiers.append(typ)
+		self.visit(td.body)
+		self._install(self.globals, td.name, td)
+		td.name.entry.quantifiers = tuple(quantifiers)
+
+	def visit_VariantSpec(self, vs:syntax.VariantSpec):
+		vs.namespace = NS(place=vs)
+		for summand in vs.alternatives:
+			assert isinstance(summand, syntax.FormalParameter)
+			self._install(vs.namespace, summand.name, summand)
+			self._import(self.globals, summand.name)
+			if summand.type_expr is not None:
+				self.visit(summand.type_expr)
 		return
 
-	def visit_RecordType(self, it:syntax.RecordType):
+	def visit_RecordSpec(self, rd:syntax.RecordSpec):
 		# Ought to have a local name-space with names having types.
-		it.namespace = NS(place=it)
-		for f in it.fields:
-			self._install(it.namespace, f.name, f)
+		rd.namespace = NS(place=rd)
+		for f in rd.fields:
+			self._install(rd.namespace, f.name, f)
 		return
 
 	def visit_ArrowSpec(self, it:syntax.ArrowSpec):
@@ -98,10 +98,10 @@ class WordDefiner(Visitor):
 		pass
 
 	def visit_Function(self, fn:syntax.Function, env:NS):
-		self._install(env, fn.name, fn)
 		inner = fn.namespace = env.new_child(fn)
 		for param in fn.params:
 			self._install(inner, param.name, param)
+		self._install(env, fn.name, fn)
 		fn.sub_fns = {}  # for simple evaluator
 		for sub_fn in fn.where:
 			sub_name = sub_fn.name
@@ -115,37 +115,31 @@ class WordResolver(Visitor):
 	Walk the tree looking for undefined words in each static scope.
 	Report on every such occurrence.
 	If this pass succeeds, every syntax.Name object is connected to its corresponding symbol table entry.
-	Otherwise, self.duptags or self.undef
+	This is also a good place to pick up interesting lists of syntax objects, such as all match-cases.
 	"""
-	def __init__(self, module:syntax.Module, report):
-		self.undef = []
-		self.duptags = defaultdict(list)
+	def __init__(self, module:syntax.Module, on_error):
+		self.undef:list[syntax.Name] = []
 		self.globals = module.namespace
+		module.all_match_expressions = self.all_match_expressions = []
 		for td in module.types:
-			self.visit(td.body, td.namespace)
+			self.visit(td)
 		for fn in module.functions:
 			self.visit(fn)
 		for expr in module.main:
 			self.visit(expr, module.namespace)
 		if self.undef:
-			report.error("Finding Definitions", self.undef, "I do not see an available definition for:")
-		for guilty in self.duptags:
-			report.error("Checking type-match expressions", guilty,
-						 "The same type-case appears more than once in a single type-matching expression.")
-
-	def visit_VariantSpec(self, it:syntax.VariantSpec, env:NS):
-		it.index = {}
-		for alt in it.alternatives:
-			if isinstance(alt, syntax.NilMember):
-				pass
-			else:
-				assert isinstance(alt, syntax.FormalParameter)
-				typ = env[alt.name.text].typ
-				if alt.type_expr is not None:
-					self.visit(alt.type_expr, env)
-				it.index[alt.key()] = typ
+			on_error(self.undef, "I do not see an available definition for:")
 	
-	def visit_RecordType(self, it:syntax.RecordType, env:NS):
+	def visit_TypeDecl(self, td:syntax.TypeDecl):
+		self.visit(td.body, td.namespace)
+		
+	def visit_VariantSpec(self, it:syntax.VariantSpec, env:NS):
+		for alt in it.alternatives:
+			if alt.type_expr is not None:
+				self.visit(alt.type_expr, env)
+			pass
+	
+	def visit_RecordSpec(self, it:syntax.RecordSpec, env:NS):
 		for f in it.fields:
 			self.visit(f.type_expr, env)
 			
@@ -210,34 +204,33 @@ class WordResolver(Visitor):
 		for e in expr.elts:
 			self.visit(e, env)
 	
-	def visit_MatchExpr(self, expr:syntax.MatchExpr, env:NS):
-		# Maybe ought to be in a separate pass,
-		# but it seems sensible to check for duplicate tags here.
-		self.visit(expr.name, env)
-		expr.dispatch = {}
-		seen = {}
-		for pattern, sub_expr in expr.alternatives:
+	def visit_MatchExpr(self, mx:syntax.MatchExpr, env:NS):
+		self.all_match_expressions.append(mx)
+		self.visit(mx.name, env)
+		for pattern, sub_expr in mx.alternatives:
 			self.visit(pattern, self.globals)
-			key = pattern.key()
-			if key in seen:
-				self.duptags[seen[key]].append(pattern)
-			else:
-				seen[key] = pattern
-				expr.dispatch[key] = sub_expr
 			self.visit(sub_expr, env)
-		if expr.otherwise is not None:
-			self.visit(expr.otherwise, env)
-	
-	def visit_NilToken(self, nil:syntax.NilToken, env:NS):
-		pass
+		if mx.otherwise is not None:
+			self.visit(mx.otherwise, env)
 
-
-########################################################
+def build_match_dispatch_tables(module: syntax.Module, on_error):
+	""" The simple evaluator uses these. """
+	for mx in module.all_match_expressions:
+		mx.dispatch = {}
+		seen = {}
+		for alt in mx.alternatives:
+			key = alt.pattern.key()
+			if key in seen:
+				on_error([seen[key], alt.pattern], "Duplication here...")
+			else:
+				mx.dispatch[key] = alt.sub_expr
+		
 
 class AliasChecker(Visitor):
 	"""
 	Check for aliases being well-founded, up front before getting caught in a loop later:
 	There should be no cycles in the aliasing dependency graph, and no wrong-kind references.
+	Also re-orders type definitions in order of alias topology.
 	"""
 	
 	def __init__(self, module: syntax.Module, on_error):
@@ -255,16 +248,25 @@ class AliasChecker(Visitor):
 			self.on_error(self.non_types, "Need a type-name here; found this instead.")
 		if self.non_values:
 			self.on_error(self.non_values, "Need a value-name or constructor here; found this type-name instead.")
+		alias_order = []
+		ok = True
 		for scc in strongly_connected_components_hashable(self.graph):
 			if len(scc) == 1:
 				node = scc[0]
 				if node in self.graph[node]:
 					self.on_error([node], "This is a circular.")
+				elif isinstance(node, syntax.TypeDecl):
+					alias_order.append(node)
 			else:
 				self.on_error(scc, "These make a circular definition.")
+				ok = False
+		if ok:
+			assert len(alias_order) == len(module.types)
+			module.types = alias_order
+	pass
 	
 	def visit_TypeDecl(self, td:syntax.TypeDecl):
-		assert td.name.entry.dfn is td
+		#assert td.name.entry.dfn is td
 		self.graph[td].append(td.body)
 		self.visit(td.body)
 	
@@ -272,9 +274,6 @@ class AliasChecker(Visitor):
 		if param.type_expr is not None:
 			self.visit(param.type_expr)
 	
-	def visit_NilMember(self, expr:syntax.NilMember):
-		pass
-		
 	def visit_TypeCall(self, expr:syntax.TypeCall):
 		referent = expr.name.entry.dfn
 		arg_arity = len(expr.arguments)
@@ -293,12 +292,11 @@ class AliasChecker(Visitor):
 			self.on_error([expr], pattern % (arg_arity, param_arity))
 		for arg in expr.arguments:
 			self.visit(arg)
-			
 
 	def visit_VariantSpec(self, expr: syntax.VariantSpec):
 		for alt in expr.alternatives:
 			self.visit(alt)
-	def visit_RecordType(self, expr: syntax.RecordType):
+	def visit_RecordSpec(self, expr: syntax.RecordSpec):
 		for f in expr.fields:
 			self.visit(f)
 	def visit_ArrowSpec(self, expr:syntax.ArrowSpec):
@@ -309,8 +307,6 @@ class AliasChecker(Visitor):
 			self.graph[expr].append(expr.rhs)
 			self.visit(expr.rhs)
 
-
-
 	def visit_Function(self, fn:syntax.Function):
 		for p in fn.params:
 			self.visit(p)
@@ -319,16 +315,12 @@ class AliasChecker(Visitor):
 		self.graph[fn].append(fn.expr)
 		self.visit(fn.expr)
 
-
-
 	def visit_MatchExpr(self, expr: syntax.MatchExpr):
 		self.graph[expr].append(expr.name.entry.dfn)
 	
 	def visit_Cond(self, expr: syntax.Cond):
 		self.graph[expr].append(expr.if_part)
 		self.visit(expr.if_part)
-	
-	
 	
 	def visit_Call(self, expr: syntax.Call):
 		self.graph[expr].append(expr.fn_exp)
@@ -346,8 +338,7 @@ class AliasChecker(Visitor):
 	def visit_UnaryExp(self, expr: syntax.UnaryExp):
 		self.graph[expr].append(expr.arg)
 		self.visit(expr.arg)
-	
-	
+ 	
 	def visit_Lookup(self, lu: syntax.Lookup):
 		dfn = lu.name.entry.dfn
 		# Allow functions, parameters, and proper constructors.

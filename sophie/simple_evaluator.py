@@ -91,14 +91,14 @@ def _eval_field_ref(expr:syntax.FieldReference, dynamic_env:NameSpace):
 def _eval_explicit_list(expr:syntax.ExplicitList, dynamic_env:NameSpace):
 	cons = dynamic_root['cons']
 	assert isinstance(cons, Constructor)
-	it = None
+	it = NIL
 	for sx in reversed(expr.elts):
 		it = cons.apply(dynamic_env, [sx, it])
 	return it
 
 def _eval_match_expr(expr:syntax.MatchExpr, dynamic_env:NameSpace):
 	subject = actual_value(dynamic_env[expr.name.text])
-	tag = None if subject is None else subject[""]
+	tag = subject[""]
 	try:
 		branch = expr.dispatch[tag]
 	except KeyError:
@@ -115,7 +115,6 @@ def evaluate(expr:syntax.Expr, dynamic_env:NameSpace) -> LAZY_VALUE:
 def delay(dynamic_env:NameSpace, item) -> LAZY_VALUE:
 	# For two kinds of expression, there is no profit to delay:
 	if isinstance(item, syntax.Literal): return item.value
-	if isinstance(item, syntax.NilValue): return None
 	if isinstance(item, syntax.Lookup): return dynamic_env[item.name.text]
 	# In less trivial cases, make a thunk and pass that instead.
 	if isinstance(item, syntax.Expr): return Thunk(dynamic_env, item)
@@ -211,14 +210,13 @@ def _prepare_global_scope(dynamic_env:NameSpace, items):
 			dynamic_env[key] = close_one_function(dynamic_env, dfn)
 		elif isinstance(dfn, syntax.FormalParameter):
 			if dfn.type_expr:
-				if isinstance(dfn.type_expr, syntax.RecordType):
+				if isinstance(dfn.type_expr, syntax.RecordSpec):
 					dynamic_env[key] = Constructor(key, dfn.type_expr.field_names())
 				else:
 					raise NotImplementedError(key, "This particular form isn't yet implemented.")
 			else:
-				assert key is not None
 				dynamic_env[key] = {"":key}
-		elif isinstance(dfn, syntax.RecordType):
+		elif isinstance(dfn, syntax.RecordSpec):
 			dynamic_env[key] = Constructor(key, dfn.field_names())
 		elif isinstance(dfn, primitive.NativeFunction):
 			dynamic_root[key] = Primitive(key, dfn)
@@ -284,13 +282,14 @@ def decons(cons:dict) -> list:
 	while isinstance(cons, dict) and cons.get("") == 'cons':
 		result.append(cons['head'])
 		cons = cons['tail']
-	if cons is not None:
+	if cons is not NIL:
 		result.append(cons)
 	return result
 
 dynamic_root = NameSpace(place=None)
 _prepare_global_scope(dynamic_root, primitive.root_namespace.local.items())
 _prepare_global_scope(dynamic_root, static_root.local.items())
+NIL = dynamic_root['nil']
 
 EVALUATE = {}
 for _k, _v in list(globals().items()):

@@ -10,6 +10,7 @@ class Report:
 		self.issues = []
 		
 	def error(self, phase: str, guilty: Sequence[slice], msg: str):
+		assert all(isinstance(g, slice) for g in guilty)
 		evidence = {"": [Evidence(s, "") for s in guilty]}
 		self.issues.append(Issue(phase, Severity.ERROR, msg, evidence))
 
