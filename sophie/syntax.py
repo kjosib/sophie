@@ -59,6 +59,9 @@ class ArrowSpec(SyntaxNode):
 class TypeCall(SyntaxNode):
 	def __init__(self, name: Name, arguments: Sequence[SIMPLE_TYPE]):
 		self.name, self.arguments = name, arguments
+	def __repr__(self):
+		p = "[%s]"%",".join(map(str, self.arguments)) if self.arguments else ""
+		return "{tc:%s%s}"%(self.name.text,p)
 	
 	def head(self) -> slice: return self.name.head()
 
@@ -69,7 +72,7 @@ def type_name(name: Name):
 
 class TypeParameter(NamedTuple):
 	name: Name
-
+	def __repr__(self): return self.name.text
 	def head(self) -> slice: return self.name.head()
 
 
@@ -83,7 +86,7 @@ class FormalParameter(SyntaxNode):
 		self.name, self.type_expr = name, type_expr
 	def head(self) -> slice: return self.name.head()
 	def key(self): return self.name.key()
-
+	def __repr__(self): return "<:%s:%s>"%(self.name.text, self.type_expr)
 
 def ordinal_member(name: Name): return FormalParameter(name, None)
 
@@ -114,7 +117,9 @@ class TypeDecl(SyntaxNode):
 	name: Name
 	parameters: Sequence[TypeParameter]
 	body: Union[TypeCall, VariantSpec, RecordType]
-	
+	def __repr__(self):
+		p = "[%s] "%",".join(map(str, self.parameters)) if self.parameters else ""
+		return "{td:%s%s = %s}"%(self.name.text, p, self.body)
 	
 	def __init__(self, name, parameters: Sequence[Name], body) -> None:
 		self.name = name
@@ -137,15 +142,14 @@ def _bookend(head: Name, coda: Name):
 
 
 class Function(SyntaxNode):
-	# This serves as either a function in the ordinary sense, or as a (local) constant.
-	# It's a constant specifically when there are no params.
-	# It's local because the expr closes over local names.
 	namespace: NS
 	sub_fns: dict[str:"Function"]  # for simple evaluator
-	where: list["Function"]
+	where: Sequence["Function"]
 	
 	def has_value_domain(self): return True
-	
+	def __repr__(self):
+		p = ", ".join(map(str, self.params))
+		return "{fn:%s(%s)}"%(self.name.text, p)
 	def __init__(
 			self,
 			name: Name,
@@ -167,7 +171,7 @@ class Function(SyntaxNode):
 	def head(self) -> slice: return self.name.head()
 
 class WhereClause(NamedTuple):
-	sub_fns: list[Function]
+	sub_fns: Sequence[Function]
 	end_name: Name
 
 
@@ -192,6 +196,9 @@ class Lookup(Expr):
 	def __init__(self, name: Name):
 		self.name = name
 	def head(self) -> slice: return self.name.head()
+	def __repr__(self):
+		referent = self.name.entry.dfn
+		return "{lookup:%s:%s}"%(self.name.text, type(referent).__name__)
 
 class FieldReference(Expr):
 	def __init__(self, lhs: Expr, field_name: Name):
@@ -262,9 +269,6 @@ class Cond(Expr):
 	def __init__(self, then_part: Expr, _kw, if_part: Expr, else_part: Expr):
 		self._kw = _kw
 		self.then_part, self.if_part, self.else_part = then_part, if_part, else_part
-	
-	def __str__(self):
-		return "(%s IF %s ELSE %s)" % (self.then_part, self.if_part, self.else_part)
 
 
 def CaseWhen(when_parts: list, else_part: Expr):
