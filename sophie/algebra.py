@@ -1,70 +1,39 @@
 """
-Types are functions.
-For now, Sophie evaluates types in (a version of) the simply-typed lambda calculus.
-
+Evaluating types with a substitution-by-need model of computation.
 """
 from typing import Sequence, Mapping
 from collections import deque
-
+from .ontology import SymbolTableEntry, Term, TypeVariable, PrimitiveType
 #########################
 
-#########################
-
-
-class Term:
-	""" It's a term re-writing system to compute types. """
-	rank = 0   # Rank for all structural types.
-	def rewrite(self, gamma:Mapping): raise NotImplementedError(type(self))
-	def instantiate(self, gamma:dict): raise NotImplementedError(type(self))
-
-class TypeVariable(Term):
-	_counter = 0   # Each is distinct; there is thus no such thing as capture.
-	def __init__(self):
-		self.nr = TypeVariable._counter
-		TypeVariable._counter += 1
-	def __repr__(self): return "<%s>"%self.nr
-	def rewrite(self, gamma:Mapping): return gamma.get(self, self)
-	def instantiate(self, gamma:dict):
-		if self not in gamma:
-			gamma[self] = TypeVariable()
-		return gamma[self]
-
-
-#########################
-
-class Alias(Term):
-	""" Think of this as essentially a pending function-call. """
-	def __init__(self, ctor:Term, mapping: Mapping[TypeVariable, Term]):
-		# Keys are formal params used by constructor.
-		self.ctor = ctor
-		self.mapping = mapping
-		self.rank = 1 + ctor.rank
-	def __repr__(self):
-		mapping = ";  ".join("%s:=%s"%i for i in self.mapping.items() )
-		return "%s[%s]"%(self.ctor, mapping)
+class Apply(Term):
+	"""
+	If you squint, this is basically a thunk.
+	The "environment" is a bit simpler because all the variables are distinct and we know which ones are free.
+	"""
+	def __init__(self, symbol:SymbolTableEntry, actuals:Mapping[TypeVariable, Term]):
+		assert isinstance(symbol, SymbolTableEntry)
+		assert set(actuals.keys()).issuperset(symbol.quantifiers)
+		free = frozenset().union(*[arg.free for arg in actuals.values()])
+		super().__init__(free)
+		self.symbol = symbol
+		self.actuals = actuals
+	def rank(self): return self.symbol.echelon
+	def demote(self): return self.symbol.typ.rewrite(self.actuals)
 	def rewrite(self, gamma:Mapping):
-		# This is just a change-of-variables.
-		# Can do this without losing information
-		new_mapping = { k:gamma.get(v,v) for k,v in self.mapping.items() }
-		return Alias(self.ctor, new_mapping)
-	def demote(self):
-		# Return a less-aliased form of the same type.
-		# If you want to know whether two aliases are compatible,
-		# Demote the higher-ranking one repeatedly until you get items of the same rank.
-		# Then compare the resulting items.
-		return self.ctor.rewrite(self.mapping)
+		if not self.free & gamma.keys(): return self
+		new_mapping = {free:bound.rewrite(gamma) for free, bound in self.actuals.items()}
+		return Apply(self.symbol, new_mapping)
+	def instantiate(self, gamma: dict):
+		fresh = {free:free.instantiate(gamma) for free in self.free}
+		return self.rewrite(fresh)
 
 
-class PrimitiveType(Term):
-	""" Presumably add clerical details here. """
-	def __init__(self, name): self.name = name
-	def __repr__(self): return "<%s>"%self.name
-	def rewrite(self, gamma:Mapping): return self
-	def has_value_domain(self): return False  # .. HACK ..
-	def instantiate(self, gamma:dict): return self
 
 class Arrow(Term):
-	def __init__(self, arg: Term, res: Term): self.arg, self.res = arg, res
+	def __init__(self, arg: Term, res: Term):
+		super().__init__(arg.free | res.free)
+		self.arg, self.res = arg, res
 	def __repr__(self): return "%s -> %s"%(self.arg, self.res)
 	def rewrite(self, gamma:Mapping): return Arrow(self.arg.rewrite(gamma), self.res.rewrite(gamma))
 	def instantiate(self, gamma:dict):
@@ -73,10 +42,41 @@ class Arrow(Term):
 		else: return Arrow(arg, res)
 
 
+class Tagged(Term):
+	# The proper destructor here is pattern-application.
+	def __init__(self, genera:object, species:str, body:Term):
+		super().__init__(body.free)
+		self.genera = genera
+		self.species = species
+		self.body = body
+	def __repr__(self): return "%s::%s %s"%(self.genera, self.species, self.body)
+	def rewrite(self, gamma:Mapping): return Tagged(self.genera, self.species, self.body.rewrite(gamma))
+	def instantiate(self, gamma: dict): return Tagged(self.genera, self.species, self.body.instantiate(gamma))
+
+
+class Sum(Term):
+	""" The proper destructor is scope-resolution. """
+	def __init__(self, genera:object, alts:dict[str,Tagged]):
+		super().__init__(frozenset().union(*[f.free for f in alts.values()]))
+		self.genera = genera
+		self.alts = alts
+	def rewrite(self, gamma: Mapping):
+		return Sum(self.genera, {
+			key: value.rewrite(gamma)
+			for key, value in self.alts.items()
+		})
+	def instantiate(self, gamma: dict):
+		return Sum(self.genera, {
+			key: value.instantiate(gamma)
+			for key, value in self.alts.items()
+		})
+
 class Product(Term):
 	# The proper "destructor" is an indexed-access operation.
 	# That's not accessible idiomatically; it's an internal thing.
-	def __init__(self, fields: Sequence[Term]): self.fields = fields
+	def __init__(self, fields: Sequence[Term]):
+		super().__init__(frozenset().union(*[f.free for f in fields]))
+		self.fields = fields
 	def __repr__(self): return "(%s)"%(",".join(map(str, self.fields)))
 	def rewrite(self, gamma:Mapping): return Product(tuple(t.rewrite(gamma) for t in self.fields))
 	def instantiate(self, gamma:dict):
@@ -84,23 +84,30 @@ class Product(Term):
 		if all(a is b for a,b in zip(fields, self.fields)): return self
 		else: return Product(fields)
 
+
 class Record(Term):
 	# The proper destructor is a field-access operation.
-	def __init__(self, symbol:str, index, product:Product):
+	def __init__(self, symbol:object, index, product:Product):
+		super().__init__(product.free)
 		self.symbol = symbol
 		self.index = index
 		self.product = product
 	def __repr__(self): return "<record %s>"%self.symbol
-	def rewrite(self, gamma:Mapping):
-		return Record(self.symbol, self.index, self.product.rewrite(gamma))
+	def rewrite(self, gamma:Mapping): return Record(self.symbol, self.index, self.product.rewrite(gamma))
+	def instantiate(self, gamma:dict):
+		product = self.product.instantiate(gamma)
+		if product is self.product: return self
+		else: return Record(self.symbol, self.index, product)
 
-class Tagged(Term):
-	# The proper destructor here is pattern-matching.
-	def __init__(self, symbol:str, body:Term):
-		self.symbol = symbol
-		self.body = body
-	def __repr__(self): return "%s %s"%(self.symbol, self.body)
-	def rewrite(self, gamma:Mapping): return Tagged(self.symbol, self.body.rewrite(gamma))
+
+class UnitType(Term):
+	""" In principle you could have different ones of these... For now, they're all equivalent. """
+	def __repr__(self): return "(/)"
+	def rewrite(self, gamma:Mapping): return self
+	def instantiate(self, gamma: dict): return self
+
+the_unit = UnitType(frozenset())
+
 
 #########################
 
@@ -112,39 +119,43 @@ def unify(peas:Term, carrots:Term) -> dict[TypeVariable:Term]:
 		while term in gamma: term = gamma[term]
 		return term
 	def enq(a,b): queue.append((a,b))
-	def U(A, B):
-		A, B = proxy(A), proxy(B)
-		if A is B: return
-		elif type(A) is TypeVariable: gamma[A] = B
-		elif type(B) is TypeVariable: gamma[B] = A
+	def U(a, b):
+		a, b = proxy(a), proxy(b)
+		if a is b: return
+		elif type(a) is TypeVariable: gamma[a] = b
+		elif type(b) is TypeVariable: gamma[b] = a
 		else:
-			while A.rank != B.rank:
-				if A.rank > B.rank:
-					A = A.demote()
+			while a.rank != b.rank:
+				if a.rank > b.rank:
+					a = a.demote(gamma)
 				else:
-					B = B.demote()
-			T = type(A)
-			if T is not type(B):
-				raise Incompatible(A,B)
-			elif T is Alias:
-				if A.symbol == B.symbol:
-					pass
+					b = b.demote(gamma)
+			T = type(a)
+			if T is not type(b):
+				raise Incompatible(a,b)
+			elif T is Apply:
+				if a.ctor is b.ctor:
+					assert len(a.actuals) == len(b.actuals)
+					for x,y in zip(a.actuals, b.actuals):
+						enq(x,y)
 				else:
-					raise Incompatible(A,B)
+					raise Incompatible(a,b)
 			elif T is PrimitiveType:
 				# Nominal Equivalence
-				if A is not B:
-					raise Incompatible(A,B)
+				if a is not b:
+					raise Incompatible(a,b)
 			elif T is Arrow:
 				# Structural Equivalence
-				enq(A.arg, B.arg)
-				enq(A.res, B.res)
+				enq(a.arg, b.arg)
+				enq(a.res, b.res)
 			elif T is Product:
 				# Structural Equivalence
-				if len(A.fields) != len(B.fields):
-					raise Incompatible(A,B)
-				for x,y in zip(A.fields,B.fields):
+				if len(a.fields) != len(b.fields):
+					raise Incompatible(a,b)
+				for x,y in zip(a.fields,b.fields):
 					enq(x,y)
+			else:
+				raise TypeError(T)
 	
 	gamma = {}
 	queue = deque()
