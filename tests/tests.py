@@ -1,7 +1,6 @@
 from pathlib import Path
 import unittest
 from unittest import mock
-from boozetools.support.failureprone import Issue
 
 from sophie.front_end import parse_file, parse_text, complain
 from sophie.resolution import resolve_words

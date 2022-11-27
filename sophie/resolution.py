@@ -6,7 +6,7 @@ from which we can find the kind, type, and definition.
 from collections import defaultdict
 from boozetools.support.foundation import Visitor, strongly_connected_components_hashable
 from boozetools.support.symtab import NoSuchSymbol, SymbolAlreadyExists
-from . import syntax, algebra
+from . import syntax
 from .ontology import SymbolTableEntry, SyntaxNode, NS
 from .primitive import PrimitiveType
 
@@ -85,7 +85,7 @@ class WordDefiner(Visitor):
 		# Ought to have a local name-space with names having types.
 		it.namespace = NS(place=it)
 		for f in it.fields:
-			self._install(it.namespace, f.name, f.type_expr)
+			self._install(it.namespace, f.name, f)
 		return
 
 	def visit_ArrowSpec(self, it:syntax.ArrowSpec):
@@ -264,7 +264,7 @@ class AliasChecker(Visitor):
 				self.on_error(scc, "These make a circular definition.")
 	
 	def visit_TypeDecl(self, td:syntax.TypeDecl):
-		assert td.name.entry.dfn == td
+		assert td.name.entry.dfn is td
 		self.graph[td].append(td.body)
 		self.visit(td.body)
 	

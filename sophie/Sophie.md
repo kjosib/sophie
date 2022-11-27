@@ -42,7 +42,6 @@ one_import -> short_string AS name
 
 At the moment, the intended semantics are typical of Hindley-Milner type algebras,
 with one quirk: the NIL symbol can be a member of any club that will have it.
-I've not yet considered more general co/contravariance: That's for another time.
 
 ```
 
@@ -52,11 +51,11 @@ type_body -> simple_type | record_type | variant_type
 record_type -> '(' comma_terminated_list(field) ')'   :RecordType
 variant_type -> .CASE ':' .semicolon_terminated_list(subtype) ESAC  :VariantSpec
 subtype  -> name record_type    :FormalParameter
-          | name simple_type     :FormalParameter
+          | name simple_type    :FormalParameter
           | name                :ordinal_member
           | .NIL                :NilMember
 
-field -> name ':' simple_type :FormalParameter
+field -> name ':' simple_type   :FormalParameter
 simple_type -> named_type | arrow_type
 
 named_type -> name '[' comma_terminated_list(simple_type) ']' :TypeCall
