@@ -4,6 +4,7 @@ Reference Manual
     Obviously a work in progress...
 
 .. contents::
+    :local:
     :depth: 2
 
 
