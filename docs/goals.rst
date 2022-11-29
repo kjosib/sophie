@@ -2,6 +2,7 @@ Goals and Roadmap
 ===================
 
 .. contents::
+    :local:
     :depth: 2
 
 Design Goals

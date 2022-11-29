@@ -36,7 +36,7 @@ Sophie is different on all accounts.
 
 .. note::
     Ok, confession: That last point is not yet implemented. The current version can "crash".
-    But that one feature is Sophie's main *raison d'être*. So it's coming soon.
+    But that feature is partially working in dev. So it's coming soon.
 
 Moreover, learning Sophie will affect you in different ways from learning a conventional starter-language.
 Sophie teaches you how to think about problems and design solutions effectively.

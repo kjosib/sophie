@@ -6,7 +6,8 @@ She's a little different from what the average coding boot-camps are teaching th
 but *vive la différence!* I hope she gives you a new perspective on CS.
 
 .. contents::
-	:depth: 2
+    :local:
+    :depth: 2
 
 Initial Preparations
 ---------------------
