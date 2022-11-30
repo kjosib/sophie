@@ -90,7 +90,6 @@ def _eval_field_ref(expr:syntax.FieldReference, dynamic_env:NameSpace):
 
 def _eval_explicit_list(expr:syntax.ExplicitList, dynamic_env:NameSpace):
 	cons = dynamic_root['cons']
-	assert isinstance(cons, Constructor)
 	it = NIL
 	for sx in reversed(expr.elts):
 		it = cons.apply(dynamic_env, [sx, it])
@@ -204,18 +203,18 @@ def run_module(module: syntax.Module):
 def _prepare_global_scope(dynamic_env:NameSpace, items):
 	for key, entry in items:
 		dfn = entry.dfn
-		if isinstance(dfn, syntax.TypeDecl):
+		if isinstance(dfn, (syntax.TypeDecl, syntax.SubType)):
 			dfn = dfn.body
-		if isinstance(dfn, syntax.Function):
-			dynamic_env[key] = close_one_function(dynamic_env, dfn)
-		elif isinstance(dfn, syntax.FormalParameter):
-			if dfn.type_expr:
-				if isinstance(dfn.type_expr, syntax.RecordSpec):
-					dynamic_env[key] = Constructor(key, dfn.type_expr.field_names())
-				else:
-					raise NotImplementedError(key, "This particular form isn't yet implemented.")
+			if isinstance(dfn, (syntax.VariantSpec, syntax.ArrowSpec, syntax.TypeCall)):
+				pass
+			elif isinstance(dfn, syntax.RecordSpec):
+				dynamic_env[key] = Constructor(key, dfn.field_names())
+			elif dfn is None:
+				dynamic_env[key] = {"": key}
 			else:
-				dynamic_env[key] = {"":key}
+				raise ValueError("Tagged scalars (%r) are not implemented."%key)
+		elif isinstance(dfn, syntax.Function):
+			dynamic_env[key] = close_one_function(dynamic_env, dfn)
 		elif isinstance(dfn, syntax.RecordSpec):
 			dynamic_env[key] = Constructor(key, dfn.field_names())
 		elif isinstance(dfn, primitive.NativeFunction):

@@ -7,6 +7,7 @@ Class-level type annotations make peace with pycharm wherever later passes add f
 from typing import Optional, Any, Sequence, NamedTuple, Union
 from boozetools.parsing.interface import SemanticError
 from .ontology import SymbolTableEntry, SyntaxNode, NS
+from . import algebra
 
 class Name(SyntaxNode):
 	entry: SymbolTableEntry  # The name-resolution pass fills this in.
@@ -56,13 +57,13 @@ class TypeCall(SyntaxNode):
 
 class TypeParameter(NamedTuple):
 	name: Name
+	quantifiers = ()
 	def __repr__(self): return self.name.text
 	def head(self) -> slice: return self.name.head()
 
 
 class ImplicitType(SyntaxNode):
 	""" Stand-in as the relevant type-expression for when the syntax doesn't bother. """
-
 
 class FormalParameter(SyntaxNode):
 	def has_value_domain(self): return True
@@ -76,19 +77,30 @@ def ordinal_member(name: Name): return FormalParameter(name, None)
 
 
 class RecordSpec:
-	namespace: NS
-
+	namespace: NS  # WordDefiner pass fills this in.
+	product_type: algebra.Product  # TypeBuilder pass sets this.
 	def __init__(self, fields: list[FormalParameter]):
 		self.fields = fields
 	
 	def field_names(self):
 		return [f.name.text for f in self.fields]
 
+class SubType(SyntaxNode):
+	body: Union[RecordSpec, TypeCall, ArrowSpec]
+	def has_value_domain(self): return True
+	def __init__(self, name:Name, body=None):
+		self.name = name
+		self.body = body
+	def head(self) -> slice: return self.name.head()
+	def key(self): return self.name.key()
+	def __repr__(self): return "<:%s:%s>"%(self.name.text, self.body)
+
+
 
 class VariantSpec:
 	_kw: slice
 	namespace: NS
-	def __init__(self, _kw: slice, alternatives: list[FormalParameter]):
+	def __init__(self, _kw: slice, alternatives: list[SubType]):
 		self._kw = _kw
 		self.alternatives = alternatives
 
@@ -98,6 +110,8 @@ class TypeDecl(SyntaxNode):
 	name: Name
 	parameters: Sequence[TypeParameter]
 	body: Union[TypeCall, VariantSpec, RecordSpec]
+	quantifiers: list  # phase: WordDefiner
+	def __str__(self): return self.name.text
 	def __repr__(self):
 		p = "[%s] "%",".join(map(str, self.parameters)) if self.parameters else ""
 		return "{td:%s%s = %s}"%(self.name.text, p, self.body)

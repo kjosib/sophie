@@ -1,7 +1,7 @@
 import inspect
 from functools import lru_cache
-from .ontology import SymbolTableEntry, NS, TypeVariable, PrimitiveType
-from .algebra import Term, Product, Arrow
+from .ontology import SymbolTableEntry, NS, PrimitiveType
+from .algebra import Term, Product, Arrow, TypeVariable, Nominal
 
 root_namespace = NS(place=None)
 ops = {}
@@ -24,10 +24,11 @@ class NativeFunction(Native):
 
 def _built_in_type(name:str) -> Term:
 	typ = PrimitiveType(name)
-	entry = SymbolTableEntry(name, typ, typ)
-	entry.quantifiers = ()
+	entry = SymbolTableEntry(name, typ, None)
+	term = Nominal(entry, ())
+	entry.typ = term
 	root_namespace[name] = entry
-	return typ
+	return term
 literal_number = _built_in_type("number")
 literal_string = _built_in_type("string")
 literal_flag = _built_in_type("flag")

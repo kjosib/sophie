@@ -22,7 +22,7 @@ type:
 		pendown;
 		penup;
 		color(color:string);
-		pensize(width:string);
+		pensize(width:number);
 		showturtle;
 		hideturtle;
 	esac;
@@ -94,6 +94,7 @@ def _init():
 		front_end.complain(report)
 		raise RuntimeError()
 	else:
+		partial_evaluator.LIST = preamble.namespace['list'].typ
 		return preamble.namespace
 
 static_root = _init()
