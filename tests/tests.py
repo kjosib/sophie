@@ -16,8 +16,8 @@ def _load_good_example(which) -> syntax.Module:
 	module = parse_file(example_folder / (which+".sg"), report)
 	if not report.issues:
 		resolve_words(module, static_root, report)
-	# if not report.issues:
-	# 	partial_evaluator.type_module(module, report)
+	if not report.issues:
+		partial_evaluator.type_module(module, report)
 	if report.issues:
 		complain(report)
 		assert False

@@ -69,23 +69,22 @@ class WordDefiner(Visitor):
 			quantifiers.append(typ)
 		self.visit(td.body)
 		self._install(self.globals, td.name, td)
-		td.name.entry.quantifiers = tuple(quantifiers)
+		td.quantifiers = tuple(quantifiers)
 
 	def visit_VariantSpec(self, vs:syntax.VariantSpec):
 		vs.namespace = NS(place=vs)
 		for summand in vs.alternatives:
-			assert isinstance(summand, syntax.FormalParameter)
-			self._install(vs.namespace, summand.name, summand)
-			self._import(self.globals, summand.name)
-			if summand.type_expr is not None:
-				self.visit(summand.type_expr)
+			assert isinstance(summand, syntax.SubType)
+			self._install(self.globals, summand.name, summand)
+			if summand.body is not None:
+				self.visit(summand.body)
 		return
 
-	def visit_RecordSpec(self, rd:syntax.RecordSpec):
+	def visit_RecordSpec(self, rs:syntax.RecordSpec):
 		# Ought to have a local name-space with names having types.
-		rd.namespace = NS(place=rd)
-		for f in rd.fields:
-			self._install(rd.namespace, f.name, f)
+		rs.namespace = NS(place=rs)
+		for f in rs.fields:
+			self._install(rs.namespace, f.name, f)
 		return
 
 	def visit_ArrowSpec(self, it:syntax.ArrowSpec):
@@ -135,8 +134,8 @@ class WordResolver(Visitor):
 		
 	def visit_VariantSpec(self, it:syntax.VariantSpec, env:NS):
 		for alt in it.alternatives:
-			if alt.type_expr is not None:
-				self.visit(alt.type_expr, env)
+			if alt.body is not None:
+				self.visit(alt.body, env)
 			pass
 	
 	def visit_RecordSpec(self, it:syntax.RecordSpec, env:NS):
@@ -295,7 +294,8 @@ class AliasChecker(Visitor):
 
 	def visit_VariantSpec(self, expr: syntax.VariantSpec):
 		for alt in expr.alternatives:
-			self.visit(alt)
+			if alt.body is not None:
+				self.visit(alt.body)
 	def visit_RecordSpec(self, expr: syntax.RecordSpec):
 		for f in expr.fields:
 			self.visit(f)

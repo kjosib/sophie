@@ -58,9 +58,9 @@ record_type -> '(' comma_terminated_list(field) ')'   :RecordSpec
 
 variant_type -> .CASE ':' .semicolon_terminated_list(subtype) ESAC  :VariantSpec
 
-subtype  -> name record_type    :FormalParameter
-          | name simple_type    :FormalParameter
-          | name                :ordinal_member
+subtype  -> name record_type    :SubType
+          | name simple_type    :SubType
+          | name                :SubType
 
 field -> name ':' simple_type   :FormalParameter
 

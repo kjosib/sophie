@@ -1,165 +1,113 @@
 """
-Evaluating types with a substitution-by-need model of computation.
+Evaluating types with a straight-up substitution model of computation.
+  --  Simple and working is better than stuck in the mud.  --
+
+Design Note:
+-------------
+Here, "constructor" is assumed to connect with something in the problem domain (i.e. the type system).
+(For example, it might be a sum-type or new-type )
 """
-from typing import Sequence, Mapping
+from typing import Sequence, Any
 from collections import deque
-from .ontology import SymbolTableEntry, Term, TypeVariable, PrimitiveType
 #########################
 
-class Apply(Term):
-	"""
-	If you squint, this is basically a thunk.
-	The "environment" is a bit simpler because all the variables are distinct and we know which ones are free.
-	"""
-	def __init__(self, symbol:SymbolTableEntry, actuals:Mapping[TypeVariable, Term]):
-		assert isinstance(symbol, SymbolTableEntry)
-		assert set(actuals.keys()).issuperset(symbol.quantifiers)
-		free = frozenset().union(*[arg.free for arg in actuals.values()])
-		super().__init__(free)
-		self.symbol = symbol
-		self.actuals = actuals
-	def rank(self): return self.symbol.echelon
-	def demote(self): return self.symbol.typ.rewrite(self.actuals)
-	def rewrite(self, gamma:Mapping):
-		if not self.free & gamma.keys(): return self
-		new_mapping = {free:bound.rewrite(gamma) for free, bound in self.actuals.items()}
-		return Apply(self.symbol, new_mapping)
-	def instantiate(self, gamma: dict):
-		fresh = {free:free.instantiate(gamma) for free in self.free}
-		return self.rewrite(fresh)
+class Term:
+	""" It's a term re-writing system to compute types. """
+	def rewrite(self, gamma: dict): raise NotImplementedError(type(self))
+	def fresh(self, gamma: dict): raise NotImplementedError(type(self))
+	def phylum(self): raise NotImplementedError(type(self))
 
+class TypeVariable(Term):
+	_counter = 0  # Each is distinct; there is thus no such thing as capture.
+	def __init__(self):
+		self.nr = TypeVariable._counter
+		TypeVariable._counter += 1
+	def __repr__(self): return "<%s>" % self.nr
+	def rewrite(self, gamma: dict):
+		return gamma.get(self, self)
+	def fresh(self, gamma:dict):
+		if self not in gamma:
+			gamma[self] = TypeVariable()
+		return gamma[self]
+	
+#########################
+
+class Nominal(Term):
+	"""
+	This type forms the boundary between the unifier and the rest of the system.
+	The unifier is meant to leave these closed.
+	Value-language syntax will be privy to the "insides".
+	"""
+	def __init__(self, semantic: Any, params: Sequence[TypeVariable]):
+		assert hasattr(semantic, "dfn")
+		self.semantic = semantic
+		self.params = params
+	def phylum(self): return self.semantic
+	def rewrite(self, gamma: dict):
+		return Nominal(self.semantic, [v.rewrite(gamma) for v in self.params])
+	def fresh(self, gamma: dict):
+		return Nominal(self.semantic, [v.fresh(gamma) for v in self.params])
+	def unify_with(self, other, enq):
+		# Note to self: This is where sub-type logic might go,
+		# perhaps in combination with a smarter .phylum() operation.
+		for x,y in zip(self.params, other.params): enq(x,y)
+		pass
+	def __repr__(self):
+		return str(self.semantic.key)+("[%s]"%(', '.join(map(str, self.params))) if self.params else "")
 
 
 class Arrow(Term):
-	def __init__(self, arg: Term, res: Term):
-		super().__init__(arg.free | res.free)
-		self.arg, self.res = arg, res
-	def __repr__(self): return "%s -> %s"%(self.arg, self.res)
-	def rewrite(self, gamma:Mapping): return Arrow(self.arg.rewrite(gamma), self.res.rewrite(gamma))
-	def instantiate(self, gamma:dict):
-		arg, res = self.arg.instantiate(gamma), self.res.instantiate(gamma)
-		if self.arg is arg and self.res is res: return self
-		else: return Arrow(arg, res)
-
-
-class Tagged(Term):
-	# The proper destructor here is pattern-application.
-	def __init__(self, genera:object, species:str, body:Term):
-		super().__init__(body.free)
-		self.genera = genera
-		self.species = species
-		self.body = body
-	def __repr__(self): return "%s::%s %s"%(self.genera, self.species, self.body)
-	def rewrite(self, gamma:Mapping): return Tagged(self.genera, self.species, self.body.rewrite(gamma))
-	def instantiate(self, gamma: dict): return Tagged(self.genera, self.species, self.body.instantiate(gamma))
-
-
-class Sum(Term):
-	""" The proper destructor is scope-resolution. """
-	def __init__(self, genera:object, alts:dict[str,Tagged]):
-		super().__init__(frozenset().union(*[f.free for f in alts.values()]))
-		self.genera = genera
-		self.alts = alts
-	def rewrite(self, gamma: Mapping):
-		return Sum(self.genera, {
-			key: value.rewrite(gamma)
-			for key, value in self.alts.items()
-		})
-	def instantiate(self, gamma: dict):
-		return Sum(self.genera, {
-			key: value.instantiate(gamma)
-			for key, value in self.alts.items()
-		})
+	def __init__(self, arg: Term, res: Term): self.arg, self.res = arg, res
+	def __repr__(self): return "%s -> %s" % (self.arg, self.res)
+	def rewrite(self, gamma: dict): return Arrow(self.arg.rewrite(gamma), self.res.rewrite(gamma))
+	def fresh(self, gamma: dict): return Arrow(self.arg.fresh(gamma), self.res.fresh(gamma))
+	def unify_with(self, other, enq):
+		# Structural Equivalence
+		enq(self.arg, other.arg)
+		enq(self.res, other.res)
+	def phylum(self): return Arrow
 
 class Product(Term):
-	# The proper "destructor" is an indexed-access operation.
-	# That's not accessible idiomatically; it's an internal thing.
-	def __init__(self, fields: Sequence[Term]):
-		super().__init__(frozenset().union(*[f.free for f in fields]))
-		self.fields = fields
-	def __repr__(self): return "(%s)"%(",".join(map(str, self.fields)))
-	def rewrite(self, gamma:Mapping): return Product(tuple(t.rewrite(gamma) for t in self.fields))
-	def instantiate(self, gamma:dict):
-		fields = tuple(t.instantiate(gamma) for t in self.fields)
-		if all(a is b for a,b in zip(fields, self.fields)): return self
-		else: return Product(fields)
-
-
-class Record(Term):
-	# The proper destructor is a field-access operation.
-	def __init__(self, symbol:object, index, product:Product):
-		super().__init__(product.free)
-		self.symbol = symbol
-		self.index = index
-		self.product = product
-	def __repr__(self): return "<record %s>"%self.symbol
-	def rewrite(self, gamma:Mapping): return Record(self.symbol, self.index, self.product.rewrite(gamma))
-	def instantiate(self, gamma:dict):
-		product = self.product.instantiate(gamma)
-		if product is self.product: return self
-		else: return Record(self.symbol, self.index, product)
-
-
-class UnitType(Term):
-	""" In principle you could have different ones of these... For now, they're all equivalent. """
-	def __repr__(self): return "(/)"
-	def rewrite(self, gamma:Mapping): return self
-	def instantiate(self, gamma: dict): return self
-
-the_unit = UnitType(frozenset())
-
+	def __init__(self, fields: Sequence[Term]): self.fields = fields
+	def __repr__(self): return "(%s)" % (",".join(map(str, self.fields)))
+	def rewrite(self, gamma: dict): return Product(tuple(t.rewrite(gamma) for t in self.fields))
+	def fresh(self, gamma: dict): return Product(tuple(t.fresh(gamma) for t in self.fields))
+	def unify_with(self, other, enq):
+		# Structural Equivalence
+		if len(self.fields) == len(other.fields):
+			for x, y in zip(self.fields, other.fields): enq(x, y)
+		else: raise Incompatible(self, other)
+	def phylum(self): return Product, len(self.fields)
 
 #########################
 
-class Incompatible(TypeError):
+class Incompatible(Exception):
 	pass
 
-def unify(peas:Term, carrots:Term) -> dict[TypeVariable:Term]:
+
+def unify(peas: Term, carrots: Term) -> dict[TypeVariable:Term]:
 	def proxy(term):
 		while term in gamma: term = gamma[term]
 		return term
-	def enq(a,b): queue.append((a,b))
+	def enq(a, b): queue.append((a, b))
 	def U(a, b):
 		a, b = proxy(a), proxy(b)
-		if a is b: return
-		elif type(a) is TypeVariable: gamma[a] = b
-		elif type(b) is TypeVariable: gamma[b] = a
+		if a is b:
+			return
+		elif type(a) is TypeVariable:
+			gamma[a] = b
+		elif type(b) is TypeVariable:
+			gamma[b] = a
+		elif a.phylum() == b.phylum():
+			a.unify_with(b, enq)
 		else:
-			while a.rank != b.rank:
-				if a.rank > b.rank:
-					a = a.demote(gamma)
-				else:
-					b = b.demote(gamma)
-			T = type(a)
-			if T is not type(b):
-				raise Incompatible(a,b)
-			elif T is Apply:
-				if a.ctor is b.ctor:
-					assert len(a.actuals) == len(b.actuals)
-					for x,y in zip(a.actuals, b.actuals):
-						enq(x,y)
-				else:
-					raise Incompatible(a,b)
-			elif T is PrimitiveType:
-				# Nominal Equivalence
-				if a is not b:
-					raise Incompatible(a,b)
-			elif T is Arrow:
-				# Structural Equivalence
-				enq(a.arg, b.arg)
-				enq(a.res, b.res)
-			elif T is Product:
-				# Structural Equivalence
-				if len(a.fields) != len(b.fields):
-					raise Incompatible(a,b)
-				for x,y in zip(a.fields,b.fields):
-					enq(x,y)
-			else:
-				raise TypeError(T)
-	
+			raise Incompatible(a, b)
+
 	gamma = {}
 	queue = deque()
 	enq(peas, carrots)
 	while queue:
 		U(*queue.popleft())
 	return gamma
+
+
