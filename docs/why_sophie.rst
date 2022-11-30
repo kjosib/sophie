@@ -32,7 +32,7 @@ Sophie is different on all accounts.
 * Sophie ... doesn't dirty herself with objects of the usual sort. (There is a better way.)
 * Sophie is fastidious about preventing errors up front, before they cause trouble during operation.
   Through *strong static type inference*, Sophie can check in advance for many kinds of
-  latent problems that testing along might not catch -- which can save you a whole mess of effort.
+  latent problems that testing alone might not catch -- which can save you a whole mess of effort.
 
 .. note::
     Ok, confession: That last point is not yet implemented. The current version can "crash".
