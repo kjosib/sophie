@@ -6,33 +6,19 @@ Class-level type annotations make peace with pycharm wherever later passes add f
 """
 from typing import Optional, Any, Sequence, NamedTuple, Union
 from boozetools.parsing.interface import SemanticError
-from .ontology import SymbolTableEntry, SyntaxNode, NS
+from .ontology import Nom, Symbol, NS, TypeExpr, ValExpr, MatchProxy
 from . import algebra
 
-class Name(SyntaxNode):
-	entry: SymbolTableEntry  # The name-resolution pass fills this in.
-	
-	def __init__(self, text, a_slice):
-		self.text, self._slice = text, a_slice
-	
-	def head(self) -> slice:
-		return self._slice
-	
-	def __repr__(self):
-		return "<Name %r>" % self.text
-	
-	def key(self):
-		return self.text
-
-
-class Expr(SyntaxNode):
-	pass
-
+class TypeParameter(Symbol):
+	nom: Nom
+	quantifiers = ()
+	def __init__(self, nom:Nom):
+		self.nom = nom
+		self.typ = algebra.TypeVariable()
 
 SIMPLE_TYPE = Union["TypeCall", "ArrowSpec", "ImplicitType"]
 
-
-class ArrowSpec(SyntaxNode):
+class ArrowSpec(TypeExpr):
 	lhs: Sequence["SIMPLE_TYPE"]
 	_head: slice
 	rhs: Optional["SIMPLE_TYPE"]
@@ -43,85 +29,71 @@ class ArrowSpec(SyntaxNode):
 		self.rhs = rhs
 	def head(self) -> slice:
 		return self._head
-		
-
-class TypeCall(SyntaxNode):
-	def __init__(self, name: Name, arguments: Sequence[SIMPLE_TYPE] = ()):
-		self.name, self.arguments = name, arguments or ()
+	
+class TypeCall(TypeExpr):
+	def __init__(self, nom: Nom, arguments: Sequence[SIMPLE_TYPE] = ()):
+		self.nom, self.arguments = nom, arguments or ()
 	def __repr__(self):
 		p = "[%s]"%",".join(map(str, self.arguments)) if self.arguments else ""
-		return "{tc:%s%s}"%(self.name.text,p)
+		return "{tc:%s%s}"%(self.nom.text, p)
 	
-	def head(self) -> slice: return self.name.head()
+	def head(self) -> slice: return self.nom.head()
 
-
-class TypeParameter(NamedTuple):
-	name: Name
-	quantifiers = ()
-	def __repr__(self): return self.name.text
-	def head(self) -> slice: return self.name.head()
-
-
-class ImplicitType(SyntaxNode):
+class ImplicitType(TypeExpr):
 	""" Stand-in as the relevant type-expression for when the syntax doesn't bother. """
 
-class FormalParameter(SyntaxNode):
+class FormalParameter(Symbol):
 	def has_value_domain(self): return True
-	def __init__(self, name:Name, type_expr: Optional[SIMPLE_TYPE]):
-		self.name, self.type_expr = name, type_expr
-	def head(self) -> slice: return self.name.head()
-	def key(self): return self.name.key()
-	def __repr__(self): return "<:%s:%s>"%(self.name.text, self.type_expr)
+	def __init__(self, nom:Nom, type_expr: Optional[SIMPLE_TYPE]):
+		self.nom, self.type_expr = nom, type_expr
+	def head(self) -> slice: return self.nom.head()
+	def key(self): return self.nom.key()
+	def __repr__(self): return "<:%s:%s>"%(self.nom.text, self.type_expr)
 
-def ordinal_member(name: Name): return FormalParameter(name, None)
-
-
-class RecordSpec:
+class RecordSpec(TypeExpr):
 	namespace: NS  # WordDefiner pass fills this in.
 	product_type: algebra.Product  # TypeBuilder pass sets this.
 	def __init__(self, fields: list[FormalParameter]):
 		self.fields = fields
 	
 	def field_names(self):
-		return [f.name.text for f in self.fields]
+		return [f.nom.text for f in self.fields]
 
-class SubType(SyntaxNode):
+class SubTypeSpec(Symbol):
 	body: Union[RecordSpec, TypeCall, ArrowSpec]
+	variant:"TypeDecl"
 	def has_value_domain(self): return True
-	def __init__(self, name:Name, body=None):
-		self.name = name
+	def __init__(self, nom:Nom, body=None):
+		self.nom = nom
 		self.body = body
-	def head(self) -> slice: return self.name.head()
-	def key(self): return self.name.key()
-	def __repr__(self): return "<:%s:%s>"%(self.name.text, self.body)
+	def head(self) -> slice: return self.nom.head()
+	def key(self): return self.nom.key()
+	def __repr__(self): return "<:%s:%s>"%(self.nom.text, self.body)
 
-
-
-class VariantSpec:
+class VariantSpec(TypeExpr):
 	_kw: slice
 	namespace: NS
-	def __init__(self, _kw: slice, alternatives: list[SubType]):
+	def __init__(self, _kw: slice, subtypes: list[SubTypeSpec]):
 		self._kw = _kw
-		self.alternatives = alternatives
+		self.subtypes = subtypes
 
-
-class TypeDecl(SyntaxNode):
+class TypeDecl(Symbol):
 	namespace: NS
-	name: Name
+	nom: Nom
 	parameters: Sequence[TypeParameter]
 	body: Union[TypeCall, VariantSpec, RecordSpec]
-	quantifiers: list  # phase: WordDefiner
-	def __str__(self): return self.name.text
+	quantifiers: list[algebra.TypeVariable]  # phase: WordDefiner
+	def __str__(self): return self.nom.text
 	def __repr__(self):
 		p = "[%s] "%",".join(map(str, self.parameters)) if self.parameters else ""
-		return "{td:%s%s = %s}"%(self.name.text, p, self.body)
+		return "{td:%s%s = %s}"%(self.nom.text, p, self.body)
 	
-	def __init__(self, name, parameters: Sequence[Name], body) -> None:
-		self.name = name
+	def __init__(self, nom, parameters: Sequence[Nom], body) -> None:
+		self.nom = nom
 		self.parameters = [TypeParameter(p) for p in parameters or ()]
 		self.body = body
 	def head(self) -> slice:
-		return self.name.head()
+		return self.nom.head()
 	def has_value_domain(self): return isinstance(self.body, RecordSpec)
 
 class MismatchedBookendsError(SemanticError):
@@ -130,13 +102,11 @@ class MismatchedBookendsError(SemanticError):
 	def __init__(self, head: slice, coda: slice):
 		super().__init__(head, coda)
 
-
-def _bookend(head: Name, coda: Name):
+def _bookend(head: Nom, coda: Nom):
 	if head.text != coda.text:
 		raise MismatchedBookendsError(head.head(), coda.head())
 
-
-class Function(SyntaxNode):
+class Function(Symbol):
 	namespace: NS
 	sub_fns: dict[str:"Function"]  # for simple evaluator
 	where: Sequence["Function"]
@@ -144,32 +114,32 @@ class Function(SyntaxNode):
 	def has_value_domain(self): return True
 	def __repr__(self):
 		p = ", ".join(map(str, self.params))
-		return "{fn:%s(%s)}"%(self.name.text, p)
+		return "{fn:%s(%s)}"%(self.nom.text, p)
 	def __init__(
 			self,
-			name: Name,
+			nom: Nom,
 			params: Sequence[FormalParameter],
 			expr_type: Optional[SIMPLE_TYPE],
-			expr: Expr,
+			expr: ValExpr,
 			where: Optional["WhereClause"]
 	):
-		self.name = name
+		self.nom = nom
 		self.params = params or ()
-		self.expr_type = expr_type
+		self.result_type_expr = expr_type
 		self.expr = expr
 		if where:
-			_bookend(name, where.end_name)
+			_bookend(nom, where.end_name)
 			self.where = where.sub_fns
 		else:
 			self.where = ()
 	
-	def head(self) -> slice: return self.name.head()
+	def head(self) -> slice: return self.nom.head()
 
 class WhereClause(NamedTuple):
 	sub_fns: Sequence[Function]
-	end_name: Name
+	end_name: Nom
 
-class Literal(Expr):
+class Literal(ValExpr):
 	def __init__(self, value: Any, a_slice: slice):
 		self.value, self._slice = value, a_slice
 	
@@ -179,35 +149,24 @@ class Literal(Expr):
 	def head(self) -> slice:
 		return self._slice
 
+class Lookup(ValExpr):
+	dfn:Symbol = None  # Fill during WordResolver pass
+	def __init__(self, nom: Nom): self.nom = nom
+	def head(self) -> slice: return self.nom.head()
+	def __repr__(self): return "{lookup:%s:%s}" % (self.nom.text, type(self.dfn).__name__)
 
-class Lookup(Expr):
-	def __init__(self, name: Name):
-		self.name = name
-	def head(self) -> slice: return self.name.head()
-	def __repr__(self):
-		referent = self.name.entry.dfn
-		return "{lookup:%s:%s}"%(self.name.text, type(referent).__name__)
-
-class FieldReference(Expr):
-	def __init__(self, lhs: Expr, field_name: Name):
-		self.lhs, self.field_name = lhs, field_name
-	
-	def __str__(self):
-		return "(%s.%s)" % (self.lhs, self.field_name.text)
+class FieldReference(ValExpr):
+	def __init__(self, lhs: ValExpr, field_name: Nom): self.lhs, self.field_name = lhs, field_name
+	def __str__(self): return "(%s.%s)" % (self.lhs, self.field_name.text)
 	def head(self) -> slice: return self.field_name.head()
 
-
-class BinExp(Expr):
-	def __init__(self, glyph: str, lhs: Expr, o:slice, rhs: Expr):
+class BinExp(ValExpr):
+	def __init__(self, glyph: str, lhs: ValExpr, o:slice, rhs: ValExpr):
 		self.glyph, self.lhs, self.rhs = glyph, lhs, rhs
 		self._head = o
-	
-	def head(self) -> slice:
-		return self._head
-
+	def head(self) -> slice: return self._head
 
 def _be(glyph: str): return lambda a, o, b: BinExp(glyph, a, o, b)
-
 
 PowerOf = _be("PowerOf")
 Mul = _be("Mul")
@@ -225,48 +184,39 @@ LT = _be("LT")
 GE = _be("GE")
 GT = _be("GT")
 
-
-class ShortCutExp(Expr):
-	def __init__(self, glyph: str, lhs: Expr, o:slice, rhs: Expr):
+class ShortCutExp(ValExpr):
+	def __init__(self, glyph: str, lhs: ValExpr, o:slice, rhs: ValExpr):
 		self.glyph, self.lhs, self._head, self.rhs = glyph, lhs, o, rhs
 	
 	def head(self) -> slice:
 		return self._head
-
-
 def LogicalAnd(a, o, b): return ShortCutExp("LogicalAnd", a, o, b)
 def LogicalOr(a, o, b): return ShortCutExp("LogicalOr", a, o, b)
 
-
-class UnaryExp(Expr):
-	def __init__(self, glyph: str, o:slice, arg: Expr):
+class UnaryExp(ValExpr):
+	def __init__(self, glyph: str, o:slice, arg: ValExpr):
 		self.glyph, self.arg = glyph, arg
 		self._head = o
 
 	def head(self) -> slice: return self._head
 
-
 def Negative(o, arg): return UnaryExp("Negative", o, arg)
-
 
 def LogicalNot(o, arg): return UnaryExp("LogicalNot", o, arg)
 
-
-class Cond(Expr):
+class Cond(ValExpr):
 	_kw: slice
-	def __init__(self, then_part: Expr, _kw, if_part: Expr, else_part: Expr):
+	def __init__(self, then_part: ValExpr, _kw, if_part: ValExpr, else_part: ValExpr):
 		self._kw = _kw
 		self.then_part, self.if_part, self.else_part = then_part, if_part, else_part
 
-
-def CaseWhen(when_parts: list, else_part: Expr):
+def CaseWhen(when_parts: list, else_part: ValExpr):
 	for _kw, test, then in reversed(when_parts):
 		else_part = Cond(then, _kw, test, else_part)
 	return else_part
 
-
-class Call(Expr):
-	def __init__(self, fn_exp: Expr, args: list[Expr]):
+class Call(ValExpr):
+	def __init__(self, fn_exp: ValExpr, args: list[ValExpr]):
 		self.fn_exp, self.args = fn_exp, args
 	
 	def __str__(self):
@@ -274,59 +224,77 @@ class Call(Expr):
 	
 	def head(self) -> slice: return self.fn_exp.head()
 
-
-def call_upon_list(fn_exp: Expr, list_arg: Expr):
+def call_upon_list(fn_exp: ValExpr, list_arg: ValExpr):
 	return Call(fn_exp, [list_arg])
 
-
-class ExplicitList(Expr):
-	def __init__(self, elts: list[Expr]):
+class ExplicitList(ValExpr):
+	def __init__(self, elts: list[ValExpr]):
 		for e in elts:
-			assert isinstance(e, Expr), e
+			assert isinstance(e, ValExpr), e
 		self.elts = elts
 
-
 class SubjectWithExpr(NamedTuple):
-	expr: Expr
-	name: Name
+	expr: ValExpr
+	nom: Nom
 
-
-class Alternative(NamedTuple):
-	pattern: Name
-	sub_expr: Expr
-
-
-class MatchExpr(Expr):
-	dispatch: dict[Optional[str]:Expr]
+class Alternative(ValExpr):
+	pattern: Nom
+	sub_expr: ValExpr
+	where: Sequence["Function"]
 	
-	def __init__(self, name: Name, alternatives: list[Alternative], otherwise: Optional[Expr]):
-		self.name, self.alternatives, self.otherwise = name, alternatives, otherwise
+	namespace: NS  # WordDefiner fills
+	proxy: MatchProxy  # WordDefiner fills
+	
+	def __init__(self, pattern:Nom, sub_expr:ValExpr, where:WhereClause):
+		self.pattern = pattern
+		self.sub_expr = sub_expr
+		if where:
+			_bookend(pattern, where.end_name)
+			self.where = where.sub_fns
+		else:
+			self.where = ()
+	def head(self) -> slice:
+		return self.pattern.head()
+	
+class MatchExpr(ValExpr):
+	subject: Nom
+	alternatives: list[Alternative]
+	otherwise: Optional[ValExpr]
+	
+	dispatch: dict[Optional[str]:ValExpr]
+	input_type: VariantSpec  # TypeBuilder pass fills this.
+	
+	def __init__(self, nom: Nom, alternatives: list[Alternative], otherwise: Optional[ValExpr]):
+		self.subject = nom
+		self.alternatives, self.otherwise = alternatives, otherwise
 	
 	def head(self) -> slice:
-		return self.name.head()
+		return self.subject.head()
 
-
-class WithExpr(Expr):
+class WithExpr(ValExpr):
 	# Represent a block-local scope for a name bound to an expression.
-	def __init__(self, expr: Expr, name: Name, body: Expr):
-		self.expr, self.name, self.body = expr, name, body
-	def head(self) -> slice: return self.name.head()
+	def __init__(self, expr: ValExpr, nom: Nom, body: ValExpr):
+		self.expr, self.nom, self.body = expr, nom, body
+	def head(self) -> slice: return self.nom.head()
 
-
-def match_expr(subject, alternatives: list[Alternative], otherwise: Optional[Expr]):
-	if isinstance(subject, Name):
+def match_expr(subject, alternatives: list[Alternative], otherwise: Optional[ValExpr]):
+	if isinstance(subject, Nom):
 		return MatchExpr(subject, alternatives, otherwise)
 	else:
 		assert isinstance(subject, SubjectWithExpr)
-		return WithExpr(subject.expr, subject.name, MatchExpr(subject.name, alternatives, otherwise))
+		return WithExpr(subject.expr, subject.nom, MatchExpr(subject.nom, alternatives, otherwise))
 
 class Module:
 	namespace: NS  # WordDefiner pass creates this.
 	constructors: dict[str:]
 	all_match_expressions: list[MatchExpr]  # WordResolver pass creates this.
+	all_functions: list[Function]
+	all_record_specs: list[RecordSpec]  # Handy to save trouble around variants.
+	all_variant_specs: list[VariantSpec]
+	all_subtype_specs: list[SubTypeSpec]
 	def __init__(self, exports:list, imports:list, types:list, functions:list, main:list):
 		self.exports = exports
 		self.imports = imports
 		self.types = types
-		self.functions = functions
+		self.outer_functions = functions
 		self.main = main

@@ -9,6 +9,8 @@ type:
 		 nil;
 	ESAC;
 	
+	pair[a,b] is (fst:a, snd:b);
+	
 	drawing is (steps: list[turtle_step]);
 	
 	turtle_step is case:
@@ -39,22 +41,15 @@ define:
 	
 	filter(predicate, xs) = case xs:
 		nil -> nil;
-		cons -> cons(xs.head, rest) if predicate(xs.head) else rest;
-	esac where
-		rest = filter(predicate, xs.tail);
-	end filter;
-	
+		cons -> cons(xs.head, rest) if predicate(xs.head) else rest where
+			rest = filter(predicate, xs.tail);
+		end cons;
+	esac;
+
 	reduce(fn, a, xs) = case xs:
 		nil -> a;
 		cons -> reduce(fn, fn(a, xs.head), xs.tail);
 	esac;
-	
-	expand(fn, acc, xs) = case xs:
-		nil -> nil;
-		cons -> cons(item, expand(fn, item, xs.tail));
-	esac where
-		item = fn(acc, xs.head);
-	end expand;
 	
 	cat(xs,ys) = case xs:
 		nil -> ys;
@@ -83,18 +78,18 @@ end.
 """
 
 def _init():
-	from . import front_end, resolution, primitive, diagnostics, partial_evaluator
+	from . import front_end, resolution, primitive, diagnostics, manifest
 	report = diagnostics.Report()
 	preamble = front_end.parse_text(__doc__, __file__, report)
 	if not report.issues:
 		resolution.resolve_words(preamble, primitive.root_namespace, report)
 	if not report.issues:
-		partial_evaluator.type_module(preamble, report)
+		manifest.type_module(preamble, report)
 	if report.issues:
 		front_end.complain(report)
 		raise RuntimeError()
 	else:
-		partial_evaluator.LIST = preamble.namespace['list'].typ
+		primitive.LIST = preamble.namespace['list'].typ
 		return preamble.namespace
 
 static_root = _init()

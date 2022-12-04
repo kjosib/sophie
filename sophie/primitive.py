@@ -1,32 +1,43 @@
 import inspect
 from functools import lru_cache
-from .ontology import SymbolTableEntry, NS, PrimitiveType
+from .ontology import NS, Symbol, Nom
 from .algebra import Term, Product, Arrow, TypeVariable, Nominal
 
 root_namespace = NS(place=None)
 ops = {}
 
+LIST : Nominal  # Generated in the preamble.
 
-class Native:
+class PrimitiveType(Symbol):
+	""" Presumably add clerical details here. """
+	quantifiers = ()
+	def __init__(self, name:str):
+		self.nom = Nom(name, None)
+		self.typ = Nominal(self, ())
+	def __repr__(self): return "<%s>"%self.nom
+	def has_value_domain(self): return False  # .. HACK ..
+
+class Native(Symbol):
 	""" Superclass of built-in run-time things. """
 	def has_value_domain(self): return True
 
 class NativeValue(Native):
-	def __init__(self, value):
-		self.value = value
+	def __init__(self, name:str, value, typ):
+		self.nom = Nom(name, None)
+		self.val = value
+		self.typ = typ
 
 class NativeFunction(Native):
 	""" Distinct from NativeValue in that the runtime needs to deal well with calling native functions. """
-	def __init__(self, native):
-		self.value = native
-		self.arity = len(inspect.signature(native).parameters.keys())
-		self.typ = _arrow_of_math(self.arity)
+	def __init__(self, name:str, fn):
+		self.nom = Nom(name, None)
+		self.fn = fn
+		self.arity = len(inspect.signature(fn).parameters.keys())
+		self.typ = _arrow_of_math(self.arity)  # Cheap hack for now; must improve later.
 
 def _built_in_type(name:str) -> Term:
-	typ = PrimitiveType(name)
-	entry = SymbolTableEntry(name, typ, None)
+	entry = PrimitiveType(name)
 	term = Nominal(entry, ())
-	entry.typ = term
 	root_namespace[name] = entry
 	return term
 literal_number = _built_in_type("number")
@@ -77,23 +88,20 @@ def _init():
 	ops["LogicalOr"] = True, logical
 	
 	NON_WORKING = {"hypot", "log"}
-	def value(name:str, dfn, typ:Term):
-		root_namespace[name] = SymbolTableEntry(name, dfn, typ)
-	def mathfn(name, native):
-		arity = len(inspect.signature(native).parameters.keys())
-		value(name, NativeFunction(native), _arrow_of_math(arity))
+	def install(symbol): root_namespace[symbol.nom.text] = symbol
+	def mathfn(name, native): install(NativeFunction(name, native))
 	for name in dir(math):
 		if not (name.startswith("_") or name in NON_WORKING):
-			native = getattr(math, name)
-			if isinstance(native, float):
-				value(name, NativeValue(native), literal_number)
-			elif callable(native):
-				mathfn(name, native)
-			else: raise ValueError(native)
+			val = getattr(math, name)
+			if isinstance(val, float):
+				install(NativeValue(name, val, literal_number))
+			elif callable(val):
+				mathfn(name, val)
+			else: raise ValueError(val)
 	mathfn('log', lambda x:math.log(x))
 	mathfn('log_base', lambda x,b: math.log(x, b))
-	value('yes', NativeValue(True), literal_flag)
-	value('no', NativeValue(False), literal_flag)
+	install(NativeValue('yes', True, literal_flag))
+	install(NativeValue('no', False, literal_flag))
 
 _init()
 

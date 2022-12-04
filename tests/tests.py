@@ -5,19 +5,19 @@ from unittest import mock
 from sophie.front_end import parse_file, parse_text, complain
 from sophie.resolution import resolve_words
 from sophie.preamble import static_root
-from sophie import syntax, simple_evaluator, partial_evaluator, diagnostics
+from sophie import syntax, simple_evaluator, manifest, diagnostics
 
 base_folder = Path(__file__).parent.parent
 example_folder = base_folder/"examples"
-zoo_folder = base_folder/"zoo_of_fail"
+zoo_fail = base_folder/"zoo/fail"
 
 def _load_good_example(which) -> syntax.Module:
 	report = diagnostics.Report()
-	module = parse_file(example_folder / (which+".sg"), report)
+	module = parse_file(example_folder/(which+".sg"), report)
 	if not report.issues:
 		resolve_words(module, static_root, report)
 	if not report.issues:
-		partial_evaluator.type_module(module, report)
+		manifest.type_module(module, report)
 	if report.issues:
 		complain(report)
 		assert False
@@ -29,14 +29,14 @@ class ExampleSmokeTests(unittest.TestCase):
 	""" Run all the examples; Test for no smoke. """
 	
 	def test_other_examples(self):
-		for name in ["hello_world", "some_arithmetic", "primes", "newton"]:
+		for name in ["hello_world", "some_arithmetic", "primes", "Newton"]:
 			with self.subTest(name=name):
 				module = _load_good_example(name)
 				simple_evaluator.run_module(module)
 	
 	def test_alias(self):
 		module = _load_good_example("alias")
-		self.assertIsInstance(module.namespace["album_tree"].dfn.body, syntax.TypeCall)
+		self.assertIsInstance(module.namespace["album_tree"].body, syntax.TypeCall)
 		self.assertEqual(7, simple_evaluator.run_module(module))
 	
 	def test_turtle_compiles(self):
@@ -47,13 +47,13 @@ class ZooOfFailTests(unittest.TestCase):
 	
 	def test_mismatched_where(self):
 		report = diagnostics.Report()
-		parse_file(zoo_folder/"mismatched_where.sg", report)
+		parse_file(zoo_fail/"mismatched_where.sg", report)
 		self.assertIn("Mismatched", report.issues[0].description)
 		
 		
 	def test_defined_twice(self):
 		report = diagnostics.Report()
-		module = parse_file(zoo_folder/"defined_twice.sg", report)
+		module = parse_file(zoo_fail/"defined_twice.sg", report)
 		assert not report.issues
 		resolve_words(module, static_root, report)
 		assert len(report.issues)
@@ -62,15 +62,15 @@ class ZooOfFailTests(unittest.TestCase):
 	@mock.patch("boozetools.support.failureprone.SourceText.complain")
 	def test_syntax_error(self, complain):
 		report = diagnostics.Report()
-		parse_file(zoo_folder / "syntax_error.sg", report)
+		parse_file(zoo_fail/"syntax_error.sg", report)
 		assert len(report.issues)
 		self.assertEqual(complain.call_count, 0)
 
 	def test_00_unresolved_names(self):
-		for fn in ("undefined_symbol", "bad_typecase_name", ):
+		for fn in ("undefined_symbol", "bad_typecase_name", "construct_variant", ):
 			with self.subTest(fn):
 				report = diagnostics.Report()
-				sut = parse_file(zoo_folder/(fn+".sg"), report)
+				sut = parse_file(zoo_fail/(fn+".sg"), report)
 				assert not report.issues
 				resolve_words(sut, static_root, report)
 				assert len(report.issues)
@@ -102,14 +102,34 @@ class ZooOfFailTests(unittest.TestCase):
 			with self.subTest(fn):
 				# Given
 				report = diagnostics.Report()
-				sut = parse_file(zoo_folder/(fn+".sg"), report)
+				sut = parse_file(zoo_fail/(fn+".sg"), report)
 				assert not report.issues
 				resolve_words(sut, static_root, report)
 				assert not report.issues
 				# When
-				partial_evaluator.type_module(sut, report)
+				manifest.type_module(sut, report)
 				# Then
 				assert len(report.issues)
+
+class TypeInferenceTests(unittest.TestCase):
+	def test_01(self):
+		text = """
+		type:
+			A[x,y] is case: bc(h:x, t:A[y,x]); na; esac;
+		define:
+			biMap(fa, fb, xs) = case xs:
+				na -> na;
+				bc -> bc(fa(xs.h), biMap(fb, fa, xs.tail));
+			esac;
+		end.
+		"""
+		report = diagnostics.Report()
+		module = parse_text(text, __file__, report)
+		assert not report.issues
+		resolve_words(module, static_root, report)
+		assert not report.issues
+		manifest.type_module(module, report)
+		
 
 if __name__ == '__main__':
 	unittest.main()

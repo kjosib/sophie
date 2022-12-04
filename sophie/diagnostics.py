@@ -1,6 +1,6 @@
 from typing import Sequence
 from boozetools.support.failureprone import Issue, Evidence, Severity
-from .ontology import SyntaxNode
+from .ontology import Expr
 
 class Report:
 	""" Might this end up participating in a result-monad? """
@@ -15,7 +15,7 @@ class Report:
 		self.issues.append(Issue(phase, Severity.ERROR, msg, evidence))
 
 	def on_error(self, phase:str):
-		def err(items:list[SyntaxNode], msg:str):
+		def err(items:list[Expr], msg:str):
 			self.error(phase, [i.head() for i in items], msg)
 		return err
 		

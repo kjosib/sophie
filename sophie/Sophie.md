@@ -29,11 +29,11 @@ Quick primer on reading the grammar:
 ```
 start -> export_section import_section typedef_section define_section main_section END '.' :Module
 
-export_section  -> EXPORT ':' comma_terminated_list(name) ';'             | :empty
-import_section  -> IMPORT ':' semicolon_terminated_list(one_import)       | :empty
-typedef_section -> TYPE ':' semicolon_terminated_list(type_declaration)   | :empty
-define_section  -> DEFINE ':' semicolon_terminated_list(function)         | :empty
-main_section    -> BEGIN ':' semicolon_terminated_list(expr)              | :empty
+export_section  -> EXPORT ':' comma_list(name) ';'             | :empty
+import_section  -> IMPORT ':' semicolon_list(one_import)       | :empty
+typedef_section -> TYPE ':' semicolon_list(type_declaration)   | :empty
+define_section  -> DEFINE ':' semicolon_list(function)         | :empty
+main_section    -> BEGIN ':' semicolon_list(expr)              | :empty
 
 one_import -> short_string AS name
 ```
@@ -50,17 +50,17 @@ That makes the type engine easier to work on.
 
 type_declaration -> name optional(type_parameters) IS type_body :TypeDecl
 
-type_parameters -> '[' comma_terminated_list(name) ']'
+type_parameters -> '[' comma_list(name) ']'
 
 type_body -> simple_type | record_type | variant_type
 
-record_type -> '(' comma_terminated_list(field) ')'   :RecordSpec
+record_type -> '(' comma_list(field) ')'   :RecordSpec
 
-variant_type -> .CASE ':' .semicolon_terminated_list(subtype) ESAC  :VariantSpec
+variant_type -> .CASE ':' .semicolon_list(subtype) ESAC  :VariantSpec
 
-subtype  -> name record_type    :SubType
-          | name simple_type    :SubType
-          | name                :SubType
+subtype  -> name record_type    :SubTypeSpec
+          | name simple_type    :SubTypeSpec
+          | name                :SubTypeSpec
 
 field -> name ':' simple_type   :FormalParameter
 
@@ -69,14 +69,14 @@ simple_type -> named_type | arrow_type
 named_type     -> name optional(type_argument)                   :TypeCall
 arrow_type     -> .type_argument .'->' .simple_type              :ArrowSpec
 
-type_argument  -> '[' comma_terminated_list(simple_type) ']'
+type_argument  -> '[' comma_list(simple_type) ']'
 
 ```
 
 **The general structure of a function:**
 ```
 function -> name optional(parameter_list) annotation '=' expr optional(where_clause) :Function
-where_clause -> WHERE semicolon_terminated_list(function) END name :WhereClause
+where_clause -> WHERE semicolon_list(function) END name :WhereClause
 ```
 
 Parameters to a function allow things to be implied.
@@ -84,7 +84,7 @@ You can leave off the type for a name,
 or use a question-mark anywhere a type-name would normally go,
 and the system will deal with it sensibly.
 ```
-parameter_list  -> '(' comma_terminated_list(parameter) ')'
+parameter_list  -> '(' comma_list(parameter) ')'
 parameter       ->   name annotation   :FormalParameter
 annotation ->  :nothing |  ':' param_type
 
@@ -94,7 +94,7 @@ param_type -> name                  :TypeCall
 | name param_type_arg               :TypeCall
 | .param_type_arg .'->' .param_type :ArrowSpec
 
-param_type_arg = '[' comma_terminated_list(param_type) ']'
+param_type_arg = '[' comma_list(param_type) ']'
 ```
 
 **The Expression Grammar:**
@@ -124,29 +124,28 @@ expr -> integer | real | short_string | list_expr | case_expr | match_expr
 | .NOT .expr  :LogicalNot
 
 | name :Lookup
-| expr '(' comma_terminated_list(expr) ')' :Call
+| expr '(' comma_list(expr) ')' :Call
 | expr list_expr :call_upon_list
 
 list_expr -> '[' list_body ']'
-list_body -> comma_terminated_list(expr) :ExplicitList
+list_body -> comma_list(expr) :ExplicitList
 
-case_expr -> CASE semicolon_terminated_list(when_clause) else_clause ESAC :CaseWhen
+case_expr -> CASE semicolon_list(when_clause) else_clause ESAC :CaseWhen
 when_clause -> .WHEN .expr THEN .expr
 else_clause -> ELSE expr ';'
 
-match_expr -> CASE .subject ':' .semicolon_terminated_list(alternative) .optional(else_clause) ESAC  :match_expr
+match_expr -> CASE .subject ':' .semicolon_list(alternative) .optional(else_clause) ESAC  :match_expr
 subject -> name | expr AS name :SubjectWithExpr
-alternative -> pattern '->' expr  :Alternative
+alternative -> pattern '->' expr optional(where_clause) :Alternative
 pattern -> name
 ```
 Experience may later suggest expanding the `pattern` grammar, but this will do for now.
 
 **Grammar Macros:**
 ```
-seplist(x,s) -> x :first | ._ s .x :more
-termlist(x,s) -> seplist(x,s) | .seplist(x,s) s
-comma_terminated_list(x) -> termlist(x,',')
-semicolon_terminated_list(x) -> seplist(x,';') ';'
+comma_separated_list(x) -> x :first | _ ',' x :more
+comma_list(x) ->  comma_separated_list(x) | comma_separated_list(x) ','
+semicolon_list(x) ->  x ';' :first  | _ x ';' :more
 optional(x) -> :nothing | x
 ```
 
