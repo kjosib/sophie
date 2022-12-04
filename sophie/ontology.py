@@ -1,29 +1,61 @@
-from typing import Optional, Mapping, Union
+from typing import Optional
 from boozetools.support.symtab import NameSpace
 
-class SyntaxNode:
-	""" Marker class for things that can have a corresponding type? """
+class Nom:
+	""" Representing the occurrence of a name anywhere. """
+	_slice: slice  # Empty-slice means pre-defined term.
+	dfn:"Symbol"   # Should happen during WordDefiner pass.
+	def __init__(self, text, a_slice): self.text, self._slice = text, a_slice or slice(0,0)
+	def head(self) -> slice: return self._slice
+	def __repr__(self): return "<Name %r>" % self.text
+	def key(self): return self.text
+
+class Term:
+	""" A term re-writing system computes types. """
+	def rewrite(self, delta: dict):
+		""" Trivial re-write during the manifest phase. """
+		raise NotImplementedError(type(self))
+	def pull_rabbit(self, gamma:dict):
+		""" Non-trivial re-write after a round of inference. """
+	def fresh(self, gamma: dict): raise NotImplementedError(type(self))
+	def phylum(self): raise NotImplementedError(type(self))
+	def render(self, gamma: dict, delta) -> str:
+		""" Return a string representation of the term. """
+		raise NotImplementedError(type(self))
+	def poll(self, seen:set):
+		""" Find all the type-variables used in the term. """
+		raise NotImplementedError(type(self))
+
+class Symbol:
+	"""
+	Any named defined thing that may be found in some name-space.
+	Thus, functions, parameters, types, subtypes, that sort of thing.
+	It's not a syntax node by itself, but it is likely to contain them.
+	It's more of a semantic node. In practice there's bound to be a strong correspondence,
+	but there can also be built-in or imported symbols.
+	"""
+	nom: Nom  # fill in during parsing.
+	typ: Term  # fill in variously.
+	def __repr__(self): return self.nom.text
+	def head(self): return self.nom.head()
+	def has_value_domain(self) -> bool: raise NotImplementedError(type(self))
+
+class Expr:
 	def head(self) -> slice:
 		""" Indicate which bit of code this node represents. """
 		raise NotImplementedError(type(self))
 
-class PrimitiveType:
-	""" Presumably add clerical details here. """
-	quantifiers = ()
-	def __init__(self, name):
-		self.name = name
-	def __repr__(self): return "<%s>"%self.name
-	def has_value_domain(self): return False  # .. HACK ..
+class TypeExpr(Expr):
+	pass
 
-DEFINITION = Union[SyntaxNode, PrimitiveType]
 
-class SymbolTableEntry:
-	def __init__(self, key, dfn:DEFINITION, typ):
-		self.key = key
-		self.dfn = dfn  # A function, typedecl, record, variant, tag, field, type-parameter, primitive-type, primitive-value, or primitive-function.
-		self.typ = typ  # The type of the whole symbol. So, in a function, the arrow. If a typedecl, a Symbolic.
-	def __str__(self):
-		return "<Sym %s :%s : %s>"%(self.key, self.dfn, self.typ)
+class ValExpr(Expr):
+	pass
 
-NS = NameSpace[SymbolTableEntry]
+NS = NameSpace[Symbol]
 
+class MatchProxy(Symbol):
+	""" Within a match-case, a name must reach a different symbol with the particular subtype """
+	def __init__(self, nom:Nom):
+		self.nom = nom
+	def has_value_domain(self) -> bool: return True

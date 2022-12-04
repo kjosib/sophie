@@ -1,3 +1,5 @@
+# Demonstration of Newton's Method as an iteration function.
+
 define:
     iterate_four_times(fn, x) = fn( fn( fn( fn( x ) ) ) );
 

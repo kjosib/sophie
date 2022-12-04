@@ -6,8 +6,8 @@ from which we can find the kind, type, and definition.
 from collections import defaultdict
 from boozetools.support.foundation import Visitor, strongly_connected_components_hashable
 from boozetools.support.symtab import NoSuchSymbol, SymbolAlreadyExists
-from . import syntax, algebra
-from .ontology import SymbolTableEntry, SyntaxNode, NS
+from . import syntax
+from .ontology import NS, Symbol, Nom, MatchProxy
 from .primitive import PrimitiveType
 
 def resolve_words(module: syntax.Module, outside: NS, report):
@@ -30,7 +30,40 @@ def resolve_words(module: syntax.Module, outside: NS, report):
 	if not report.issues:
 		AliasChecker(module, report.on_error("Circular reasoning"))
 
-class WordDefiner(Visitor):
+class WordPass(Visitor):
+	""" Simple pass-through for word-agnostic expression syntax. """
+	def visit_Literal(self, l:syntax.Literal, env:NS): pass
+	
+	def visit_ShortCutExp(self, it: syntax.ShortCutExp, env: NS):
+		self.visit(it.lhs, env)
+		self.visit(it.rhs, env)
+	
+	def visit_BinExp(self, it: syntax.BinExp, env: NS):
+		self.visit(it.lhs, env)
+		self.visit(it.rhs, env)
+	
+	def visit_UnaryExp(self, expr: syntax.UnaryExp, env: NS):
+		self.visit(expr.arg, env)
+	
+	def visit_FieldReference(self, expr: syntax.FieldReference, env: NS):
+		# word-agnostic until we know the type of expr.lhs.
+		self.visit(expr.lhs, env)
+	
+	def visit_Call(self, expr: syntax.Call, env: NS):
+		self.visit(expr.fn_exp, env)
+		for a in expr.args:
+			self.visit(a, env)
+	
+	def visit_Cond(self, expr: syntax.Cond, env: NS):
+		self.visit(expr.if_part, env)
+		self.visit(expr.then_part, env)
+		self.visit(expr.else_part, env)
+	
+	def visit_ExplicitList(self, expr: syntax.ExplicitList, env: NS):
+		for e in expr.elts:
+			self.visit(e, env)
+
+class WordDefiner(WordPass):
 	"""
 	At the end of this phase:
 		Names used in declarations have an attached symbol table entry.
@@ -44,72 +77,83 @@ class WordDefiner(Visitor):
 	def __init__(self, module:syntax.Module, outer:NS, on_error):
 		self.redef = []
 		self.globals = module.namespace = outer.new_child(module)
+		self.all_match_expressions = module.all_match_expressions = []
+		self.all_functions = module.all_functions = []
 		for td in module.types:
 			self.visit(td)
-		for fn in module.functions:
+		for fn in module.outer_functions:  # Can't iterate all-functions yet; must build it first.
 			self.visit(fn, module.namespace)
 		if self.redef:
 			on_error(self.redef, "I see the same name defined earlier in the same scope:")
 
-	def _install(self, namespace: NS, name: syntax.Name, dfn, typ=None):
-		name.entry = SymbolTableEntry(name.key(), dfn, typ)
-		self._import(namespace, name)
-	
-	def _import(self, namespace: NS, name: syntax.Name):
-		try: namespace[name.key()] = name.entry
-		except SymbolAlreadyExists: self.redef.append(name)
+	def _install(self, namespace: NS, dfn:Symbol):
+		try: namespace[dfn.nom.text] = dfn
+		except SymbolAlreadyExists: self.redef.append(dfn.nom)
 	
 	def visit_TypeDecl(self, td:syntax.TypeDecl):
 		td.namespace = self.globals.new_child(td)
 		quantifiers = []
 		for param in td.parameters:
-			typ = algebra.TypeVariable()
-			self._install(td.namespace, param.name, param, typ)
-			param.name.entry.quantifiers = ()
-			quantifiers.append(typ)
+			self._install(td.namespace, param)
+			param.quantifiers = ()
+			quantifiers.append(param.typ)
 		self.visit(td.body)
-		self._install(self.globals, td.name, td)
+		self._install(self.globals, td)
 		td.quantifiers = tuple(quantifiers)
 
 	def visit_VariantSpec(self, vs:syntax.VariantSpec):
 		vs.namespace = NS(place=vs)
-		for summand in vs.alternatives:
-			assert isinstance(summand, syntax.SubType)
-			self._install(self.globals, summand.name, summand)
-			if summand.body is not None:
-				self.visit(summand.body)
+		for subtype in vs.subtypes:
+			assert isinstance(subtype, syntax.SubTypeSpec)
+			self._install(self.globals, subtype)
+			self._install(vs.namespace, subtype)
+			if subtype.body is not None:
+				self.visit(subtype.body)
 		return
 
 	def visit_RecordSpec(self, rs:syntax.RecordSpec):
 		# Ought to have a local name-space with names having types.
 		rs.namespace = NS(place=rs)
 		for f in rs.fields:
-			self._install(rs.namespace, f.name, f)
+			self._install(rs.namespace, f)
 		return
 
 	def visit_ArrowSpec(self, it:syntax.ArrowSpec):
 		pass
 
-	def visit_Name(self, it:syntax.Name):
+	def visit_Nom(self, it:syntax.Nom):
 		pass
 
 	def visit_TypeCall(self, it:syntax.TypeCall):
 		pass
 
 	def visit_Function(self, fn:syntax.Function, env:NS):
+		self.all_functions.append(fn)
+		self._install(env, fn)
 		inner = fn.namespace = env.new_child(fn)
 		for param in fn.params:
-			self._install(inner, param.name, param)
-		self._install(env, fn.name, fn)
-		fn.sub_fns = {}  # for simple evaluator
+			self._install(inner, param)
 		for sub_fn in fn.where:
-			sub_name = sub_fn.name
 			self.visit(sub_fn, inner)
-			fn.sub_fns[sub_name.text] = sub_fn
-		del fn.where  # Don't need this anymore.
+		self.visit(fn.expr, inner) # Might need to deal with let-expressions.
+	
+	def visit_Lookup(self, l:syntax.Lookup, env:NS): pass
 
+	def visit_MatchExpr(self, mx:syntax.MatchExpr, env:NS):
+		self.all_match_expressions.append(mx)
+		for alt in mx.alternatives:
+			self.visit(alt, env, mx.subject)
+		if mx.otherwise is not None:
+			self.visit(mx.otherwise, env)
 
-class WordResolver(Visitor):
+	def visit_Alternative(self, alt: syntax.Alternative, env: NS, subject: Nom):
+		inner = alt.namespace = env.new_child(alt)
+		inner[subject.text] = alt.proxy = MatchProxy(subject)
+		for sub_ex in alt.where:
+			self.visit(sub_ex, inner)
+		self.visit(alt.sub_expr, inner)
+
+class WordResolver(WordPass):
 	"""
 	Walk the tree looking for undefined words in each static scope.
 	Report on every such occurrence.
@@ -117,100 +161,75 @@ class WordResolver(Visitor):
 	This is also a good place to pick up interesting lists of syntax objects, such as all match-cases.
 	"""
 	def __init__(self, module:syntax.Module, on_error):
-		self.undef:list[syntax.Name] = []
+		self.undef:list[syntax.Nom] = []
+		self.non_value:list[syntax.Nom] = []
 		self.globals = module.namespace
-		module.all_match_expressions = self.all_match_expressions = []
 		for td in module.types:
 			self.visit(td)
-		for fn in module.functions:
+		for fn in module.all_functions:
 			self.visit(fn)
 		for expr in module.main:
 			self.visit(expr, module.namespace)
 		if self.undef:
 			on_error(self.undef, "I do not see an available definition for:")
+		if self.non_value:
+			on_error(self.non_value, "This word is defined only in type context, not value context:")
 	
 	def visit_TypeDecl(self, td:syntax.TypeDecl):
 		self.visit(td.body, td.namespace)
-		
-	def visit_VariantSpec(self, it:syntax.VariantSpec, env:NS):
-		for alt in it.alternatives:
-			if alt.body is not None:
-				self.visit(alt.body, env)
+	
+	def visit_ArrowSpec(self, it: syntax.ArrowSpec, env: NS):
+		for a in it.lhs:
+			self.visit(a, env)
+		self.visit(it.rhs, env)
+	
+	def visit_VariantSpec(self, vs:syntax.VariantSpec, env:NS):
+		for st in vs.subtypes:
+			self.visit(st.nom, vs.namespace)
+			if st.body is not None:
+				self.visit(st.body, env)
 			pass
 	
-	def visit_RecordSpec(self, it:syntax.RecordSpec, env:NS):
-		for f in it.fields:
+	def visit_RecordSpec(self, rs:syntax.RecordSpec, env:NS):
+		for f in rs.fields:
+			self.visit(f.nom, rs.namespace)
 			self.visit(f.type_expr, env)
 			
-	def visit_Name(self, name:syntax.Name, env:NS):
+	def visit_Nom(self, nom:syntax.Nom, env:NS):
 		try:
-			name.entry = env[name.text]
+			nom.dfn = env[nom.text]
+			return nom.dfn
 		except NoSuchSymbol:
-			self.undef.append(name)
+			self.undef.append(nom)
 	
-	def visit_TypeCall(self, it:syntax.TypeCall, env:NS):
-		self.visit(it.name, env)
-		for p in it.arguments:
+	def visit_TypeCall(self, tc:syntax.TypeCall, env:NS):
+		self.visit(tc.nom, env)
+		for p in tc.arguments:
 			self.visit(p, env)
 
 	def visit_Function(self, fn:syntax.Function):
 		for param in fn.params:
 			if param.type_expr is not None:
 				self.visit(param.type_expr, self.globals)
-		if fn.expr_type is not None:
-			self.visit(fn.expr_type, self.globals)
+		if fn.result_type_expr is not None:
+			self.visit(fn.result_type_expr, self.globals)
 		self.visit(fn.expr, fn.namespace)
-		for item in fn.sub_fns.values():
-			self.visit(item)
-	
-	def visit_Literal(self, it:syntax.Literal, env:NS):
-		pass
-	
-	def visit_ArrowSpec(self, it:syntax.ArrowSpec, env:NS):
-		for a in it.lhs:
-			self.visit(a, env)
-		self.visit(it.rhs, env)
 
-	def visit_ShortCutExp(self, it:syntax.ShortCutExp, env:NS):
-		self.visit(it.lhs, env)
-		self.visit(it.rhs, env)
-
-	def visit_BinExp(self, it:syntax.BinExp, env:NS):
-		self.visit(it.lhs, env)
-		self.visit(it.rhs, env)
-
-	def visit_UnaryExp(self, expr:syntax.UnaryExp, env:NS):
-		self.visit(expr.arg, env)
-	
-	def visit_Lookup(self, expr:syntax.Lookup, env:NS):
-		self.visit(expr.name, env)
-	
-	def visit_FieldReference(self, expr:syntax.FieldReference, env:NS):
-		self.visit(expr.lhs, env)
-		# Save expr.field_name for once types are more of a thing.
-	
-	def visit_Call(self, expr:syntax.Call, env:NS):
-		self.visit(expr.fn_exp, env)
-		for a in expr.args:
-			self.visit(a, env)
-	
-	def visit_Cond(self, expr:syntax.Cond, env:NS):
-		self.visit(expr.if_part, env)
-		self.visit(expr.then_part, env)
-		self.visit(expr.else_part, env)
-
-	def visit_ExplicitList(self, expr:syntax.ExplicitList, env:NS):
-		for e in expr.elts:
-			self.visit(e, env)
-	
 	def visit_MatchExpr(self, mx:syntax.MatchExpr, env:NS):
-		self.all_match_expressions.append(mx)
-		self.visit(mx.name, env)
-		for pattern, sub_expr in mx.alternatives:
-			self.visit(pattern, self.globals)
-			self.visit(sub_expr, env)
+		self.visit(mx.subject, env)
+		for alt in mx.alternatives:
+			self.visit(alt.pattern, self.globals)
+			inner = alt.namespace
+			self.visit(alt.sub_expr, inner)
+			for sub_ex in alt.where:
+				self.visit(sub_ex)
 		if mx.otherwise is not None:
 			self.visit(mx.otherwise, env)
+			
+	def visit_Lookup(self, expr: syntax.Lookup, env: NS):
+		dfn = self.visit(expr.nom, env)
+		if dfn is not None and not dfn.has_value_domain():
+			self.non_value.append(expr.nom)
 
 def build_match_dispatch_tables(module: syntax.Module, on_error):
 	""" The simple evaluator uses these. """
@@ -236,11 +255,11 @@ class AliasChecker(Visitor):
 		self.on_error = on_error
 		self.non_types = []
 		self.non_values = []
-		self.graph : dict[SyntaxNode:list[SyntaxNode]] = defaultdict(list)
+		self.graph = defaultdict(list)
 		for td in module.types:
 			self.visit(td)
-		for fn in module.functions:
-			self.visit(fn)
+		for fn in module.all_functions:
+			self.visit_Function(fn)
 		for expr in module.main:
 			self.visit(expr)
 		if self.non_types:
@@ -265,7 +284,6 @@ class AliasChecker(Visitor):
 	pass
 	
 	def visit_TypeDecl(self, td:syntax.TypeDecl):
-		#assert td.name.entry.dfn is td
 		self.graph[td].append(td.body)
 		self.visit(td.body)
 	
@@ -274,7 +292,7 @@ class AliasChecker(Visitor):
 			self.visit(param.type_expr)
 	
 	def visit_TypeCall(self, expr:syntax.TypeCall):
-		referent = expr.name.entry.dfn
+		referent = expr.nom.dfn
 		arg_arity = len(expr.arguments)
 		if isinstance(referent, syntax.TypeDecl):
 			param_arity = len(referent.parameters)
@@ -293,7 +311,7 @@ class AliasChecker(Visitor):
 			self.visit(arg)
 
 	def visit_VariantSpec(self, expr: syntax.VariantSpec):
-		for alt in expr.alternatives:
+		for alt in expr.subtypes:
 			if alt.body is not None:
 				self.visit(alt.body)
 	def visit_RecordSpec(self, expr: syntax.RecordSpec):
@@ -310,13 +328,13 @@ class AliasChecker(Visitor):
 	def visit_Function(self, fn:syntax.Function):
 		for p in fn.params:
 			self.visit(p)
-		if fn.expr_type:
-			self.visit(fn.expr_type)
+		if fn.result_type_expr:
+			self.visit(fn.result_type_expr)
 		self.graph[fn].append(fn.expr)
 		self.visit(fn.expr)
 
-	def visit_MatchExpr(self, expr: syntax.MatchExpr):
-		self.graph[expr].append(expr.name.entry.dfn)
+	def visit_MatchExpr(self, mx: syntax.MatchExpr):
+		self.graph[mx].append(mx.subject.dfn)
 	
 	def visit_Cond(self, expr: syntax.Cond):
 		self.graph[expr].append(expr.if_part)
@@ -340,12 +358,12 @@ class AliasChecker(Visitor):
 		self.visit(expr.arg)
  	
 	def visit_Lookup(self, lu: syntax.Lookup):
-		dfn = lu.name.entry.dfn
+		dfn = lu.nom.dfn
 		# Allow functions, parameters, and proper constructors.
 		if dfn.has_value_domain():
 			self.graph[lu].append(dfn)
 		else:
-			self.non_values.append(lu.name)
+			self.non_values.append(lu.nom)
 	
 	def visit_Literal(self, l:syntax.Literal):
 		pass

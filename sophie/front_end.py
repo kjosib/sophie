@@ -31,7 +31,7 @@ class SophieParser(TypicalApplication):
 	def scan_word(self, yy: IterableScanner):
 		upper = yy.match().upper()
 		if upper in self.RESERVED: yy.token(upper, yy.slice())
-		else: yy.token("name", syntax.Name(sys.intern(yy.match()), yy.slice()))
+		else: yy.token("name", syntax.Nom(sys.intern(yy.match()), yy.slice()))
 	
 	def scan_relop(self, yy: IterableScanner, op:str):
 		yy.token("relop", op)

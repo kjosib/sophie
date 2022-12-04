@@ -25,8 +25,9 @@ parser = argparse.ArgumentParser(
 	prog="py -m sophie",
 	description="Interpreter for the Sophie programming langauge.",
 )
-parser.add_argument("-t", "--type", action="store_true", help="Run the type-checker. (Caveat: This is a work in progress.)")
 parser.add_argument("program", help="try examples/turtle.sg for example.")
+parser.add_argument('-n', "--no-preamble", action="store_true", help="Don't load the preamble.")
+parser.add_argument('-x', "--experimental", action="store_true", help="Run the experimental pass.")
 
 if len(sys.argv) > 1:
 	args = parser.parse_args()
@@ -37,15 +38,19 @@ if len(sys.argv) > 1:
 	module = parse_file(args.program, report)
 	if not report.issues:
 		from sophie.resolution import resolve_words
-		from sophie.preamble import static_root
-		resolve_words(module, static_root, report)
-	if args.type and not report.issues:
-		from sophie.partial_evaluator import type_module
+		if args.no_preamble:
+			from sophie.primitive import root_namespace as root
+		else:
+			from sophie.preamble import static_root as root
+		resolve_words(module, root, report)
+	if not report.issues:
+		from sophie.manifest import type_module
 		type_module(module, report)
+	if args.experimental and not report.issues:
+		from sophie.experimental import Experiment
+		Experiment(module, report.on_error("Experimental Pass"))
 	if report.issues:
 		complain(report)
-	elif args.type:
-		pass
 	elif module.main:
 		from sophie.simple_evaluator import run_module
 		run_module(module)

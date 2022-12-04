@@ -1,0 +1,12 @@
+# There is an unknowable expression, and it looks like this:
+define:
+    omega = omicron(omicron) where
+        omicron(x) = x(x);
+    end omega;
+end.
+
+# It cannot type-check. It certainly cannot run, either.
+# The proper type of omicron appears to be a countably-infinite nest of arrows.
+# The type of omega never even gets started.
+
+# I'm guessing this is an example of the need for the "occurs" check.

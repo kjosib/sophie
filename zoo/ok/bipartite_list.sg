@@ -1,0 +1,20 @@
+# Consider a bipartite type, such as an alternating list:
+type:
+critter[x,y] is case:
+    um(a:x, b:critter[y,x]);
+    nope;
+esac;
+
+define:
+
+# The natural map-type function for this would need two function-arguments and a critter.
+# It takes three rounds of inference to figure that type.
+
+cmap(fa, fb, cs) = case cs:
+    nope -> nope;
+    um -> um(fa(cs.a), cmap(fb, fa, cs.b));
+esac;
+
+end.
+
+

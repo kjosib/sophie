@@ -13,7 +13,7 @@ from . import syntax, primitive
 class Procedure(abc.ABC):
 	""" A run-time object that can be applied with arguments. """
 	@abc.abstractmethod
-	def apply(self, caller_env:NameSpace, args:list[syntax.Expr]) -> Any:
+	def apply(self, caller_env:NameSpace, args:list[syntax.ValExpr]) -> Any:
 		pass
 
 STRICT_VALUE = Union[int, float, str, Procedure, namedtuple, "Closure", dict]
@@ -21,8 +21,8 @@ STRICT_VALUE = Union[int, float, str, Procedure, namedtuple, "Closure", dict]
 ABSENT = object()
 class Thunk:
 	""" A kind of not-yet-value which can be forced. """
-	def __init__(self, dynamic_env: NameSpace, expr: syntax.Expr):
-		assert isinstance(expr, syntax.Expr), type(expr)
+	def __init__(self, dynamic_env: NameSpace, expr: syntax.ValExpr):
+		assert isinstance(expr, syntax.ValExpr), type(expr)
 		self._dynamic_env = dynamic_env
 		self._expr = expr
 		self._value = ABSENT
@@ -50,14 +50,14 @@ def actual_value(it:LAZY_VALUE) -> STRICT_VALUE:
 		it = it.force()
 	return it
 
-def strict(expr:syntax.Expr, dynamic_env:NameSpace):
+def strict(expr:syntax.ValExpr, dynamic_env:NameSpace):
 	return actual_value(evaluate(expr, dynamic_env))
 
 def _eval_literal(expr:syntax.Literal, dynamic_env:NameSpace):
 	return expr.value
 
 def _eval_lookup(expr:syntax.Lookup, dynamic_env:NameSpace):
-	return dynamic_env[expr.name.text]
+	return dynamic_env[expr.nom.text]
 
 def _eval_bin_exp(expr:syntax.BinExp, dynamic_env:NameSpace):
 	return OPS[expr.glyph](strict(expr.lhs, dynamic_env), strict(expr.rhs, dynamic_env))
@@ -96,7 +96,7 @@ def _eval_explicit_list(expr:syntax.ExplicitList, dynamic_env:NameSpace):
 	return it
 
 def _eval_match_expr(expr:syntax.MatchExpr, dynamic_env:NameSpace):
-	subject = actual_value(dynamic_env[expr.name.text])
+	subject = actual_value(dynamic_env[expr.subject.text])
 	tag = subject[""]
 	try:
 		branch = expr.dispatch[tag]
@@ -106,7 +106,7 @@ def _eval_match_expr(expr:syntax.MatchExpr, dynamic_env:NameSpace):
 			raise RuntimeError("Confused by tag %r; this will not be possible after type-checking works."%tag)
 	return delay(dynamic_env, branch)
 
-def evaluate(expr:syntax.Expr, dynamic_env:NameSpace) -> LAZY_VALUE:
+def evaluate(expr:syntax.ValExpr, dynamic_env:NameSpace) -> LAZY_VALUE:
 	try: fn = EVALUATE[type(expr)]
 	except KeyError: raise NotImplementedError(type(expr), expr)
 	else: return fn(expr, dynamic_env)
@@ -114,9 +114,9 @@ def evaluate(expr:syntax.Expr, dynamic_env:NameSpace) -> LAZY_VALUE:
 def delay(dynamic_env:NameSpace, item) -> LAZY_VALUE:
 	# For two kinds of expression, there is no profit to delay:
 	if isinstance(item, syntax.Literal): return item.value
-	if isinstance(item, syntax.Lookup): return dynamic_env[item.name.text]
+	if isinstance(item, syntax.Lookup): return dynamic_env[item.nom.text]
 	# In less trivial cases, make a thunk and pass that instead.
-	if isinstance(item, syntax.Expr): return Thunk(dynamic_env, item)
+	if isinstance(item, syntax.ValExpr): return Thunk(dynamic_env, item)
 	# Some internals already have the data and it's no use making a (new) thunk.
 	return item
 
@@ -126,28 +126,29 @@ class Closure(Procedure):
 	def __init__(self, static_link:NameSpace, udf:syntax.Function):
 		self._udf = udf
 		self._static_link = static_link
-		self._params = [p.name.text for p in udf.params]
+		self._params = [p.nom.text for p in udf.params]
 		self._arity = len(self._params)
 	
-	def _name(self): return self._udf.name.text
+	def _name(self): return self._udf.nom.text
 
-	def apply(self, caller_env:NameSpace, args:list[syntax.Expr]) -> LAZY_VALUE:
+	def apply(self, caller_env:NameSpace, args:list[syntax.ValExpr]) -> LAZY_VALUE:
 		if self._arity != len(args):
 			raise TypeError("Procedure %s expected %d args, got %d."%(self._name(), self._arity, len(args)))
 		inner_env = self._static_link.new_child(self._udf)
 		for param_name, expr in zip(self._params, args):
-			assert isinstance(expr, syntax.Expr), "%s :: %s given %r"%(self._name(), param_name, expr)
+			assert isinstance(expr, syntax.ValExpr), "%s :: %s given %r" % (self._name(), param_name, expr)
 			inner_env[param_name] = delay(caller_env, expr)
-		for key, fn in self._udf.sub_fns.items():
-			inner_env[key] = close_one_function(inner_env, fn)
+		for fn in self._udf.where:
+			inner_env[fn.nom.text] = close_one_function(inner_env, fn)
 		return delay(inner_env, self._udf.expr)
 
 def close_one_function(env:NameSpace, udf:syntax.Function):
 	if udf.params:
 		return Closure(env, udf)
-	elif udf.sub_fns:
+	elif udf.where:
 		inner_env = env.new_child(udf)
-		for inner_key, inner_function in udf.sub_fns.items():
+		for inner_function in udf.where:
+			inner_key = inner_function.nom.text
 			inner_env[inner_key] = close_one_function(inner_env, inner_function)
 		return delay(inner_env, udf.expr)
 	else:
@@ -158,10 +159,10 @@ class Primitive(Procedure):
 	def __init__(self, key:str, native:primitive.NativeFunction):
 		assert isinstance(key, str)
 		self._key = key
-		self._native = native.value
+		self._native = native.fn
 		self._arity = native.arity
 		
-	def apply(self, caller_env:NameSpace, args:list[syntax.Expr]) -> STRICT_VALUE:
+	def apply(self, caller_env:NameSpace, args:list[syntax.ValExpr]) -> STRICT_VALUE:
 		if self._arity != len(args):
 			message = "Native procedure %s expected %d args, got %d."
 			raise TypeError(message%(self._key, self._arity, len(args)))
@@ -173,7 +174,7 @@ class Constructor(Procedure):
 		self.key = key
 		self.fields = fields
 	
-	def apply(self, caller_env: NameSpace, args: list[syntax.Expr]) -> Any:
+	def apply(self, caller_env: NameSpace, args: list[syntax.ValExpr]) -> Any:
 		assert len(args) == len(self.fields)
 		structure = {"":self.key}
 		for field, expr in zip(self.fields, args):
@@ -201,9 +202,8 @@ def run_module(module: syntax.Module):
 	return result
 
 def _prepare_global_scope(dynamic_env:NameSpace, items):
-	for key, entry in items:
-		dfn = entry.dfn
-		if isinstance(dfn, (syntax.TypeDecl, syntax.SubType)):
+	for key, dfn in items:
+		if isinstance(dfn, (syntax.TypeDecl, syntax.SubTypeSpec)):
 			dfn = dfn.body
 			if isinstance(dfn, (syntax.VariantSpec, syntax.ArrowSpec, syntax.TypeCall)):
 				pass
@@ -220,7 +220,7 @@ def _prepare_global_scope(dynamic_env:NameSpace, items):
 		elif isinstance(dfn, primitive.NativeFunction):
 			dynamic_root[key] = Primitive(key, dfn)
 		elif isinstance(dfn, primitive.NativeValue):
-			dynamic_root[key] = dfn.value
+			dynamic_root[key] = dfn.val
 		elif type(dfn) in _ignore_these:
 			pass
 		else:
@@ -229,7 +229,7 @@ def _prepare_global_scope(dynamic_env:NameSpace, items):
 _ignore_these = {
 	# type(None),
 	syntax.ArrowSpec,
-	syntax.Name,
+	syntax.Nom,
 	syntax.TypeCall,
 	syntax.VariantSpec,
 	primitive.PrimitiveType,
