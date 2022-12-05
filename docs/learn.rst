@@ -182,7 +182,112 @@ Once again, let's study the bits.
 Making Decisions
 --------------------
 
-Introduce the conditional forms.
+So far, we've seen arithmetic and how to use functions, but no way to decide between options.
+Let's fix that.
+Sophie has three of what we call *conditional forms,* or ways to represent decision-points in a program.
+I'll cover the first two of these here, and the last in the section about data structures.
+
+Let's improve our root-finding program.
+You may have noticed that it did significantly better with ``root(2)`` than with ``root(17)``.
+To get a better answer for larger numbers, one approach we could take is to iterate Newton's method more times.
+We could do this::
+
+    define:
+        iterate_six_times(fn, x) = fn( fn( fn( fn( fn( fn( x ) ) ) ) ) );
+
+        root(square) = iterate_six_times(newton, 1) where
+            newton(guess) = (guess + square/guess) / 2;
+        end root;
+
+    begin:
+        root(2);   # 1.414213562373095   -- As good as we're going to get.
+        sqrt(2);   # 1.4142135623730951  -- That last digit is a topic for another day.
+
+        root(17);  # 4.123105625617805   -- Quite a bit better now,
+        sqrt(17);  # 4.123105625617661   -- but still not quite perfect.
+
+        root(170000);  # 2677.54397787486   -- Ack! Horribly wrong.
+        sqrt(170000);  # 412.31056256176606  -- It should be 100x that for 17.
+    end.
+
+..
+
+    For the record, ``sqrt`` is the built-in math function for taking square-roots,
+    so that's convenient for testing against.
+
+In this example, I've added two more rounds of Newton's Method (and renamed a certain function accordingly).
+Even still, it's not enough.
+Feed a big enough number into the ``root(...)`` function and it stops too soon.
+It would be nice if we could let Sophie figure out when to stop.
+Perhaps we come up with a function like this::
+
+    define:
+        root(square) = iterated(newton(1), 1) where
+            newton(root) = (root + square/root) / 2;
+            iterated(a, b) = a if good_enough else iterated(newton(a), a) where
+                good_enough = relative_difference < 1e-14;
+                relative_difference = fabs(a-b) / (a+b) ;
+             end iterated;
+        end root;
+
+    begin:
+        root(2);        # 1.414213562373095
+        sqrt(2);        # 1.4142135623730951
+
+        root(17);       # 4.123105625617661
+        sqrt(17);       # 4.123105625617661
+
+        root(170000);   # 412.31056256176606
+        sqrt(170000);   # 412.31056256176606
+    end.
+
+Success! But ... What just happened? There's a lot going on in this case-study.
+
+1. | The body-expression of ``iterated`` shows the first of the conditional forms:
+   |    *expression-1* ``if`` *test* ``else`` *expression-2*.
+
+2. So-called *where-clauses* can have as many definitions as you like.
+   The main ``root`` function defines two sub-functions in this manner.
+
+3. You can nest sub-functions as deeply as you like.
+   The function ``good_enough`` is within ``iterated``, which itself is within ``root``.
+
+4. In the function ``good_enough``, we meet scientific notation. ``1e-14`` is one over ten trillion, so very small.
+
+5. The built-in function ``fabs`` stands for "absolute-value of" and is effectively ``fabs(x) = x if x >= 0 else -x``,
+   but in native code. The ``f`` in ``fabs`` comes from a historical accident, and I will probably remove it
+   from a near-future version of the interpreter.
+
+..
+
+    Normally, it's best to use the standard-library functions rather than re-build from scratch.
+    But then again, normally you'll already know how to use the langauge.
+    This exercise is just practice for learning the concepts.
+
+Seven Moving Parts
+-------------------
+
+This might be a good point to pause and reflect.
+You have seen functions and if/then/else decision points.
+In principle, that's enough to compute anything that can be computed.
+
+The Holy Trinity of structured programming is *sequence, selection, and repetition*.
+We're doing something even holier than structured, though.
+We're doing *pure* functional programming with *call-by-need*.
+
+So far, we've seen:
+
+* Arithmetic and Logic.
+* Selection among alternatives.
+* Functional abstraction, by which we obtain sequence and repetition.
+
+We've yet to tackle:
+
+* Organizing information internal the program for proper access.
+* Influencing the world, such as displaying something or writing to long-term storage: Output.
+* Getting information from the outside world into the program: Input.
+* Interconnecting sections of program written by different people at different times and places: a module system.
+* The eventual plans for solving *big* problems with Sophie.
 
 Fantastic Lists and Where to Find Them
 --------------------------------------------
