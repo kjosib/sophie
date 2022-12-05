@@ -48,7 +48,7 @@ if len(sys.argv) > 1:
 		type_module(module, report)
 	if args.experimental and not report.issues:
 		from sophie.experimental import Experiment
-		Experiment(module, report.on_error("Experimental Pass"))
+		Experiment(module, report.on_error("Experimental Pass"), verbose=True)
 	if report.issues:
 		complain(report)
 	elif module.main:

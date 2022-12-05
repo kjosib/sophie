@@ -35,7 +35,7 @@ class NativeFunction(Native):
 		self.arity = len(inspect.signature(fn).parameters.keys())
 		self.typ = _arrow_of_math(self.arity)  # Cheap hack for now; must improve later.
 
-def _built_in_type(name:str) -> Term:
+def _built_in_type(name:str) -> Nominal:
 	entry = PrimitiveType(name)
 	term = Nominal(entry, ())
 	root_namespace[name] = entry

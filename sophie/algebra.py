@@ -24,7 +24,7 @@ class TypeVariable(Term):
 		# This is for trivial re-write during the manifest phase.
 		return delta.get(self, self)
 	def pull_rabbit(self, gamma:dict):
-		# This is for the non-trivial re-write after a round of inference.
+		# This is for the non-trivial re-write during inference.
 		while self in gamma: self = gamma[self]
 		return self
 	def fresh(self, gamma: dict):
@@ -64,11 +64,11 @@ class Nominal(Term):
 	def phylum(self):
 		return self.dfn
 	def rewrite(self, delta: dict):
-		return Nominal(self.dfn, [v.rewrite(delta) for v in self.params])
+		return self if not self.params else Nominal(self.dfn, [v.rewrite(delta) for v in self.params])
 	def pull_rabbit(self, gamma:dict):
-		return Nominal(self.dfn, [v.pull_rabbit(gamma) for v in self.params])
+		return self if not self.params else Nominal(self.dfn, [v.pull_rabbit(gamma) for v in self.params])
 	def fresh(self, gamma: dict):
-		return Nominal(self.dfn, [v.fresh(gamma) for v in self.params])
+		return self if not self.params else Nominal(self.dfn, [v.fresh(gamma) for v in self.params])
 	def unify_with(self, other, enq):
 		# Note to self: This is where sub-type logic might go,
 		# perhaps in combination with a smarter .phylum() operation.

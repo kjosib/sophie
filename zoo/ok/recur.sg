@@ -1,0 +1,7 @@
+
+define:
+# Should type as (number, number) -> list[number]
+recur(a,b) = cons(a, recur(b, a+b));
+
+# Because:
+end.
