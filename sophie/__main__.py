@@ -31,6 +31,10 @@ parser.add_argument('-x', "--experimental", action="store_true", help="Run the e
 
 if len(sys.argv) > 1:
 	args = parser.parse_args()
+	if args.no_preamble:
+		from sophie.primitive import root_namespace as root
+	else:
+		from sophie.preamble import static_root as root
 	
 	from sophie.diagnostics import Report
 	from sophie.front_end import parse_file, complain
@@ -38,10 +42,6 @@ if len(sys.argv) > 1:
 	module = parse_file(args.program, report)
 	if not report.issues:
 		from sophie.resolution import resolve_words
-		if args.no_preamble:
-			from sophie.primitive import root_namespace as root
-		else:
-			from sophie.preamble import static_root as root
 		resolve_words(module, root, report)
 	if not report.issues:
 		from sophie.manifest import type_module
