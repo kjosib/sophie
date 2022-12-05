@@ -222,16 +222,17 @@ It would be nice if we could let Sophie figure out when to stop.
 Perhaps we come up with a function like this::
 
     define:
-        root(square) = iterated(newton(1), 1) where
+        root(square) = iterated(newton(1), 1) where               # Note 6
             newton(root) = (root + square/root) / 2;
-            iterated(a, b) = a if good_enough else iterated(newton(a), a) where
-                good_enough = relative_difference < 1e-14;
-                relative_difference = fabs(a-b) / (a+b) ;
+            iterated(x, y) =                                      # Note 2
+              x if good_enough else iterated(newton(x), x) where  # Note 1
+                good_enough = relative_difference < 1e-14;        # Note 3, 4
+                relative_difference = fabs(x-y) / (x+y) ;         # Note 5
              end iterated;
         end root;
 
     begin:
-        root(2);        # 1.414213562373095
+        root(2);        # 1.414213562373095    # Note 7
         sqrt(2);        # 1.4142135623730951
 
         root(17);       # 4.123105625617661
@@ -252,11 +253,28 @@ Success! But ... What just happened? There's a lot going on in this case-study.
 3. You can nest sub-functions as deeply as you like.
    The function ``good_enough`` is within ``iterated``, which itself is within ``root``.
 
-4. In the function ``good_enough``, we meet scientific notation. ``1e-14`` is one over ten trillion, so very small.
+4. In the function ``good_enough``, we meet `scientific notation`_.
+   ``1e-14`` is one over ten trillion, or a very *very* small number for most practical purposes.
 
 5. The built-in function ``fabs`` stands for "absolute-value of" and is effectively ``fabs(x) = x if x >= 0 else -x``,
    but in native code. The ``f`` in ``fabs`` comes from a historical accident, and I will probably remove it
    from a near-future version of the interpreter.
+
+6. This illustrates a design technique: The function ``iterated(x, y)`` does most of the work,
+   and is `recursive`_ with two parameters. So the outer function ``root(square)`` must
+   provide an initial set of values for those parameters.
+
+   When you write a recursive algorithm, you should spend a moment to convince yourself that it always terminates.
+   In our case, Isaac Newton has already done most of the work four hundred years ago,
+   as long as you start with a positive number.
+   It might not go so well if you feed in a negative number, but that's a topic for a bit later on.
+
+7. There are limits to the precision of numerical operations in computers.
+   The built-in ``sqrt`` can determine square-roots to slightly more precision in a single operation
+   than what we can accomplish with several separate operations. (It's also much faster.)
+
+.. _scientific notation: https://en.wikipedia.org/wiki/Scientific_notation#E_notation
+.. _recursive: https://en.wikipedia.org/wiki/Recursion_(computer_science)
 
 ..
 
