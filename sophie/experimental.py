@@ -11,16 +11,19 @@ class Experiment(Visitor):
 	"""
 	By this point, all type-definition bodies and type-expressions are well-founded.
 	"""
-	def __init__(self, module, on_error):
+	def __init__(self, module, on_error, verbose=False):
 		self.on_error = on_error
 		self.globals = module.namespace
 		try:
+			gamma = {}
 			for _ in range(3):
-				for fn in module.outer_functions:
-					self.visit_Function(fn, {})
 				for fn in module.all_functions:
-					print(">>", fn.nom.text, fn.typ.render({}, {}))
-				print("============")
+					self.visit_Function(fn, gamma)
+				for fn in module.all_functions:
+					if verbose:
+						print(">>", fn.nom.text, fn.typ.render({}, {}))
+				if verbose:
+					print("============")
 			for expr in module.main:
 				self.visit(expr, {})
 		except Incompatible as e:
@@ -28,8 +31,8 @@ class Experiment(Visitor):
 			self.on_error([stem], "This looks inconsistent: %s / %s"%(a,b))
 
 	def visit_Function(self, fn: syntax.Function, gamma):
-		for sub_fn in fn.where:
-			self.visit_Function(sub_fn, gamma)
+		# for sub_fn in fn.where:
+		# 	self.visit_Function(sub_fn, gamma)
 		# Can monomorphism leak through the shared gamma/context?
 		# I think not: Whatever the new type of the sub_fn,
 		# each call-site instantiates fresh new (polymorphic) variables.
@@ -47,7 +50,7 @@ class Experiment(Visitor):
 		arg = Product(tuple(self.visit(a, gamma) for a in arg_exprs))
 		res = TypeVariable()
 		unify([(Arrow(arg, res)), fn_type], gamma, expr)
-		return res
+		return res.pull_rabbit(gamma)
 
 	def visit_Call(self, expr: syntax.Call, gamma):
 		fn_type = self.visit(expr.fn_exp, gamma)
@@ -77,16 +80,16 @@ class Experiment(Visitor):
 		We need to look up the type (and definition) of the symbol,
 		and compose a type which represents the function of that
 		name as used in that place.
-		
-		If the name refers to a normal function,
-		then rewrite only the variables that are free in its
 		"""
 		dfn = nom.dfn
 		if isinstance(dfn, syntax.Function):
 			return dfn.typ.fresh({})
-		if isinstance(dfn, (syntax.FormalParameter, ontology.MatchProxy)):
-			return dfn.typ
-		if isinstance(dfn, (primitive.NativeFunction, primitive.NativeValue)):
+		if isinstance(dfn, (
+				syntax.FormalParameter,
+				ontology.MatchProxy,
+				primitive.NativeFunction,
+				primitive.NativeValue,
+		)):
 			return dfn.typ
 		if isinstance(dfn, syntax.SubTypeSpec):
 			variant = dfn.variant

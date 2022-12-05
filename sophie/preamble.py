@@ -85,6 +85,9 @@ def _init():
 		resolution.resolve_words(preamble, primitive.root_namespace, report)
 	if not report.issues:
 		manifest.type_module(preamble, report)
+	if not report.issues:
+		from . import experimental
+		experimental.Experiment(preamble, report, verbose=False)
 	if report.issues:
 		front_end.complain(report)
 		raise RuntimeError()

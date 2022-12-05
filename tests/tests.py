@@ -5,7 +5,7 @@ from unittest import mock
 from sophie.front_end import parse_file, parse_text, complain
 from sophie.resolution import resolve_words
 from sophie.preamble import static_root
-from sophie import syntax, simple_evaluator, manifest, diagnostics
+from sophie import syntax, simple_evaluator, manifest, diagnostics, experimental
 
 base_folder = Path(__file__).parent.parent
 example_folder = base_folder/"examples"
@@ -18,6 +18,8 @@ def _load_good_example(which) -> syntax.Module:
 		resolve_words(module, static_root, report)
 	if not report.issues:
 		manifest.type_module(module, report)
+	if not report.issues:
+		experimental.Experiment(module, report)
 	if report.issues:
 		complain(report)
 		assert False
@@ -106,8 +108,10 @@ class ZooOfFailTests(unittest.TestCase):
 				assert not report.issues
 				resolve_words(sut, static_root, report)
 				assert not report.issues
-				# When
 				manifest.type_module(sut, report)
+				assert not report.issues
+				# When
+				experimental.Experiment(sut, report.on_error("Type Checking"))
 				# Then
 				assert len(report.issues)
 
