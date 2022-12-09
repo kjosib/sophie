@@ -132,6 +132,15 @@ Let's break this down:
     If the meaning is abstract, pick an abstract name.
     The most abstract names of all are single letters near the end of the alphabet.
 
+Apples and Oranges
+...................
+
+* *Brief introduction about type-safety and type-correctness.*
+* *Something about how the types of functions are normally inferred.*
+* *Invoke the type-reporter mode and talk about the types of the functions above.*
+* *Illustrate Sophie's type-checker using the difference between text and numbers.*
+* *How you can influence type-checking.*
+
 More Fun with Functions
 -------------------------
 
@@ -178,6 +187,11 @@ Once again, let's study the bits.
     Specifically, ``newton`` can use the value of ``square`` even when ``iterate_four_times`` calls it.
     This phenomenon is called *closure*.
 
+More Apples and More Oranges
+..............................
+
+* *Take a look at type-report and ``iterate_four_times`` specifically.*
+* *Discuss the types of higher-order functions generally.*
 
 Making Decisions
 --------------------
@@ -282,6 +296,8 @@ Success! But ... What just happened? There's a lot going on in this case-study.
     But then again, normally you'll already know how to use the langauge.
     This exercise is just practice for learning the concepts.
 
+* *Add an exercise to teach the ``case when/then .. else`` syntax.*
+
 Seven Moving Parts
 -------------------
 
@@ -312,6 +328,15 @@ Fantastic Lists and Where to Find Them
 
 Talk about data structures.
 
+* The built-in ``list`` type and its two constructors ``cons`` and ``nil``.
+* The short-cut syntax ``[`` *element* ``,`` ... ``,`` *element* ``]``.
+* Making lists with recursive functions.
+    * A good introduction to type-case matching
+* Infinite lists and finite prefixes of them.
+* The built-in list-processing functions.
+
+* *Talk about generic types and how they're represented.*
+
 Turtle Graphics
 ----------------
 
@@ -320,7 +345,19 @@ Build up to all the examples in ``turtle.sg``.
 All the other bits
 ------------------
 
-that have yet to be designed...
+These sections are still on the drawing board...
+
+* Module / Package system
+    * Imports
+    * Exports
+    * Launch configurations
+    * Qualified names, navigating name-spaces, etc.
+* Partial functions
+* List-builder notation
+* Starmap-like functors
+* Input from files
+* Input from the console, and other event-driven things
+
 
 Congratulations
 -----------------
