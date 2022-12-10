@@ -1,0 +1,17 @@
+define:
+	age(years) = case
+		when years < 0.3 then "infant";
+		when years < 1.5 then "baby";
+		when years < 3 then "toddler";
+		when years < 8 then "child";
+		when years < 13 then "big kid";
+		when years < 20 then "teenager";
+		when years < 25 then "young adult";
+		when years < 65 then "grown adult";
+		when years < 80 then "senior citizen";
+		else "geriatric";
+	esac;
+
+begin:
+	map(age, [2/12, 1, 1.7, 2.5, 5, 7, 23, 47, 99, 72.5, 14, 9]);
+end.
