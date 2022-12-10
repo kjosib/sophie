@@ -177,7 +177,7 @@ and therefore get passed to a production rule's action:
 These next two sections define the scanner.
 ```
 leadingDigit    [1-9]
-moreDigits      {digit}+(_{digit})*
+moreDigits      {digit}+(_{digit}+)*
 wholeNumber     0|{leadingDigit}(_?{moreDigits})?
 mantissa        {wholeNumber}(\.{moreDigits})?
 exponent        [Ee][-+]?{wholeNumber}
