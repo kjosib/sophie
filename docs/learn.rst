@@ -201,6 +201,69 @@ Let's fix that.
 Sophie has three of what we call *conditional forms,* or ways to represent decision-points in a program.
 I'll cover the first two of these here, and the last in the section about data structures.
 
+Case Study: Age Classifier
+...........................
+Here's an example of a not-always-totally-respectful age-classifier::
+
+    define:
+
+    age(years) = case
+        when years < 0.3 then "infant";
+        when years < 1.5 then "baby";
+        when years < 3 then "toddler";
+        when years < 8 then "child";
+        when years < 13 then "big kid";
+        when years < 20 then "teenager";
+        when years < 25 then "young adult";
+        when years < 65 then "grown adult";
+        when years < 80 then "senior citizen";
+        else "geriatric";
+    esac;
+
+    begin:
+    	age(1);
+    	age(10);
+    	age(100);
+    end.
+
+The ``case`` - ``when`` - ``then`` - ``else`` - ``esac`` structure
+represents a multi-way decision.
+You might not agree with the precise thresholds or translations,
+but what's going on should be pretty clear.
+Sophie looks for the first ``when`` clause that is true in context,
+and evaluates the corresponding ``then`` clause.
+If no ``when`` clause is true, then Sophie evaluates the ``else`` clause instead.
+
+	And what about that funny word ``esac``? Well, it's ``case`` spelled backwards.
+	It makes for a nice symmetric open-and-close, sort of like parentheses.
+	We could probably live without it for this particular structure
+	because ``else`` is always last here,
+	but Sophie uses the word ``case`` in a couple other ways where clear
+	containment is less obvious without the closing bracket.
+	So this is a nod to consistency,
+	which will make for easier composition and reading.
+
+* Exercise:
+	Observe that this demo calls the ``age`` function with a few different
+	sample arguments ``1``, ``10``, and ``100``. Think about what result you expect
+	in each of these scenarios, and why that is the result you expect.
+
+* Exercise:
+	Actually run the example code.
+	See how things line up with your expectations.
+
+* Exercise:
+	Try mixing up the order in which the ``when`` ... ``then`` clauses appear.
+	What happens?
+	Can you adjust the ``when`` conditions to make them work properly regardless of the order in which they appear?
+
+* Exercise:
+	Can you think of a way for Sophie to check for overlap between the conditions?
+	If so, how does your idea change when the conditions get more complicated?
+
+Case Study: Improved Root-Finder
+...................................
+
 Let's improve our root-finding program.
 You may have noticed that it did significantly better with ``root(2)`` than with ``root(17)``.
 To get a better answer for larger numbers, one approach we could take is to iterate Newton's method more times.
@@ -220,8 +283,8 @@ We could do this::
         root(17);  # 4.123105625617805   -- Quite a bit better now,
         sqrt(17);  # 4.123105625617661   -- but still not quite perfect.
 
-        root(170000);  # 2677.54397787486   -- Ack! Horribly wrong.
-        sqrt(170000);  # 412.31056256176606  -- It should be 100x that for 17.
+        root(170_000);  # 2677.54397787486   -- Ack! Horribly wrong.
+        sqrt(170_000);  # 412.31056256176606  -- It should be 100x that for 17.
     end.
 
 ..
@@ -232,6 +295,11 @@ We could do this::
 In this example, I've added two more rounds of Newton's Method (and renamed a certain function accordingly).
 Even still, it's not enough.
 Feed a big enough number into the ``root(...)`` function and it stops too soon.
+
+	Of note, you can have underscores in numbers
+	like ``123_465.789_012`` and you can group them as you like,
+	so long as there is a digit on both sides of every underscore.
+
 It would be nice if we could let Sophie figure out when to stop.
 Perhaps we come up with a function like this::
 
@@ -296,13 +364,20 @@ Success! But ... What just happened? There's a lot going on in this case-study.
     But then again, normally you'll already know how to use the langauge.
     This exercise is just practice for learning the concepts.
 
-* *Add an exercise to teach the ``case when/then .. else`` syntax.*
+Wrapping Up
+..............
+
+We have seen how to do multi-way selection based on conditions,
+and we have seen a short-cut notation when there are only two options.
+Internally, they both translate to the same form (and it resembles the "short-cut").
+One or the other syntax will more or less represent how you think about
+any given decision point.
 
 Seven Moving Parts
 -------------------
 
 This might be a good point to pause and reflect.
-You have seen functions and if/then/else decision points.
+You have seen functions and decision points.
 In principle, that's enough to compute anything that can be computed.
 
 The Holy Trinity of structured programming is *sequence, selection, and repetition*.

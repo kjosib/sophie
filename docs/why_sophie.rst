@@ -35,8 +35,10 @@ Sophie is different on all accounts.
   latent problems that testing alone might not catch -- which can save you a whole mess of effort.
 
 .. note::
-    Ok, confession: That last point is not yet implemented. The current version can "crash".
-    But that feature is partially working in dev. So it's coming soon.
+    Ok, confession: That last point is still in progress.
+    It mostly works in an experimental mode,
+    but there are some edge cases and inefficiencies I'd like to fix
+    before the type-checker becomes standard operating procedure.
 
 Moreover, learning Sophie will affect you in different ways from learning a conventional starter-language.
 Sophie teaches you how to think about problems and design solutions effectively.
