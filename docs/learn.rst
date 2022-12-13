@@ -401,16 +401,112 @@ We've yet to tackle:
 Fantastic Lists and Where to Find Them
 --------------------------------------------
 
-Talk about data structures.
+So far, almost all the data in the tutorial has been numbers,
+with the occasional bit of text (what programmers often call "strings" for historical reasons).
+In the small, most things do boil down to letters and numbers,
+but we're often interested in treating coherent groups of information as a unit.
+In other words, we want structured data.
 
-* The built-in ``list`` type and its two constructors ``cons`` and ``nil``.
-* The short-cut syntax ``[`` *element* ``,`` ... ``,`` *element* ``]``.
-* Making lists with recursive functions.
-    * A good introduction to type-case matching
+Sophie provides two primary data structuring conventions: records and variants.
+
+Case Study: Music Archive
+..........................
+
+Suppose you're going to write some code that deals with a library of music.
+You might end up with some type definitions like this::
+
+	type:
+	year is number;
+	track is (title:string, artist:string, published:year, recorded:year);
+	album is (title:string, published:year, tracks:list[track]);
+
+Line by line:
+
+1. The ``type:`` section goes before any ``define:`` or ``begin:`` section.
+2. The word ``year`` is made a synonym for ``number``.
+3. Next, ``track`` is defined to have a title, artist, year of publication, and year when it was recorded.
+4. Finally, we define ``album`` to have its own title and year, but also a list of tracks.
+   Thus, ``track`` and ``album`` are both record definitions.
+
+Here's some sample expression of an album::
+
+	sample = album("50 Public-Domain Songs", 2022, [
+		track("After You Get What You Want, You Don't Want It", "Irving Berlin", 1925, 2021),
+		track("Some of These Days", "Shelton Brooks", 1925, 2022),
+	]);
+
+	some_year = sample.published;
+
+Notice a few things:
+
+* Record definitions behave somewhat like functions.
+  We can create an album or a track by giving arguments in the correct type and sequence.
+* You can write a list of things with commas between and surrounded by square brackets.
+  The syntax looks like ``[`` *element* ``,`` ... ``,`` *element* ``]``.
+  If it makes life easier, you can optionally include a comma after the last element.
+* An empty list is spelled ``nil``, even though we don't yet have an example here.
+
+Lists in Sophie are sequences of all the same type of object. You can have lists of numbers,
+lists of strings, lists of tracks, even lists of other lists;
+but then those other lists must themselves all have the same type of entry.
+
+So, for instance, ``[1, "apple"]`` is not a list because it contains elements of dissimilar type.
+
+You can also make lists one element at a time, using the ``cons`` constructor.
+These are two ways to write the exact same list::
+
+	begin:
+		cons(1, cons(2, cons(3, nil)));
+		[1, 2, 3];
+	end.
+
+Obviously the second way is much preferable for many cases,
+but when you're composing lists functionally it's handy to have the other.
+
+Now, you might be wondering how to get at data in lists.
+This is a good time to look at the code for the ``map`` built-in function::
+
+	map(fn, xs) = case xs:
+		nil -> nil;
+		cons -> cons(fn(xs.head), map(fn, xs.tail));
+	esac;
+
+How to explain this? On two levels: what it does, and how it works.
+
+* ``map`` takes a function (from type A to type B, let's say) and a ``list[A]``;
+  and produces from these a ``list[B]`` by applying the function to each element in succession.
+
+* ``map`` works by deconstructing each ``cons``, applying the function to the head, and constructing a new ``cons``.
+  Naturally when it finds ``nil`` it's done.
+
+For context, let's look at the definition of ``list``::
+
+	list[x] is case:
+		 cons(head:x, tail:list[x]);
+		 nil;
+	esac;
+
+So, every ``list`` is *either* a ``cons`` or an empty-list (called ``nil``.)
+We call ``cons`` and ``nil`` the two constructors of ``list``.
+We *define* ``list`` with a ``case`` construction, and we *take apart* a ``list`` with a ``case`` construction.
+
+Note that we don't *just* define ``list``. We actually define ``list[x]``.
+The ``x`` is a placeholder for some other type: the element-type for any given list.
+It works sort of like the argument to aa function: you can supply whatever ``x`` you need when you need it.
+We go on to use ``x`` in the definition of the ``cons`` constructor.
+
+Getting back to ``map``:
+The phrase ``case xs:`` says we've got a different answer depending on which constructor ``xs`` is built with.
+In the outer function body, ``xs`` is known only to be a ``list``,
+but within the ``cons ->`` branch, ``xs`` certainly has the subtype of ``cons``,
+so we can access ``xs.head`` and ``xs.tail`` only within that branch.
+
+
+
+*Talk about:*
+
 * Infinite lists and finite prefixes of them.
 * The built-in list-processing functions.
-
-* *Talk about generic types and how they're represented.*
 
 Turtle Graphics
 ----------------
