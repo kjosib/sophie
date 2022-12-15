@@ -501,17 +501,220 @@ In the outer function body, ``xs`` is known only to be a ``list``,
 but within the ``cons ->`` branch, ``xs`` certainly has the subtype of ``cons``,
 so we can access ``xs.head`` and ``xs.tail`` only within that branch.
 
+Case Study: Fibonacci Numbers
+..............................
 
+Everything you ever wanted to know about these numbers are at https://en.wikipedia.org/wiki/Fibonacci_number
+but here's the extremely short version:
 
-*Talk about:*
+	You get an interesting *and endless* sequence of numbers by starting ``1, 1,``
+	and then each next number is the sum of the two preceding ones.
+	A slightly longer prefix of this sequence goes ``1, 1, 2, 3, 5, 8, 13, 21, 35,``
+	but the sequence overall continues until you get tired of it.
 
-* Infinite lists and finite prefixes of them.
-* The built-in list-processing functions.
+	These numbers come up often in nature, music, art, and applied math,
+	so it's handy to have a convenient way to get a list of them.
+
+The usual mathematical definition of the Fibonacci sequence usually looks something
+like ``fib(n) = 1 if n < 2 else fib(n-1) + fib(n-2);`` but that has three problems:
+
+1. It defines the nth Fibonacci number, not the sequence of them all.
+2. This style of recursive definition is rather difficult to make an efficient translation of.
+   Some systems apply some clever tricks which can often help,
+   but for the most part we can expect this *general category* of expression
+   to require `exponential time <time_comp_>`_.
+   Why? It breaks the larger problem into two smaller similar problems,
+   but they are "smaller" by a only constant increment rather than a constant factor.
+3. There happens to be a direct, non-recursive expression for the nth Fibonacci number.
+   A text on discrete math will show you how to find such an expression.
+
+What I'd like to do instead is define the infinite list of Fibonacci numbers,
+and then have a convenient way to get a prefix of that list.
+Here's one way to do it::
+
+	define:
+	Fibonacci = recur(1,1) where              # Note 2
+		recur(a,b) = cons(a, recur(b, a+b));  # Note 1
+	end Fibonacci;
+
+	begin:
+	take(20, Fibonacci);                      # Note 3
+	end.
+
+Discussion:
+
+1. The Fibonacci sequence is something called a `linear recurrence relation <rec_rel_>`_.
+   It is perhaps the simplest non-trivial one: each term is the sum of the two previous terms.
+   I've captured the fact of that summation in the ``recur`` sub-function:
+   it composes an infinite list.
+
+2. The sequence specifically is that recurrence beginning with a pair of ones.
+   A common pattern in the design of functions is to apply a specific set of initial conditions
+   to a more generalized recursive core. We saw something similar in the design of the improved root finder, earlier.
+
+3. An infinite list may be easy to define, but naturally you can't use the whole thing.
+   You have to confine yourself to using a finite prefix of the infinite list.
+   One way is the function ``take``, which is built-in to the `standard preamble`_.
+   It takes a *size* (here, ``20``) and a source-list to produce a new list with at most *size* elements.
+   For reference, here is the source code for ``take``::
+
+	take(n, xs) = nil if n < 1 else case xs:
+		nil -> nil;
+		cons -> cons(xs.head, take(n-1, xs.tail));
+	esac;
+
+Exercises:
+
+1. Critique the similarities and differences between how ``Fibonacci`` and ``take`` use the ``cons`` list-constructor.
+2. The `Lucas numbers`_ are similar, but they have a different starting value. Refactor this to provide both sequences.
+3. The `Pell numbers`_ are again similar, but with a multiplication involved. How could you add support for these?
+4. (Harder) Try composing a version of ``Fibonacci`` that takes a *size* argument and produces only that size of list,
+   but without using ``take`` as a primitive.
+   Now critique the mess you just made.
+   How much harder was it to write, and later to read?
+   Now you know why not to ever do that again.
+   Instead, design and take full advantage of small composable functions.
+
+.. _time_comp: https://en.wikipedia.org/wiki/Time_complexity
+.. _rec_rel: https://en.wikipedia.org/wiki/Recurrence_relation
+.. _Lucas numbers: https://en.wikipedia.org/wiki/Lucas_number
+.. _Pell numbers: https://en.wikipedia.org/wiki/Pell_number
+
+The built-in list-processing functions
+.......................................
+
+You can read the `standard preamble`_ to see all the relevant source code,
+but here's a handy list of built-in list processing functions:
+
+* ``any`` - Given a list of yes/no values, tell if *any* of them are a yes. (For an empty list, this will be *no*.)
+* ``all`` -  Given a list of yes/no values, tell if *all* of them are a yes. (For an empty list, this will be *yes*.)
+* ``map`` -  Given a function and a source-list, produce a new list composed by applying the function to each element of the source list.
+* ``filter`` - Given a predicate (i.e. a function returning yes or no) and a source-list, produce a new list composed of every source-list element for which the predicate is true of that element.
+* ``reduce`` - Described in detail below.
+* ``cat`` -  Given two lists, produce a new list containing each element of the first list, and then each element of the second list.
+* ``flat`` - Given a list-of-lists, produce a single-level list consisting of all the elements of each sub-list in succession.
+* ``take`` - Given a number and a source-list, produce a new list containing at most the first *number* elements of *source-list*.
+* ``skip`` - Given a number and a source-list, produce only that portion of *source-list* after the first *number* elements are skipped over.
+
+A word about ``reduce``:
+	The idea here is that you have a list and you want to crush it down into a single value.
+	To do this, you have a function (of two parameters) and some *initial* value.
+	This function, applied to the *initial* value and the head of the list,
+	produces a new *intermediate* value. We then apply your function to the *intermediate* value and the *next* element of the list,
+	over and over until we run out of list-elements. At that point, whatever was the last value to be returned from your function
+	is the result of ``reduce``.
+
+	Here's an example::
+
+		sum(xs) = reduce(add, 0, xs) where add(a,b) = a+b; end sum;
+
+	Many authors refer to this behavior as a *fold*, evoking the image of literally folding a strip of paper over on itself many times.
+	Some authors might specifically call it a *left-fold* due to its dynamic of processing the elements in the list from first to last.
+	There are perhaps around a dozen commonly-encountered variants of approximately this function.
+	Some expect a seed value; some take the seed from the head of the list. Some work in reverse.
+	Some try to form a balanced tree of sub-list sub-folds. Some might even work in parallel across different CPU cores.
+	Some reverse the arguments to the provided function. Some produce only the final result;
+	others produce the list of intermediate values.
+
+	If there's a point, it's this: There are many interesting patterns of iteration.
+	Some of those patterns may well have conventional names, but they're all just variations on a simple theme.
+	At the moment, Sophie is not trying to *catch them all.*
+	It's easy enough to just catch the ones you need when you need them.
+	Eventually, Sophie might add a library of these so-called *morphisms*.
+
 
 Turtle Graphics
 ----------------
 
-Build up to all the examples in ``turtle.sg``.
+Sophie has Turtle-graphics!
+
+When I was a little kid, one fun thing to do in the school computer lab was to write short
+Logo programs to make intricate designs with its distinctive turtle-graphics feature.
+This was secretly also a nice introduction to several important aspects of the art of computer programming,
+but we kids were all having way too much fun to notice. (Perhaps we might have learned more with more structure?)
+
+In this early revision of **Sophie**, turtle graphics are available with no special effort.
+
+Case Study: Simple Designs
+............................
+
+You can display drawings by composing ``drawing`` objects containing a list of ``turtle_step`` items.
+Here's an example turtle-program that generates a couple designs::
+
+    define:
+        square(size) = repeat(4, [forward(size), right(90)]);
+
+        rosette = repeat(12, petal) where
+            petal = flat[square(150), [right(15)], square(75), [right(15)]];
+        end rosette;
+
+        repeat(n, portion) = nil if n < 1 else cat(portion, repeat(n-1, portion));
+
+    begin:
+        "Square:"; drawing(square(200));
+        "Rosette:"; drawing(rosette);
+    end.
+
+At this point, you can begin to make your own designs. Try it out; it's fun!
+
+The plan is to add fun and interesting designs to `this program <https://github.com/kjosib/sophie/blob/main/examples/turtle.sg>`_.
+Useful components (like ``repeat``, above) might move into either the preamble or a standard library module (once those get invented).
+
+All the turtle-y things
+.........................
+
+The system pre-defines two data types for turtle graphics::
+
+	drawing is (steps: list[turtle_step]);
+
+	turtle_step is case
+		forward(distance:number);
+		backward(distance:number);
+		right(angle:number);
+		left(angle:number);
+		goto(x:number, y:number);
+		setheading(angle:number);
+		home;
+		pendown;
+		penup;
+		color(color:string);
+		pensize(width:number);
+		showturtle;
+		hideturtle;
+	esac;
+
+Currently that's done in the standard preamble. One day, it might become an import. Or not. We'll see.
+
+I'm not *currently* supporting filled areas, predefined shapes, multiple turtles, or other sophisticated extras.
+I might do some of those eventually, if there's demand.
+
+Case Study: Color Spiral
+...........................
+
+.. image:: color_spiral.png
+
+That's a pretty picture. Let's see the code for it:
+
+.. literalinclude:: color_spiral.sg
+
+At this point, interpreting the code is mostly left as an exercise for the reader.
+Here are a couple of comments:
+
+* This puts most of what you've learned to use.
+* The color specifications can be well-known color names or RGB values expressed in hexadecimal,
+  and prefixed by the hash mark ``#``. That's a consequence of the underlying turtle-graphics library.
+
+Exercises:
+
+* What are the *types* of the functions here?
+* What does each definition achieve toward the pretty picture?
+* The lack of commentary is not (necessarily) an endorsement.
+  What comment would you make for each function,
+  and who is your target audience for that comment?
+* Invent a design of your own, and make it happen.
+* Poke around in `turtle.sg <https://github.com/kjosib/sophie/blob/main/examples/turtle.sg>`_.
+  What are your favorite designs, and why?
+* Add a design and send it in!
 
 All the other bits
 ------------------
@@ -539,3 +742,4 @@ You can reach the author at kjosib@gmail.com.
 .. _pathname: https://www.google.com/search?q=define+pathname
 .. _command-prompt: https://www.google.com/search?q=define+command+prompt
 .. _current-directory: https://www.google.com/search?q=define+current%20directory
+.. _standard preamble: https://github.com/kjosib/sophie/blob/main/sophie/preamble.py
