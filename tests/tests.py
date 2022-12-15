@@ -100,7 +100,7 @@ class ZooOfFailTests(unittest.TestCase):
 				assert len(report.issues)
 		
 	def test_02_does_not_type(self):
-		for fn in ("num_plus_string", "wrong_arity"):
+		for fn in ("num_plus_string", "wrong_arity", "mismatched-case-when"):
 			with self.subTest(fn):
 				# Given
 				report = diagnostics.Report()
