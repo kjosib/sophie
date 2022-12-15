@@ -209,6 +209,8 @@ class Cond(ValExpr):
 	def __init__(self, then_part: ValExpr, _kw, if_part: ValExpr, else_part: ValExpr):
 		self._kw = _kw
 		self.then_part, self.if_part, self.else_part = then_part, if_part, else_part
+	def head(self) -> slice:
+		return self._kw
 
 def CaseWhen(when_parts: list, else_part: ValExpr):
 	for _kw, test, then in reversed(when_parts):
