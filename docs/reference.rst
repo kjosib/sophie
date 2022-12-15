@@ -65,7 +65,7 @@ Predefined functions include:
 * ``reduce(fn, a, xs)``: Produce a single element by applying ``fn`` repeatedly to rolling pairs of arguments:
   first ``a`` and the head of ``xs``, then that result with the next entry in ``xs``, and so forth.
   If ``xs`` is empty, it returns ``a`` without ever calling ``fn``.
-* expand
+* ``expand`` is not currently a thing. When it becomes a thing, this page will update.
 * ``cat(xs, ys)``: Return a list composed of the elements of ``xs`` followed by those of ``ys``.
 * ``flat(xss)``: Given a list of lists, return a single list composed of the elements of each input list in sequence.
 * ``sum(xs)``: add all the numbers in the given list and return their sum, or a if the list is empty.
@@ -79,56 +79,4 @@ Predefined functions include:
 
 If you'd like to see how that's all been done,
 you can find the standard preamble `here <https://github.com/kjosib/sophie/blob/main/sophie/preamble.py>`_.
-
-Turtle Graphics
-----------------
-
-Sophie has Turtle-graphics!
-
-When I was a little kid, one fun thing to do in the school computer lab was to write short
-Logo programs to make intricate designs with its distinctive turtle-graphics feature.
-This was secretly also a nice introduction to several important aspects of the art of computer programming,
-but we kids were all having way too much fun to notice. (Perhaps we might have learned more with more structure?)
-
-In this early revision of **Sophie**, turtle graphics are available with no special effort.
-The system pre-defines two data types for turtle graphics::
-
-	drawing is (steps: list[turtle_step]);
-
-	turtle_step is case
-		forward(distance:number);
-		backward(distance:number);
-		right(angle:number);
-		left(angle:number);
-		goto(x:number, y:number);
-		setheading(angle:number);
-		home;
-		pendown;
-		penup;
-		color(color:string);
-		pensize(width:string);
-		showturtle;
-		hideturtle;
-	esac;
-
-You can display drawings by composing ``drawing`` objects containing a list of ``turtle_step`` items.
-Here's an example turtle-program that generates a couple designs::
-
-    define:
-        square(size) = repeat(4, [forward(size), right(90)]);
-
-        rosette = repeat(12, petal) where
-            petal = flat[square(150), [right(15)], square(75), [right(15)]];
-        end rosette;
-
-        repeat(n, portion) = nil if n < 1 else cat(portion, repeat(n-1, portion));
-
-    begin:
-        "Square:"; drawing(square(200));
-        "Rosette:"; drawing(rosette);
-    end.
-
-The plan is to add fun and interesting designs to `this program <https://github.com/kjosib/sophie/blob/main/examples/turtle.sg>`_.
-Useful components (like ``repeat``, above) might move into either the preamble or a standard library module (once those get invented).
-
 

@@ -116,6 +116,18 @@ that's fine. You'd just need to define a way to interpret those *value* componen
 and plug that into the import mechanism, or replace the importer altogether.
 That's not something a typical end-user would do, but it could solve some enterprisey thing.
 
+Input and the Process Abstraction
+----------------------------------
+One view of a process is a function which must wait for an input event before computing anything.
+Specifically, it computes its own next state (i.e. subsequent behavior-function) and any outputs.
+
+Independent of any concurrency model, I can explore what types might be involved using a simplified model.
+So, let's consider what would be involved in a simple text-based game.
+Quite likely the simplest would be "guess-the-number" style game in which the human player picks a number
+and the computer makes "guesses" following a binary-search strategy.
+
+
+
 Dimensions and Units of Measure
 --------------------------------
 
@@ -243,11 +255,9 @@ It ought to sort and group this information to present a nicer excerpt.
 Also, some ansi color would be nice.
 (Incidentally, what if input source contains terminal control codes?)
 
-Concurrency and Process Abstraction
+Concurrency
 -------------------------------------
 
-One view of a process is a function which must wait for an input event before computing anything.
-Specifically, it computes its own next state (i.e. subsequent behavior-function) and any outputs.
 This suggests a signature possibly including channels or streams or some such.
 Call them what you will; they're ultimately an asynchronous data type.
 
