@@ -567,7 +567,7 @@ Exercises:
 
 1. Critique the similarities and differences between how ``Fibonacci`` and ``take`` use the ``cons`` list-constructor.
 2. Explain  why the ``take`` function *always* finishes. Don't just test it.
-   Prove it. *(Hint:* `mathematical induction`_ *is your friend.)*
+   Prove it. *(Hint:* mathematical_ induction_ *is your friend.)*
 3. The `Lucas numbers`_ are similar, but they have a different starting value. Refactor this to provide both sequences.
 4. The `Pell numbers`_ are again similar, but with a multiplication involved. How could you add support for these?
 5. (Harder) Try composing a version of ``Fibonacci`` that takes a *size* argument and produces only that size of list,
@@ -579,7 +579,8 @@ Exercises:
 
 .. _time_comp: https://en.wikipedia.org/wiki/Time_complexity
 .. _rec_rel: https://en.wikipedia.org/wiki/Recurrence_relation
-.. _mathematical induction: https://www.mathsisfun.com/algebra/mathematical-induction.html
+.. _mathematical: https://www.mathsisfun.com/algebra/mathematical-induction.html
+.. _induction: https://en.wikipedia.org/wiki/Mathematical_induction
 .. _Lucas numbers: https://en.wikipedia.org/wiki/Lucas_number
 .. _Pell numbers: https://en.wikipedia.org/wiki/Pell_number
 
