@@ -37,6 +37,14 @@ Hurdles:
 * Error reports currently don't track which file is relevant. That mechanism would completely change.
 * Type-checking should take place module-by-module, so that's another update.
 
+One point of possible aggravation: Right now match-patterns are just constructor names,
+but they necessarily must form cohorts according to the variant-in-common.
+If that variant is in an imported module, but the constructors are not brought into the local namespace,
+then today the patterns would need to mention the same module over and over again, which is bananas.
+It should be possible to just once hint at where to find a variant's definition,
+and then not mention it again.
+
+
 Stage Two
 ...........
 Almost from day one, some sort of shortcut for the qualified-names will be desired.

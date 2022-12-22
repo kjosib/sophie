@@ -57,8 +57,8 @@ class ExperimentTests(unittest.TestCase):
 	def test_Newton(self):
 		module = self.load(example_folder, "Newton")
 		assert not self.report.issues, complain(self.report)
-		assert_convergent(module.namespace['iterate_four_times'])
-		root = module.namespace['root']
+		assert_convergent(module.globals['iterate_four_times'])
+		root = module.globals['root']
 		assert_convergent(root)
 		assert isinstance(root.typ, algebra.Arrow)
 		arg = root.typ.arg
@@ -71,7 +71,7 @@ class ExperimentTests(unittest.TestCase):
 	def test_bipartite(self):
 		module = self.load(zoo_ok, "bipartite_list")
 		assert not self.report.issues, complain(self.report)
-		cmap = module.namespace['cmap']
+		cmap = module.globals['cmap']
 		assert_convergent(cmap)
 		assert isinstance(cmap.typ, algebra.Arrow)
 		res = cmap.typ.res
@@ -83,7 +83,7 @@ class ExperimentTests(unittest.TestCase):
 		""" (number, number) -> list[<a>] is the wrong type for a recurrence relation. """
 		module = self.load(zoo_ok, "recur")
 		assert not self.report.issues, complain(self.report)
-		assert_convergent(module.namespace['recur'])
+		assert_convergent(module.globals['recur'])
 
 if __name__ == '__main__':
 	unittest.main()

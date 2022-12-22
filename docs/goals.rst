@@ -15,8 +15,10 @@ The design goals, *in priority order,* are:
 4. Be pragmatic. Trade cheap computer power for a nicer time.
 5. Call-by-need pure-functional for general computation.
 6. Turtle graphics.
-7. Strong type-inference so run-time troubles are few and far between.
-8. Other nice things to have.
+7. A modular import system, probably with explicit exports.
+8. Strong type-inference so run-time troubles are few and far between.
+9. Event-driven concurrency over a sensible (maybe pluggable?) process-model.
+10. Other nice things to have.
 
 When all is said and done, I'd like Sophie to be a viable alternative for learning (or deepening one's grasp of) comp-sci.
 The call-by-need pure-functional design gives Sophie a very different flavor from your average introductory language,
@@ -25,12 +27,12 @@ but should produce excellent habits.
 Things on Deck
 ----------------
 
-Type inference is top-of-mind. The next release will focus on that.
+The next increment will probably focus on one of:
 
-After that, the next release will probably do one of:
+* Preliminary support for shared modules: an export/import mechanism.
+* Bringing type inference out of experimental-mode.
 
 * Better error messages. (I have an idea related to sentential forms.)
-* Preliminary support for shared modules: an export/import mechanism.
 * Approximate solution to the halting problem, thus to reject (some useful subset of) programs that would hang.
 
 Other Nice Things to Have
@@ -44,9 +46,11 @@ In no particular order:
 * An interactive (REPL) mode for Sophie.
 * Making it easier to get started.
 * Integration with some popular IDEs. (VS-code might fit this bill.)
+* Some way to pre-declare a vocabulary of parameter names along with intended types.
 * Concurrency: Declarative and Transparent. (Probably a functional process abstraction seasoned with CSP.)
 * A nice set of (presumably concurrent) I/O facilities.
 * Some pattern for resilience -- likely *Tree-of-Supervisors* .
+* More polymorphism.
 * A proper GUI toolkit. This will have to wait for several other features, though.
 * Native Code, or perhaps running on JVM or CLR. (Transpiling is a viable option.)
 * Distributed computing -- but respecting Byzantine Generals and propagation delay.

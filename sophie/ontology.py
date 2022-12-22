@@ -1,10 +1,8 @@
-from typing import Optional
 from boozetools.support.symtab import NameSpace
 
 class Nom:
 	""" Representing the occurrence of a name anywhere. """
 	_slice: slice  # Empty-slice means pre-defined term.
-	dfn:"Symbol"   # Should happen during WordDefiner pass.
 	def __init__(self, text, a_slice): self.text, self._slice = text, a_slice or slice(0,0)
 	def head(self) -> slice: return self._slice
 	def __repr__(self): return "<Name %r>" % self.text
@@ -45,9 +43,12 @@ class Expr:
 		""" Indicate which bit of code this node represents. """
 		raise NotImplementedError(type(self))
 
+class Reference(Expr):
+	nom:Nom
+	dfn:Symbol   # Should happen during WordResolver pass.
+
 class TypeExpr(Expr):
 	pass
-
 
 class ValExpr(Expr):
 	pass
