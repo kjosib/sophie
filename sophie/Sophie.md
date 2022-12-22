@@ -4,12 +4,6 @@ Programming language inspired by Pascal and way too many other things.
 Named for another French mathematician: Sophie Germain.
 She was, among other things, a number theorist.
 
-There are three main goals:
-
-1. Have fun.
-2. Use a call-by-need evaluation strategy.
-3. Do something cool with data type declarations.
-
 **This document is no mere reference.**
 It is the very source-file from which Sophie's parser and scanner are generated.
 It is up to date by definition.
@@ -36,6 +30,13 @@ define_section  -> DEFINE ':' semicolon_list(function)         | :empty
 main_section    -> BEGIN ':' semicolon_list(expr)              | :empty
 
 one_import -> short_string AS name
+```
+
+Since I'd like Sophie to support a unit/module system,
+she needs a way to navigate namespaces. Here is that way:
+```
+reference -> name     :PlainReference
+  | name '@' name     :QualifiedReference
 ```
 
 **The grammar of type declarations**
@@ -66,11 +67,10 @@ field -> name ':' simple_type   :FormalParameter
 
 simple_type -> named_type | arrow_type
 
-named_type     -> name optional(type_argument)                   :TypeCall
-arrow_type     -> .type_argument .'->' .simple_type              :ArrowSpec
+named_type     -> reference optional(type_argument)              :TypeCall
+arrow_type     -> '(' .comma_list(simple_type) ')' .'->' .simple_type              :ArrowSpec
 
 type_argument  -> '[' comma_list(simple_type) ']'
-
 ```
 
 **The general structure of a function:**
@@ -86,12 +86,12 @@ and the system will deal with it sensibly.
 ```
 parameter_list  -> '(' comma_list(parameter) ')'
 parameter       ->   name annotation   :FormalParameter
-annotation ->  :nothing |  ':' param_type
+annotation ->  :nothing   |  ':' param_type
 
-param_type -> name                  :TypeCall
+param_type -> reference             :TypeCall
+| reference param_type_arg          :TypeCall
 | .'?'                              :anonymous_type_variable
 | '?' name                          :TypeParameter
-| name param_type_arg               :TypeCall
 | .param_type_arg .'->' .param_type :ArrowSpec
 
 param_type_arg = '[' comma_list(param_type) ']'
@@ -123,7 +123,7 @@ expr -> integer | real | short_string | list_expr | case_expr | match_expr
 | .expr .OR .expr :LogicalOr
 | .NOT .expr  :LogicalNot
 
-| name :Lookup
+| reference :Lookup
 | expr '(' comma_list(expr) ')' :Call
 | expr list_expr :call_upon_list
 
@@ -133,11 +133,13 @@ list_body -> comma_list(expr) :ExplicitList
 case_expr -> CASE semicolon_list(when_clause) else_clause ESAC :CaseWhen
 when_clause -> .WHEN .expr THEN .expr
 else_clause -> ELSE expr ';'
-
+```
+For a while, that was all. But then Sophie got pattern-matching based on variant-types:
+```
 match_expr -> CASE .subject ':' .semicolon_list(alternative) .optional(else_clause) ESAC  :match_expr
 subject -> name | expr AS name :SubjectWithExpr
 alternative -> pattern '->' expr optional(where_clause) :Alternative
-pattern -> name
+pattern -> reference
 ```
 Experience may later suggest expanding the `pattern` grammar, but this will do for now.
 

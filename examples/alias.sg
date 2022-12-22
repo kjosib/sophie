@@ -5,8 +5,8 @@
 
 type:
 
-	predicate[A] is [A] -> flag;
-	comparator[A] is [A,A] -> flag;
+	predicate[A] is (A) -> flag;
+	comparator[A] is (A,A) -> flag;
 	album_tree is tree[album];               # You can use things before you define them.
 	tree[X] is case:                         # Just define them eventually, ok?
 	    leaf(item:X);

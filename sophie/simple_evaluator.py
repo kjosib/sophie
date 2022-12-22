@@ -57,6 +57,9 @@ def _eval_literal(expr:syntax.Literal, dynamic_env:NameSpace):
 	return expr.value
 
 def _eval_lookup(expr:syntax.Lookup, dynamic_env:NameSpace):
+	return evaluate(expr.ref, dynamic_env)
+
+def _eval_plain_reference(expr:syntax.PlainReference, dynamic_env:NameSpace):
 	return dynamic_env[expr.nom.text]
 
 def _eval_bin_exp(expr:syntax.BinExp, dynamic_env:NameSpace):
@@ -106,7 +109,9 @@ def _eval_match_expr(expr:syntax.MatchExpr, dynamic_env:NameSpace):
 			raise RuntimeError("Confused by tag %r; this will not be possible after type-checking works."%tag)
 	return delay(dynamic_env, branch)
 
-def evaluate(expr:syntax.ValExpr, dynamic_env:NameSpace) -> LAZY_VALUE:
+EVALUABLE = Union[syntax.ValExpr, syntax.Reference]
+
+def evaluate(expr:EVALUABLE, dynamic_env:NameSpace) -> LAZY_VALUE:
 	try: fn = EVALUATE[type(expr)]
 	except KeyError: raise NotImplementedError(type(expr), expr)
 	else: return fn(expr, dynamic_env)
@@ -114,7 +119,7 @@ def evaluate(expr:syntax.ValExpr, dynamic_env:NameSpace) -> LAZY_VALUE:
 def delay(dynamic_env:NameSpace, item) -> LAZY_VALUE:
 	# For two kinds of expression, there is no profit to delay:
 	if isinstance(item, syntax.Literal): return item.value
-	if isinstance(item, syntax.Lookup): return dynamic_env[item.nom.text]
+	if isinstance(item, syntax.Lookup): return _eval_lookup(item, dynamic_env)
 	# In less trivial cases, make a thunk and pass that instead.
 	if isinstance(item, syntax.ValExpr): return Thunk(dynamic_env, item)
 	# Some internals already have the data and it's no use making a (new) thunk.
@@ -183,7 +188,7 @@ class Constructor(Procedure):
 
 def run_module(module: syntax.Module):
 	module_env = dynamic_root.new_child(module)
-	_prepare_global_scope(module_env, module.namespace.local.items())
+	_prepare_global_scope(module_env, module.globals.local.items())
 	result = None  # Pacify the IDE
 	for expr in module.main:
 		result = evaluate(expr, module_env)

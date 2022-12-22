@@ -6,7 +6,7 @@ Class-level type annotations make peace with pycharm wherever later passes add f
 """
 from typing import Optional, Any, Sequence, NamedTuple, Union
 from boozetools.parsing.interface import SemanticError
-from .ontology import Nom, Symbol, NS, TypeExpr, ValExpr, MatchProxy
+from .ontology import Nom, Symbol, NS, Reference, TypeExpr, ValExpr, MatchProxy
 from . import algebra
 
 class TypeParameter(Symbol):
@@ -15,6 +15,22 @@ class TypeParameter(Symbol):
 	def __init__(self, nom:Nom):
 		self.nom = nom
 		self.typ = algebra.TypeVariable()
+
+class PlainReference(Reference):
+	nom: Nom
+	def __init__(self, nom:Nom):
+		self.nom = nom
+	def head(self) -> slice:
+		return self.nom.head()
+
+class QualifiedReference(Reference):
+	nom: Nom
+	space: Nom
+	def __init__(self, nom:Nom, space:Nom):
+		self.nom = nom
+		self.space = space
+	def head(self) -> slice:
+		return slice(self.nom.head().start, self.space.head().stop)
 
 SIMPLE_TYPE = Union["TypeCall", "ArrowSpec", "ImplicitType"]
 
@@ -31,13 +47,11 @@ class ArrowSpec(TypeExpr):
 		return self._head
 	
 class TypeCall(TypeExpr):
-	def __init__(self, nom: Nom, arguments: Sequence[SIMPLE_TYPE] = ()):
-		self.nom, self.arguments = nom, arguments or ()
-	def __repr__(self):
-		p = "[%s]"%",".join(map(str, self.arguments)) if self.arguments else ""
-		return "{tc:%s%s}"%(self.nom.text, p)
+	def __init__(self, ref: Reference, arguments: Sequence[SIMPLE_TYPE] = ()):
+		assert isinstance(ref, Reference)
+		self.ref, self.arguments = ref, arguments or ()
 	
-	def head(self) -> slice: return self.nom.head()
+	def head(self) -> slice: return self.ref.head()
 
 class ImplicitType(TypeExpr):
 	""" Stand-in as the relevant type-expression for when the syntax doesn't bother. """
@@ -150,10 +164,9 @@ class Literal(ValExpr):
 		return self._slice
 
 class Lookup(ValExpr):
-	dfn:Symbol = None  # Fill during WordResolver pass
-	def __init__(self, nom: Nom): self.nom = nom
-	def head(self) -> slice: return self.nom.head()
-	def __repr__(self): return "{lookup:%s:%s}" % (self.nom.text, type(self.dfn).__name__)
+	ref:Reference
+	def __init__(self, ref: Reference): self.ref = ref
+	def head(self) -> slice: return self.ref.head()
 
 class FieldReference(ValExpr):
 	def __init__(self, lhs: ValExpr, field_name: Nom): self.lhs, self.field_name = lhs, field_name
@@ -240,18 +253,18 @@ class SubjectWithExpr(NamedTuple):
 	nom: Nom
 
 class Alternative(ValExpr):
-	pattern: Nom
+	pattern: Reference
 	sub_expr: ValExpr
 	where: Sequence["Function"]
 	
 	namespace: NS  # WordDefiner fills
 	proxy: MatchProxy  # WordDefiner fills
 	
-	def __init__(self, pattern:Nom, sub_expr:ValExpr, where:WhereClause):
+	def __init__(self, pattern:Reference, sub_expr:ValExpr, where:WhereClause):
 		self.pattern = pattern
 		self.sub_expr = sub_expr
 		if where:
-			_bookend(pattern, where.end_name)
+			_bookend(pattern.nom, where.end_name)
 			self.where = where.sub_fns
 		else:
 			self.where = ()
@@ -260,6 +273,7 @@ class Alternative(ValExpr):
 	
 class MatchExpr(ValExpr):
 	subject: Nom
+	subject_dfn:Symbol  # WordDefiner must fill
 	alternatives: list[Alternative]
 	otherwise: Optional[ValExpr]
 	
@@ -287,7 +301,7 @@ def match_expr(subject, alternatives: list[Alternative], otherwise: Optional[Val
 		return WithExpr(subject.expr, subject.nom, MatchExpr(subject.nom, alternatives, otherwise))
 
 class Module:
-	namespace: NS  # WordDefiner pass creates this.
+	globals: NS  # WordDefiner pass creates this.
 	constructors: dict[str:]
 	all_match_expressions: list[MatchExpr]  # WordResolver pass creates this.
 	all_functions: list[Function]

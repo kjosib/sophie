@@ -38,7 +38,7 @@ class ExampleSmokeTests(unittest.TestCase):
 	
 	def test_alias(self):
 		module = _load_good_example("alias")
-		self.assertIsInstance(module.namespace["album_tree"].body, syntax.TypeCall)
+		self.assertIsInstance(module.globals["album_tree"].body, syntax.TypeCall)
 		self.assertEqual(7, simple_evaluator.run_module(module))
 	
 	def test_turtle_compiles(self):

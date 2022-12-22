@@ -92,8 +92,8 @@ def _init():
 		front_end.complain(report)
 		raise RuntimeError()
 	else:
-		primitive.LIST = preamble.namespace['list'].typ
-		return preamble.namespace
+		primitive.LIST = preamble.globals['list'].typ
+		return preamble.globals
 
 static_root = _init()
 

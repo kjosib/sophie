@@ -76,13 +76,13 @@ class WordDefiner(WordPass):
 	
 	def __init__(self, module:syntax.Module, outer:NS, on_error):
 		self.redef = []
-		self.globals = module.namespace = outer.new_child(module)
+		self.globals = module.globals = outer.new_child(module)
 		self.all_match_expressions = module.all_match_expressions = []
 		self.all_functions = module.all_functions = []
 		for td in module.types:
 			self.visit(td)
 		for fn in module.outer_functions:  # Can't iterate all-functions yet; must build it first.
-			self.visit(fn, module.namespace)
+			self.visit(fn, module.globals)
 		if self.redef:
 			on_error(self.redef, "I see the same name defined earlier in the same scope:")
 
@@ -162,14 +162,14 @@ class WordResolver(WordPass):
 	"""
 	def __init__(self, module:syntax.Module, on_error):
 		self.undef:list[syntax.Nom] = []
-		self.non_value:list[syntax.Nom] = []
-		self.globals = module.namespace
+		self.non_value:list[syntax.Reference] = []
+		self.module = module
 		for td in module.types:
 			self.visit(td)
 		for fn in module.all_functions:
 			self.visit(fn)
 		for expr in module.main:
-			self.visit(expr, module.namespace)
+			self.visit(expr, module.globals)
 		if self.undef:
 			on_error(self.undef, "I do not see an available definition for:")
 		if self.non_value:
@@ -185,40 +185,47 @@ class WordResolver(WordPass):
 	
 	def visit_VariantSpec(self, vs:syntax.VariantSpec, env:NS):
 		for st in vs.subtypes:
-			self.visit(st.nom, vs.namespace)
 			if st.body is not None:
 				self.visit(st.body, env)
 			pass
 	
 	def visit_RecordSpec(self, rs:syntax.RecordSpec, env:NS):
 		for f in rs.fields:
-			self.visit(f.nom, rs.namespace)
 			self.visit(f.type_expr, env)
-			
-	def visit_Nom(self, nom:syntax.Nom, env:NS):
+	
+	def _lookup(self, nom:syntax.Nom, env:NS):
 		try:
-			nom.dfn = env[nom.text]
-			return nom.dfn
+			return env[nom.text]
 		except NoSuchSymbol:
 			self.undef.append(nom)
+
+	def visit_PlainReference(self, ref:syntax.PlainReference, env:NS):
+		# This kind of reference searches the local-scoped name-space
+		ref.dfn = self._lookup(ref.nom, env)
+	
+	def visit_QualifiedReference(self, ref:syntax.QualifiedReference, env:NS):
+		# Search among imports.
+		# Not yet real; just give a message and try not to crash.
+		self.undef.append(ref.space)
+		ref.dfn = None
 	
 	def visit_TypeCall(self, tc:syntax.TypeCall, env:NS):
-		self.visit(tc.nom, env)
+		self.visit(tc.ref, env)
 		for p in tc.arguments:
 			self.visit(p, env)
 
 	def visit_Function(self, fn:syntax.Function):
 		for param in fn.params:
 			if param.type_expr is not None:
-				self.visit(param.type_expr, self.globals)
+				self.visit(param.type_expr, self.module.globals)
 		if fn.result_type_expr is not None:
-			self.visit(fn.result_type_expr, self.globals)
+			self.visit(fn.result_type_expr, self.module.globals)
 		self.visit(fn.expr, fn.namespace)
 
 	def visit_MatchExpr(self, mx:syntax.MatchExpr, env:NS):
-		self.visit(mx.subject, env)
+		mx.subject_dfn = self._lookup(mx.subject, env)
 		for alt in mx.alternatives:
-			self.visit(alt.pattern, self.globals)
+			self.visit(alt.pattern, self.module.globals)
 			inner = alt.namespace
 			self.visit(alt.sub_expr, inner)
 			for sub_ex in alt.where:
@@ -227,9 +234,10 @@ class WordResolver(WordPass):
 			self.visit(mx.otherwise, env)
 			
 	def visit_Lookup(self, expr: syntax.Lookup, env: NS):
-		dfn = self.visit(expr.nom, env)
+		self.visit(expr.ref, env)
+		dfn = expr.ref.dfn
 		if dfn is not None and not dfn.has_value_domain():
-			self.non_value.append(expr.nom)
+			self.non_value.append(expr.ref)
 
 def build_match_dispatch_tables(module: syntax.Module, on_error):
 	""" The simple evaluator uses these. """
@@ -237,7 +245,7 @@ def build_match_dispatch_tables(module: syntax.Module, on_error):
 		mx.dispatch = {}
 		seen = {}
 		for alt in mx.alternatives:
-			key = alt.pattern.key()
+			key = alt.pattern.nom.key()
 			if key in seen:
 				on_error([seen[key], alt.pattern], "Duplication here...")
 			else:
@@ -292,7 +300,7 @@ class AliasChecker(Visitor):
 			self.visit(param.type_expr)
 	
 	def visit_TypeCall(self, expr:syntax.TypeCall):
-		referent = expr.nom.dfn
+		referent = expr.ref.dfn
 		arg_arity = len(expr.arguments)
 		if isinstance(referent, syntax.TypeDecl):
 			param_arity = len(referent.parameters)
@@ -334,7 +342,7 @@ class AliasChecker(Visitor):
 		self.visit(fn.expr)
 
 	def visit_MatchExpr(self, mx: syntax.MatchExpr):
-		self.graph[mx].append(mx.subject.dfn)
+		self.graph[mx].append(mx.subject_dfn)
 	
 	def visit_Cond(self, expr: syntax.Cond):
 		self.graph[expr].append(expr.if_part)
@@ -358,12 +366,12 @@ class AliasChecker(Visitor):
 		self.visit(expr.arg)
  	
 	def visit_Lookup(self, lu: syntax.Lookup):
-		dfn = lu.nom.dfn
+		dfn = lu.ref.dfn
 		# Allow functions, parameters, and proper constructors.
 		if dfn.has_value_domain():
 			self.graph[lu].append(dfn)
 		else:
-			self.non_values.append(lu.nom)
+			self.non_values.append(lu.ref)
 	
 	def visit_Literal(self, l:syntax.Literal):
 		pass

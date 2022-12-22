@@ -36,7 +36,7 @@ class TypeVariable(Term):
 		while self in gamma: self = gamma[self]
 		if isinstance(self, TypeVariable):
 			if self not in delta:
-				delta[self] = "<%s>"%_name_variable(len(delta)+1)
+				delta[self] = "?%s"%_name_variable(len(delta)+1)
 			return delta[self]
 		else:
 			return self.render(gamma, delta)

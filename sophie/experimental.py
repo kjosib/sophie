@@ -13,7 +13,6 @@ class Experiment(Visitor):
 	"""
 	def __init__(self, module, on_error, verbose=False):
 		self.on_error = on_error
-		self.globals = module.namespace
 		try:
 			gamma = {}
 			for _ in range(3):
@@ -39,8 +38,8 @@ class Experiment(Visitor):
 		res = self.visit(fn.expr, gamma)
 		if fn.params:
 			arg = Product(tuple(p.typ for p in fn.params))
-			fn.typ = Arrow(arg, res).pull_rabbit(gamma)
-			for p,t in zip(fn.params, fn.typ.arg.fields):
+			fn.typ = arrow = Arrow(arg, res).pull_rabbit(gamma)
+			for p,t in zip(fn.params, arrow.arg.fields):
 				p.typ = t
 		else:
 			fn.typ = res.pull_rabbit(gamma)
@@ -72,16 +71,15 @@ class Experiment(Visitor):
 		raise TypeError(expr.value)
 
 	def visit_Lookup(self, expr: syntax.Lookup, gamma):
-		return self._value_type(expr.nom)
+		return self._value_type(expr.ref.dfn)
 	
-	def _value_type(self, nom:ontology.Nom):
+	def _value_type(self, dfn:ontology.Symbol):
 		"""
 		This function is where let-polymorphism comes from.
-		We need to look up the type (and definition) of the symbol,
-		and compose a type which represents the function of that
+		Based on the type of the symbol,
+		compose a type which represents the thing of that
 		name as used in that place.
 		"""
-		dfn = nom.dfn
 		if isinstance(dfn, syntax.Function):
 			return dfn.typ.fresh({})
 		if isinstance(dfn, (
@@ -112,7 +110,7 @@ class Experiment(Visitor):
 		return Nominal(primitive.LIST.dfn, [inside[0]])
 	
 	def visit_MatchExpr(self, mx: syntax.MatchExpr, gamma):
-		unify([mx.input_type, self._value_type(mx.subject)], gamma, mx.subject)
+		unify([mx.input_type, self._value_type(mx.subject_dfn)], gamma, mx.subject)
 		parts = []
 		for alt in mx.alternatives:
 			for sub_fn in alt.where:

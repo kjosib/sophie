@@ -41,7 +41,6 @@ class TypeBuilder(Visitor):
 
 	def _patch_variant(self, vs:syntax.VariantSpec):
 		for st in vs.subtypes:
-			assert st.nom.dfn is st
 			if isinstance(st.body, syntax.RecordSpec):
 				self._patch_record(st.body)
 			elif st.body is not None:
@@ -61,9 +60,9 @@ class TypeBuilder(Visitor):
 		return algebra.Arrow(arg, res)
 
 	def visit_TypeCall(self, tc:syntax.TypeCall):
-		inner = tc.nom.dfn.typ
+		inner = tc.ref.dfn.typ
 		args = [self.visit(a) for a in tc.arguments]
-		formals = tc.nom.dfn.quantifiers
+		formals = tc.ref.dfn.quantifiers
 		if len(args) != len(formals): self.on_error([tc], "Got %d type-arguments; expected %d"%(len(args), len(formals)))
 		mapping = {Q: self.visit(arg) for Q, arg in zip(formals, tc.arguments)}
 		return inner.rewrite(mapping)
