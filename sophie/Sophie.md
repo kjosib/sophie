@@ -172,7 +172,7 @@ This next bit tells the parser-generator how to tell which terminals have semant
 and therefore get passed to a production rule's action:
 ```
 %void_set UPPER
-%void '(' ')' '[' ']' '.' ',' ';' ':' '=' '->'
+%void '(' ')' '[' ']' '.' ',' ';' ':' '=' '->' '@'
 ```
 
 ## Definitions
