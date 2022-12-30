@@ -301,6 +301,8 @@ def match_expr(subject, alternatives: list[Alternative], otherwise: Optional[Val
 		return WithExpr(subject.expr, subject.nom, MatchExpr(subject.nom, alternatives, otherwise))
 
 class Module:
+	module_imports: NS  # Modules imported with an "as" clause.
+	wildcard_imports: NS  # Names imported with a wildcard. Sits underneath globals.
 	globals: NS  # WordDefiner pass creates this.
 	constructors: dict[str:]
 	all_match_expressions: list[MatchExpr]  # WordResolver pass creates this.

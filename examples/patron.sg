@@ -1,0 +1,10 @@
+# This is a simple sample client importing from another module.
+# The idea is to import a function from some other module (library.sg in this case) and use it.
+
+import:
+"library.sg" as lib;
+
+begin:
+nice_book@lib;  # This does not yet work in the current Sophie interpreter, but it will soon enough.
+
+end.

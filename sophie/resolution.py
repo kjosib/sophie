@@ -205,9 +205,8 @@ class WordResolver(WordPass):
 	
 	def visit_QualifiedReference(self, ref:syntax.QualifiedReference, env:NS):
 		# Search among imports.
-		# Not yet real; just give a message and try not to crash.
-		self.undef.append(ref.space)
-		ref.dfn = None
+		space = self._lookup(ref.space, self.module.module_imports)
+		ref.dfn = self._lookup(ref.nom, space) if space else None
 	
 	def visit_TypeCall(self, tc:syntax.TypeCall, env:NS):
 		self.visit(tc.ref, env)

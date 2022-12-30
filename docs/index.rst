@@ -18,8 +18,9 @@ Sophie is a call-by-need strong-inferred-type language named for French mathemat
    quick_start
    reference
    goals
-   contributing
    future
+   mechanics
+   contributing
 
 .. note::
    Sophie is not yet a complete system. If you're feeling adventurous, read on.

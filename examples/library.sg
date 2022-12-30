@@ -1,0 +1,9 @@
+# This is a simple sample library module.
+# The idea is to export a function (or several) that some client (patron.sg) can use without re-implementing it.
+
+define:
+
+nice_book = "Gulliver's Travels";
+
+end.
+
