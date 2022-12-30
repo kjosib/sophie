@@ -79,6 +79,8 @@ but it would be better to emit a warning instead and then mark conflicted names 
 Attempting to actually *use* the (unqualified) name might result in a proper error,
 or it might later be resolved with the aid of type-checking.
 
+    A third option would treat the wildcard as just another
+
 Also, if an implicitly-imported name is later defined, it should probably shadow the import.
 Conversely, if an explicitly-imported name is later defined at top-level, that *is* a naming conflict.
 So it's important to track the "strength" of an imported name.
@@ -135,6 +137,21 @@ Quite likely the simplest would be "guess-the-number" style game in which the hu
 and the computer makes "guesses" following a binary-search strategy.
 
 
+Holes in the Code
+-----------------
+
+Suppose that ``??`` can stand in for an expression or type annotation without blocking the parser.
+Treat it like a bit of the program that's yet to be decided.
+It could get as far as the type-checker and maybe yield suggestions for things that might go there.
+It's better than an unbound name because it's clearly not misspelled.
+
+Suppose (in some mode) we speculatively interpret the code until it hits a hole,
+and then drop into a monitor which summarizes the context both static and dynamic.
+It's no good in production, but it's fine for research and general poking around.
+
+Suppose this "monitor" continues automatically, using the "holey" result with defined propagation rules.
+One could imagine seeing not just what *creates* the hole, but also what *consumes* it,
+which could be valuable for understanding a system.
 
 Dimensions and Units of Measure
 --------------------------------
@@ -266,8 +283,18 @@ Also, some ansi color would be nice.
 Concurrency
 -------------------------------------
 
-This suggests a signature possibly including channels or streams or some such.
-Call them what you will; they're ultimately an asynchronous data type.
+I'm sold on the virtues of the *actor-model* of concurrency roughly as Erlang exemplifies it.
+However, Sophie will need a few adjustments to mix with pure-lazy-functional.
+
+* The *spawn-process* operation is fundamentally a nondeterministic action with environmental side-effects.
+  (It invents a different *PID* each time.) It cannot be a (pure) function, so it should not look like one.
+  It's effectively an I/O operation in its own right. You cannot have a (pure) function which, when called,
+  does something, because you do not get a concept of *when called* -- except in the case of actors.
+  Actors have a (local) time-line, so the *syntax to construct an action* needs to support spawning.
+
+* Sophie's current simplistic interpreter won't get preemption,
+  but an event-driven model makes a decent *(and reproducible)* proxy for exploring language semantics.
+  Later, we can *have nice things* if Sophie plays by the right rules.
 
 I don't want to include any implicit meta-information along with the messages on channels.
 If you need a time, accept a clock as part of an input. A behavior-function should have no way to tell
@@ -281,12 +308,16 @@ Message delivery is best-effort, and semantically call-by-copy.
 This all suggests a run-time responsible for scheduling computation to ready processes.
 It also suggests room for drivers or adapters suited to different operating-system services.
 
-Sophie may pick up some sensible syntax for declaring, defining, spawning, and combining processes.
-A *tree-of-supervisors* concept may fall out of the *spawn* syntax.
+Sophie needs some sensible syntax for declaring, defining, spawning, and combining processes.
+(They look a lot like functions from a distance, but the differences are in the details.)
+A *tree-of-supervisors* concept may fall out of the *spawn* syntax and semantics.
 
-One possibility is to treat ``channel`` as a normal generic type with two constructors,
-one of which represents a closed connection. In that sense, it's largely similar to ``list``,
-and suggests a *transducer* architecture.
+Briefly (and with much waving of hands) an actor is approximately a function from *input-message* to *action*.
+An *action* clearly includes the next state of the actor, which can either be *finished* or another actor.
+An *action* also must be able to send messages.
+It's nice if those messages are statically typed, but I anticipate corner-cases.
+
+One approach to static-typed spawn is to make the spawn-operation
 
 Arrays and Dictionaries
 ------------------------
@@ -325,3 +356,76 @@ Incidentally, different applications might want/need more or less detail about f
 So an application should be able to provide and use its own *bind* operator
 comfortably with ``result`` types.
 
+Stronger Guarantees
+---------------------
+
+Right now, Sophie has a traditional H-M generic type inference engine under construction.
+
+Partial Evaluation
+....................
+
+Initially I thought to use true partial-evaluation:
+Run the code on the types instead of the data.
+It's quick, precise, and feasible for some scenarios, but it's a strange work-flow:
+Partial evaluation works top-down rather than bottom-up (same as a normal evaluator),
+so you often can't tell if a function is well-typed in the abstract.
+You can only tell if the *application* of a function is well-typed in context.
+So if something doesn't type out, the whole call stack is potentially to blame.
+
+Anyway, I got stuck part-way through designing the partial-evaluator and shifted tactics.
+In retrospect, that may have been a mistake.
+To bound the scope of blame, use the type annotations on functions.
+A call that is consistent with its annotations cannot be blamed.
+
+Type-Like Traits and Gradual Formality
+.......................................
+
+Dependent-types are normally explained as "computing in the domain of types",
+using something composed of a (normal) type and a (normal) value.
+Partial evaluation seems particularly well-suited to that model.
+But why stop at the one trait implied by the usual notion of dependent types?
+And furthermore, why clutter a low-risk program with a mess of formal assurance?
+Even if you stripped all the types out of a correct program,
+it would still be correct. Let the circumstances dictate how much care
+you want the compiler to take, and about which properties.
+
+Let's suppose you want to prove your program never adds apples and oranges.
+Plug in an evaluation rule that computes and checks a fruity trait on the arguments to addition.
+This suggests some sort of interface or protocol by which a generic partial-evaluator framework
+might call upon a trait-evaluator for help assessing the validity of some interesting property.
+
+Any logical sub-framework will need a set of *because I said so* axioms.
+In traditional type-systems, these are things like the types of primitive lexemes and platform built-ins.
+The goal is to keep to a small, manageable number of manifestly-obvious axioms and inference rules.
+These axioms and rules could be written as ordinary Sophie modules.
+Turtles all the way down? Not entirely. Of course those modules would need their own verification,
+but that's normally a much smaller problem. Eventually you have to run out of paranoia-fuel.
+
+The call-side of the protocol would presumably resemble a visitor/strategy pattern walking an AST.
+The response-side would need to reflect progress, potentially-incomplete information derived,
+and the sudden relevance of unsolved variables.
+The context for this would presumably contain information about everything in scope for any given call-out.
+
+Model Checking and (randomized) Property Testing
+.....................................................
+
+These two ideas have a lot in common.
+
+Property-based testing randomly generates screwy sequences API calls to search for minimal sequences
+that violate a set of given pre- and post-conditions.
+Assuming your API does not *actually* launch ze missiles while under test, this is a pretty good way to find mistakes.
+Especially where there's a separate specification of how the API is meant to behave,
+this also makes for a good way to divide efforts between build and test.
+
+With model-checking, first you go and learn what properties a system ought to have,
+then you cast these in terms of formal statements about a model, and finally you let a tool
+search for scenarios (i.e. instances of the model) which are *possible* given the defined transactions
+but *impermissible* given the check-constraints.
+When it does, you clear up design mistakes before ever even looking at production code.
+(Technically the model constraints are themselves a form of code, but vastly smaller than the real-life system.)
+
+Both techniques amount to a search for ways to violate declared constraints.
+On the surface, they also seem to benefit from something like reflection and run-time/dynamic types.
+Yet Sophie deliberately eschews these, at least for now.
+Can a language like Sophie plug into this?
+The answer may change Sophie.
