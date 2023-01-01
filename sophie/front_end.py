@@ -7,7 +7,7 @@ from typing import Union
 from boozetools.macroparse.runtime import TypicalApplication, make_tables
 from boozetools.scanning.engine import IterableScanner
 from boozetools.parsing.interface import ParseError
-from boozetools.support.failureprone import Issue, Evidence, Severity
+from boozetools.support.failureprone import Issue
 from boozetools.support.pretty import DOT
 from . import syntax
 from .diagnostics import Report
@@ -57,6 +57,7 @@ def parse_file(pathname, report:Report):
 	"""Read file given by name; pass contents to next phase."""
 	with open(pathname, "r") as fh:
 		text = fh.read()
+	report.set_path(pathname)
 	return parse_text(text, pathname, report)
 
 def parse_text(text:str, pathname:Path, report:Report) -> Union[syntax.Module, Issue]:
@@ -70,6 +71,3 @@ def parse_text(text:str, pathname:Path, report:Report) -> Union[syntax.Module, I
 		description = "Unexpected token at %r %s %r" % (stack_symbols, DOT, kind)
 		report.error("Parsing", [where], description)
 
-def complain(report:Report):
-	for i in report.issues:
-		i.emit(lambda x:sophie_parser.source)
