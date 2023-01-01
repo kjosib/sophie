@@ -1,0 +1,8 @@
+# What happens if imports are in a circle?
+import:
+"cyclic_import.sg" as not_a_good_idea;
+define:
+foo = 27;
+begin:
+foo @ not_a_good_idea;
+end.

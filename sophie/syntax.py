@@ -6,6 +6,7 @@ Class-level type annotations make peace with pycharm wherever later passes add f
 """
 from typing import Optional, Any, Sequence, NamedTuple, Union
 from boozetools.parsing.interface import SemanticError
+from boozetools.support.symtab import NameSpace
 from .ontology import Nom, Symbol, NS, Reference, TypeExpr, ValExpr, MatchProxy
 from . import algebra
 
@@ -301,7 +302,7 @@ def match_expr(subject, alternatives: list[Alternative], otherwise: Optional[Val
 		return WithExpr(subject.expr, subject.nom, MatchExpr(subject.nom, alternatives, otherwise))
 
 class Module:
-	module_imports: NS  # Modules imported with an "as" clause.
+	module_imports: NameSpace[NS]  # Modules imported with an "as" clause.
 	wildcard_imports: NS  # Names imported with a wildcard. Sits underneath globals.
 	globals: NS  # WordDefiner pass creates this.
 	constructors: dict[str:]
@@ -316,3 +317,4 @@ class Module:
 		self.types = types
 		self.outer_functions = functions
 		self.main = main
+		self.module_imports = NameSpace(place=self)

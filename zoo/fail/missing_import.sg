@@ -1,0 +1,7 @@
+# What happens if you try to import a module that does not exist?
+
+import:
+
+"file that does not exist.sg" as fail;
+
+end.

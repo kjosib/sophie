@@ -2,10 +2,10 @@ from pathlib import Path
 import unittest
 from unittest import mock
 
-from sophie.front_end import parse_file, parse_text, complain
+from sophie.front_end import parse_file, parse_text
 from sophie.resolution import resolve_words
 from sophie.preamble import static_root
-from sophie import syntax, simple_evaluator, manifest, diagnostics, experimental
+from sophie import syntax, simple_evaluator, manifest, diagnostics, experimental, modularity
 
 base_folder = Path(__file__).parent.parent
 example_folder = base_folder/"examples"
@@ -13,15 +13,10 @@ zoo_fail = base_folder/"zoo/fail"
 
 def _load_good_example(which) -> syntax.Module:
 	report = diagnostics.Report()
-	module = parse_file(example_folder/(which+".sg"), report)
-	if not report.issues:
-		resolve_words(module, static_root, report)
-	if not report.issues:
-		manifest.type_module(module, report)
-	if not report.issues:
-		experimental.Experiment(module, report)
+	loader = modularity.Loader(static_root, report, experimental=True)
+	module = loader.need_module(example_folder, which+".sg")
 	if report.issues:
-		complain(report)
+		report.complain_to_console()
 		assert False
 	else:
 		return module
@@ -42,7 +37,11 @@ class ExampleSmokeTests(unittest.TestCase):
 		self.assertEqual(7, simple_evaluator.run_module(module))
 	
 	def test_turtle_compiles(self):
-		module = _load_good_example("turtle")
+		_load_good_example("turtle")
+
+	def test_patron_compiles(self):
+		""" it fails to execute at the moment, but that will soon fix. """
+		_load_good_example("patron")
 
 class ZooOfFailTests(unittest.TestCase):
 	""" Tests that assert about failure modes. """
@@ -61,12 +60,12 @@ class ZooOfFailTests(unittest.TestCase):
 		assert len(report.issues)
 
 	@mock.patch("boozetools.macroparse.runtime.print", lambda *x,file=None:None)
-	@mock.patch("boozetools.support.failureprone.SourceText.complain")
-	def test_syntax_error(self, complain):
+	def test_syntax_error(self):
 		report = diagnostics.Report()
+		report.complain_to_console = mock.Mock()
 		parse_file(zoo_fail/"syntax_error.sg", report)
 		assert len(report.issues)
-		self.assertEqual(complain.call_count, 0)
+		self.assertEqual(report.complain_to_console.call_count, 0)
 
 	def test_00_unresolved_names(self):
 		for fn in ("undefined_symbol", "bad_typecase_name", "construct_variant", ):
@@ -114,6 +113,18 @@ class ZooOfFailTests(unittest.TestCase):
 				experimental.Experiment(sut, report.on_error("Type Checking"))
 				# Then
 				assert len(report.issues)
+	
+	def test_03_module_breakage(self):
+		for bogon in ["missing_import", "broken_import", "circular_import"]:
+			with self.subTest(bogon):
+				# Given
+				report = diagnostics.Report()
+				loader = modularity.Loader(static_root, report, experimental=False)
+				# When
+				module = loader.need_module(zoo_fail, bogon + ".sg")
+				# Then
+				assert len(report.issues)
+				assert type(module) is syntax.Module
 
 class TypeInferenceTests(unittest.TestCase):
 	def test_01(self):
