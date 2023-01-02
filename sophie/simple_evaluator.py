@@ -145,7 +145,7 @@ class Closure(Procedure):
 			inner_env[param_name] = delay(caller_env, expr)
 		for fn in self._udf.where:
 			inner_env[fn.nom.text] = close_one_function(inner_env, fn)
-		return delay(inner_env, self._udf.expr)
+		return evaluate(self._udf.expr, inner_env)
 
 def close_one_function(env:NameSpace, udf:syntax.Function):
 	if udf.params:
