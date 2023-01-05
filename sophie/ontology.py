@@ -29,11 +29,13 @@ class Symbol:
 	Any named defined thing that may be found in some name-space.
 	Thus, functions, parameters, types, subtypes, that sort of thing.
 	It's not a syntax node by itself, but it is likely to contain them.
-	It's more of a semantic node. In practice there's bound to be a strong correspondence,
+	It's more of a semantic node.
+	In practice there's bound to be a strong correspondence,
 	but there can also be built-in or imported symbols.
 	"""
 	nom: Nom  # fill in during parsing.
 	typ: Term  # fill in variously.
+	static_depth: int  # fill during StaticDepthPass.
 	def __repr__(self): return self.nom.text
 	def head(self): return self.nom.head()
 	def has_value_domain(self) -> bool: raise NotImplementedError(type(self))

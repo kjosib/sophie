@@ -24,6 +24,7 @@ def resolve_words(module: syntax.Module, outside: NS, report):
 	if not report.issues:
 		WordDefiner(module, outside, report.on_error("Defining words"))
 	if not report.issues:
+		StaticDepthPass(module)
 		WordResolver(module, report.on_error("Finding Definitions"))
 	if not report.issues:
 		build_match_dispatch_tables(module, report.on_error("Validating Match Cases"))
@@ -121,9 +122,6 @@ class WordDefiner(WordPass):
 	def visit_ArrowSpec(self, it:syntax.ArrowSpec):
 		pass
 
-	def visit_Nom(self, it:syntax.Nom):
-		pass
-
 	def visit_TypeCall(self, it:syntax.TypeCall):
 		pass
 
@@ -152,6 +150,36 @@ class WordDefiner(WordPass):
 		for sub_ex in alt.where:
 			self.visit(sub_ex, inner)
 		self.visit(alt.sub_expr, inner)
+
+class StaticDepthPass(WordPass):
+	# Assign static depth to the definitions of all parameters and functions.
+	# This pass cannot fail.
+	def __init__(self, module):
+		for fn in module.outer_functions:
+			self.visit_Function(fn, 0)
+		for expr in module.main:
+			self.visit(expr, 0)
+			
+	def visit_Function(self, fn:syntax.Function, depth:int):
+		fn.static_depth = depth
+		inner = depth + (1 if fn.params else 0)
+		for param in fn.params:
+			param.static_depth = inner
+		self.visit(fn.expr, inner)
+		for sub_fn in fn.where:
+			self.visit_Function(sub_fn, inner)
+		
+	def visit_MatchExpr(self, mx:syntax.MatchExpr, depth:int):
+		for alt in mx.alternatives:
+			alt.proxy.static_depth = depth
+			self.visit(alt.sub_expr, depth)
+		if mx.otherwise is not None:
+			self.visit(mx.otherwise, depth)
+
+	def visit_Lookup(self, l:syntax.Lookup, depth:int):
+		assert not hasattr(l, "source_depth")
+		l.source_depth = depth
+
 
 class WordResolver(WordPass):
 	"""

@@ -19,6 +19,7 @@ class PrimitiveType(Symbol):
 
 class Native(Symbol):
 	""" Superclass of built-in run-time things. """
+	static_depth = 0
 	def has_value_domain(self): return True
 
 class NativeValue(Native):
