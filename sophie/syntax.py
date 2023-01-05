@@ -77,6 +77,7 @@ class RecordSpec(TypeExpr):
 class SubTypeSpec(Symbol):
 	body: Union[RecordSpec, TypeCall, ArrowSpec]
 	variant:"TypeDecl"
+	static_depth = 0
 	def has_value_domain(self): return True
 	def __init__(self, nom:Nom, body=None):
 		self.nom = nom
@@ -98,6 +99,7 @@ class TypeDecl(Symbol):
 	parameters: Sequence[TypeParameter]
 	body: Union[TypeCall, VariantSpec, RecordSpec]
 	quantifiers: list[algebra.TypeVariable]  # phase: WordDefiner
+	static_depth = 0
 	def __str__(self): return self.nom.text
 	def __repr__(self):
 		p = "[%s] "%",".join(map(str, self.parameters)) if self.parameters else ""
@@ -166,6 +168,7 @@ class Literal(ValExpr):
 
 class Lookup(ValExpr):
 	ref:Reference
+	source_depth:int
 	def __init__(self, ref: Reference): self.ref = ref
 	def head(self) -> slice: return self.ref.head()
 

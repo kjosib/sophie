@@ -19,7 +19,7 @@ class Loader:
 		self._on_error = report.on_error("Loading Modules")
 		self._prepared_modules = {}
 		self._construction_stack = []
-		self.topological_sort = []
+		self.module_sequence = []
 		self._experimental = experimental
 
 	def need_module(self, base_path, module_path:str) -> Module:
@@ -37,7 +37,7 @@ class Loader:
 			self._construction_stack.append(abs_path)
 			module = self._load_normal_file(abs_path)
 			self._construction_stack.pop()
-		self.topological_sort.append(module)
+		self.module_sequence.append(module)
 		self._prepared_modules[abs_path] = module
 		return module
 	

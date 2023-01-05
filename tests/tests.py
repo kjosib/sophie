@@ -11,37 +11,33 @@ base_folder = Path(__file__).parent.parent
 example_folder = base_folder/"examples"
 zoo_fail = base_folder/"zoo/fail"
 
-def _load_good_example(which) -> syntax.Module:
+def _load_good_example(which) -> list[syntax.Module]:
 	report = diagnostics.Report()
 	loader = modularity.Loader(static_root, report, experimental=True)
-	module = loader.need_module(example_folder, which+".sg")
+	loader.need_module(example_folder, which+".sg")
 	if report.issues:
 		report.complain_to_console()
 		assert False
 	else:
-		return module
+		return loader.module_sequence
 
 
 class ExampleSmokeTests(unittest.TestCase):
 	""" Run all the examples; Test for no smoke. """
 	
 	def test_other_examples(self):
-		for name in ["hello_world", "some_arithmetic", "primes", "Newton"]:
+		for name in ["hello_world", "some_arithmetic", "primes", "Newton", "patron"]:
 			with self.subTest(name=name):
-				module = _load_good_example(name)
-				simple_evaluator.run_module(module)
+				each_module = _load_good_example(name)
+				simple_evaluator.run_program(each_module)
 	
 	def test_alias(self):
-		module = _load_good_example("alias")
-		self.assertIsInstance(module.globals["album_tree"].body, syntax.TypeCall)
-		self.assertEqual(7, simple_evaluator.run_module(module))
+		each_module = _load_good_example("alias")
+		self.assertIsInstance(each_module[-1].globals["album_tree"].body, syntax.TypeCall)
+		self.assertEqual(7, simple_evaluator.run_program(each_module))
 	
 	def test_turtle_compiles(self):
 		_load_good_example("turtle")
-
-	def test_patron_compiles(self):
-		""" it fails to execute at the moment, but that will soon fix. """
-		_load_good_example("patron")
 
 class ZooOfFailTests(unittest.TestCase):
 	""" Tests that assert about failure modes. """

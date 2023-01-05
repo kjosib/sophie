@@ -48,8 +48,8 @@ def run(args):
 		report.complain_to_console()
 		return 1
 	elif module.main:
-		from sophie.simple_evaluator import run_module
-		run_module(module)
+		from sophie.simple_evaluator import run_program
+		run_program(loader.module_sequence)
 	else:
 		print("That module has no `begin:` section and thus is not a main program.", file=sys.stderr)
 		return 1
