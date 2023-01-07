@@ -29,7 +29,6 @@ Things on Deck
 
 The next increment will probably focus on one of:
 
-* Preliminary support for shared modules: an export/import mechanism.
 * Bringing type inference out of experimental-mode.
 
 * Better error messages. (I have an idea related to sentential forms.)

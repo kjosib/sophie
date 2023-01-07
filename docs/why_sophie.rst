@@ -29,7 +29,7 @@ Sophie is different on all accounts.
   (Fresh new mistakes, in other words. But anyway, more leeway to adapt.)
 * Sophie is functionally pure. That means *meaning is eternal* and you don't have to worry about
   changes behind your back. That may also sound impossibly constraining, but trust me: it's fine.
-* Sophie ... doesn't dirty herself with objects of the usual sort. (There is a better way.)
+* Sophie ... doesn't dirty herself with *objects* of the usual sort. (There is a better way.)
 * Sophie is fastidious about preventing errors up front, before they cause trouble during operation.
   Through *strong static type inference*, Sophie can check in advance for many kinds of
   latent problems that testing alone might not catch -- which can save you a whole mess of effort.
