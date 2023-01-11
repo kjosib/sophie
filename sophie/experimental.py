@@ -3,7 +3,7 @@ from typing import Sequence
 
 from boozetools.support.foundation import Visitor
 from . import primitive, syntax, ontology
-from .algebra import Arrow, Product, Term, TypeVariable, Nominal
+from .algebra import Arrow, Product, Term, TypeVariable, Nominal, PullRabbit
 
 OPS = {glyph:typ for glyph, (op, typ) in primitive.ops.items()}
 
@@ -11,45 +11,45 @@ class Experiment(Visitor):
 	"""
 	By this point, all type-definition bodies and type-expressions are well-founded.
 	"""
-	def __init__(self, module, on_error, verbose=False):
+	def __init__(self, module, on_error:callable, verbose=False):
+		assert callable(on_error)
 		self.on_error = on_error
+		gamma = {}
 		try:
-			gamma = {}
 			for _ in range(3):
 				for fn in module.all_functions:
 					self.visit_Function(fn, gamma)
-				for fn in module.all_functions:
 					if verbose:
-						print(">>", fn.nom.text, fn.typ.render({}, {}))
+						print(">>", fn.nom.text, fn.typ.render(gamma, {}))
 				if verbose:
 					print("============")
 			for expr in module.main:
 				self.visit(expr, {})
-		except Incompatible as e:
+		except UnificationFailed as e:
 			a,b, stem = e.args
-			self.on_error([stem], "This looks inconsistent: %s / %s"%(a,b))
+			delta = {}
+			self.on_error([stem], e.gripe%(a.render(gamma, delta), b.render(gamma, delta)))
 
 	def visit_Function(self, fn: syntax.Function, gamma):
-		# for sub_fn in fn.where:
-		# 	self.visit_Function(sub_fn, gamma)
-		# Can monomorphism leak through the shared gamma/context?
-		# I think not: Whatever the new type of the sub_fn,
-		# each call-site instantiates fresh new (polymorphic) variables.
 		res = self.visit(fn.expr, gamma)
+		rabbit = PullRabbit(gamma)
 		if fn.params:
 			arg = Product(tuple(p.typ for p in fn.params))
-			fn.typ = arrow = Arrow(arg, res).pull_rabbit(gamma)
-			for p,t in zip(fn.params, arrow.arg.fields):
+			unify([Arrow(arg, res), fn.typ], gamma, fn.nom)
+			fn.typ = fn.typ.visit(rabbit)
+			assert isinstance(fn.typ, Arrow)
+			assert isinstance(fn.typ.arg, Product)
+			for p,t in zip(fn.params, fn.typ.arg.fields):
 				p.typ = t
 		else:
-			fn.typ = res.pull_rabbit(gamma)
+			fn.typ = res.visit(rabbit)
 		pass
 	
 	def _call_site(self, expr, fn_type, arg_exprs, gamma):
 		arg = Product(tuple(self.visit(a, gamma) for a in arg_exprs))
 		res = TypeVariable()
-		unify([(Arrow(arg, res)), fn_type], gamma, expr)
-		return res.pull_rabbit(gamma)
+		unify([Arrow(arg, res), fn_type], gamma, expr)
+		return res.visit(PullRabbit(gamma))
 
 	def visit_Call(self, expr: syntax.Call, gamma):
 		fn_type = self.visit(expr.fn_exp, gamma)
@@ -113,8 +113,8 @@ class Experiment(Visitor):
 		unify([mx.input_type, self._value_type(mx.subject_dfn)], gamma, mx.subject)
 		parts = []
 		for alt in mx.alternatives:
-			for sub_fn in alt.where:
-				self.visit_Function(sub_fn, gamma)
+			# for sub_fn in alt.where:
+			# 	self.visit_Function(sub_fn, gamma)
 			parts.append(self.visit(alt.sub_expr, gamma))
 		if mx.otherwise: parts.append(self.visit(mx.otherwise, gamma))
 		unify(parts, gamma, mx)
@@ -162,15 +162,22 @@ class Experiment(Visitor):
 		unify(branches, gamma, cond)
 		return branches[0]
 		
-class Incompatible(Exception):
+class UnificationFailed(Exception):
+	gripe:str
 	def __init__(self, prior, term, at):
 		self.prior, self.term, self.at = prior, term, at
-	pass
+class Incompatible(UnificationFailed):
+	gripe = "This needs a value to be both %s and also %s, which cannot happen."
+class RecursiveTypeError(UnificationFailed):
+	gripe = "This tries to equate %s with %s which contains it, but a type cannot be part of itself."
 
 def _proxy(a: Term, gamma: dict):
-	while a in gamma:
-		a = gamma[a]
-	return a
+	if a in gamma:
+		b = _proxy(gamma[a], gamma)
+		gamma[a] = b
+		return b
+	else:
+		return a
 
 def unify(terms: Sequence[Term], gamma: dict, stem):
 	def enq(a, b):
@@ -183,9 +190,11 @@ def unify(terms: Sequence[Term], gamma: dict, stem):
 			return
 		elif type(a) is TypeVariable:
 			# if A occurs in B, then reject. It would be ill-founded.
+			if b.mentions(a): raise RecursiveTypeError(a, b, stem)
 			gamma[a] = b  # A is made to stand for B
 		elif type(b) is TypeVariable:
 			# if B occurs in A, then reject. It would be ill-founded.
+			if a.mentions(b): raise RecursiveTypeError(b, a, stem)
 			gamma[b] = a  # B is made to stand for A
 		elif a.phylum() == b.phylum():
 			a.unify_with(b, enq)

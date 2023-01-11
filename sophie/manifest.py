@@ -65,7 +65,7 @@ class TypeBuilder(Visitor):
 		formals = tc.ref.dfn.quantifiers
 		if len(args) != len(formals): self.on_error([tc], "Got %d type-arguments; expected %d"%(len(args), len(formals)))
 		mapping = {Q: self.visit(arg) for Q, arg in zip(formals, tc.arguments)}
-		return inner.rewrite(mapping)
+		return inner.visit(algebra.Rewrite(mapping))
 	
 	def visit_Function(self, fn: syntax.Function):
 		typ = self.visit(fn.result_type_expr) if fn.result_type_expr else algebra.TypeVariable()
@@ -97,13 +97,14 @@ def check_match_expressions(module:syntax.Module, on_error):
 			on_error(bogons, "These do not all come from the same variant type.")
 			return
 		local_mapping = {Q:algebra.TypeVariable() for Q in variant.quantifiers}
-		mx.input_type = variant.typ.rewrite(local_mapping)
+		visitor = algebra.Rewrite(local_mapping)
+		mx.input_type = variant.typ.visit(visitor)
 		seen = set()
 		for alt in mx.alternatives:
 			subtype = alt.pattern.dfn
 			seen.add(subtype)
 			assert isinstance(subtype, syntax.SubTypeSpec)
-			alt.proxy.typ = subtype.typ.rewrite(local_mapping)
+			alt.proxy.typ = subtype.typ.visit(visitor)
 		exhaustive = len(seen) == len(variant.body.subtypes)
 		if exhaustive and mx.otherwise:
 			on_error([mx, mx.otherwise], "This case-construction is exhaustive; the otherwise-clause cannot run.")
