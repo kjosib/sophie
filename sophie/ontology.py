@@ -10,11 +10,9 @@ class Nom:
 
 class Term:
 	""" A term re-writing system computes types. """
-	def rewrite(self, delta: dict):
-		""" Trivial re-write during the manifest phase. """
+	def visit(self, visitor):
+		""" Implement the visitor pattern... """
 		raise NotImplementedError(type(self))
-	def pull_rabbit(self, gamma:dict):
-		""" Non-trivial re-write after a round of inference. """
 	def fresh(self, gamma: dict): raise NotImplementedError(type(self))
 	def phylum(self): raise NotImplementedError(type(self))
 	def render(self, gamma: dict, delta) -> str:
@@ -22,6 +20,12 @@ class Term:
 		raise NotImplementedError(type(self))
 	def poll(self, seen:set):
 		""" Find all the type-variables used in the term. """
+		raise NotImplementedError(type(self))
+	def mentions(self, v):
+		"""
+		Determine whether type variable v occurs within the term.
+		Does not need gamma because v is guaranteed not to be mentioned there.
+		"""
 		raise NotImplementedError(type(self))
 
 class Symbol:

@@ -95,7 +95,7 @@ class ZooOfFailTests(unittest.TestCase):
 				assert len(report.issues)
 		
 	def test_02_does_not_type(self):
-		for fn in ("num_plus_string", "wrong_arity", "mismatched-case-when"):
+		for fn in ("num_plus_string", "wrong_arity", "mismatched-case-when", "omega"):
 			with self.subTest(fn):
 				# Given
 				report = diagnostics.Report()
@@ -124,6 +124,7 @@ class ZooOfFailTests(unittest.TestCase):
 
 class TypeInferenceTests(unittest.TestCase):
 	def test_01(self):
+		from sophie.experimental import Experiment
 		text = """
 		type:
 			A[x,y] is case: bc(h:x, t:A[y,x]); na; esac;
@@ -140,7 +141,7 @@ class TypeInferenceTests(unittest.TestCase):
 		resolve_words(module, static_root, report)
 		assert not report.issues
 		manifest.type_module(module, report)
-		
+		experimental.Experiment(module, report.on_error("Inferring Types"), True)
 
 if __name__ == '__main__':
 	unittest.main()

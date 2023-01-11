@@ -8,7 +8,6 @@ Here, "constructor" is assumed to connect with something in the problem domain (
 (For example, it might be a sum-type or new-type )
 """
 from typing import Sequence
-from collections import deque
 from .ontology import Symbol, Term
 
 #########################
@@ -20,13 +19,7 @@ class TypeVariable(Term):
 		self.nr = TypeVariable._counter
 		TypeVariable._counter += 1
 	def __repr__(self): return "<%s>" % self.nr
-	def rewrite(self, delta: dict):
-		# This is for trivial re-write during the manifest phase.
-		return delta.get(self, self)
-	def pull_rabbit(self, gamma:dict):
-		# This is for the non-trivial re-write during inference.
-		while self in gamma: self = gamma[self]
-		return self
+	def visit(self, visitor): return visitor.on_variable(self)
 	def fresh(self, gamma: dict):
 		if self not in gamma:
 			gamma[self] = TypeVariable()
@@ -41,6 +34,7 @@ class TypeVariable(Term):
 		else:
 			return self.render(gamma, delta)
 	def poll(self, seen:set): seen.add(self)
+	def mentions(self, v): return v is self
 
 def _name_variable(n):
 	name = ""
@@ -63,10 +57,7 @@ class Nominal(Term):
 		self.params = params
 	def phylum(self):
 		return self.dfn
-	def rewrite(self, delta: dict):
-		return self if not self.params else Nominal(self.dfn, [v.rewrite(delta) for v in self.params])
-	def pull_rabbit(self, gamma:dict):
-		return self if not self.params else Nominal(self.dfn, [v.pull_rabbit(gamma) for v in self.params])
+	def visit(self, visitor): return visitor.on_nominal(self)
 	def fresh(self, gamma: dict):
 		return self if not self.params else Nominal(self.dfn, [v.fresh(gamma) for v in self.params])
 	def unify_with(self, other, enq):
@@ -85,12 +76,13 @@ class Nominal(Term):
 		return self.dfn.nom.text+brick
 	def poll(self, seen:set):
 		for p in self.params: p.poll(seen)
+	def mentions(self, v):
+		return any(p.mentions(v) for p in self.params)
 
 class Arrow(Term):
 	def __init__(self, arg: Term, res: Term): self.arg, self.res = arg, res
 	def __repr__(self): return "%s -> %s" % (self.arg, self.res)
-	def rewrite(self, delta: dict): return Arrow(self.arg.rewrite(delta), self.res.rewrite(delta))
-	def pull_rabbit(self, gamma: dict): return Arrow(self.arg.pull_rabbit(gamma), self.res.pull_rabbit(gamma))
+	def visit(self, visitor): return visitor.on_arrow(self)
 	def fresh(self, gamma: dict): return Arrow(self.arg.fresh(gamma), self.res.fresh(gamma))
 	def unify_with(self, other, enq):
 		# Structural Equivalence
@@ -104,12 +96,13 @@ class Arrow(Term):
 	def poll(self, seen:set):
 		self.arg.poll(seen)
 		self.res.poll(seen)
+	def mentions(self, v):
+		return self.arg.mentions(v) or self.res.mentions(v)
 
 class Product(Term):
 	def __init__(self, fields: Sequence[Term]): self.fields = fields
 	def __repr__(self): return "(%s)" % (",".join(map(str, self.fields)))
-	def rewrite(self, delta: dict): return Product(tuple(t.rewrite(delta) for t in self.fields))
-	def pull_rabbit(self, gamma: dict): return Product(tuple(t.pull_rabbit(gamma) for t in self.fields))
+	def visit(self, visitor): return visitor.on_product(self)
 	def fresh(self, gamma: dict): return Product(tuple(t.fresh(gamma) for t in self.fields))
 	def unify_with(self, other, enq):
 		# Structural Equivalence
@@ -121,6 +114,40 @@ class Product(Term):
 		return "(%s)" % (", ".join(args))
 	def poll(self, seen:set):
 		for k in self.fields: k.poll(seen)
+	def mentions(self, v):
+		return any(p.mentions(v) for p in self.fields)
 
 #########################
 
+class Visitor:
+	def on_variable(self, v:TypeVariable): pass
+	def on_nominal(self, n:Nominal): pass
+	def on_arrow(self, a:Arrow): pass
+	def on_product(self, p:Product): pass
+
+#########################
+
+class Rewrite(Visitor):
+	# This is for trivial re-write during the manifest phase.
+	def __init__(self, gamma:dict):
+		self.gamma = gamma
+	def on_variable(self, v: TypeVariable):
+		return self.gamma.get(v,v)
+	def on_nominal(self, n: Nominal):
+		return n if not n.params else Nominal(n.dfn, [p.visit(self) for p in n.params])
+	def on_arrow(self, a: Arrow):
+		return Arrow(a.arg.visit(self), a.res.visit(self))
+	def on_product(self, p: Product):
+		return Product(tuple(f.visit(self) for f in p.fields))
+	
+class PullRabbit(Rewrite):
+	# This is for the non-trivial re-write during inference.
+	def __init__(self, gamma: dict):
+		super().__init__(gamma)
+		
+	def on_variable(self, v: TypeVariable):
+		j = v
+		while v in self.gamma: v = self.gamma[v]
+		# if j is not v:
+		# 	print("   ", j, ":=", v)
+		return v if isinstance(v, TypeVariable) else v.visit(self)

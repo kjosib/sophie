@@ -80,6 +80,7 @@ end.
 def _init():
 	from . import front_end, resolution, primitive, diagnostics, manifest
 	report = diagnostics.Report()
+	report.set_path(__file__)
 	preamble = front_end.parse_text(__doc__, __file__, report)
 	if not report.issues:
 		resolution.resolve_words(preamble, primitive.root_namespace, report)
@@ -87,9 +88,9 @@ def _init():
 		manifest.type_module(preamble, report)
 	if not report.issues:
 		from . import experimental
-		experimental.Experiment(preamble, report, verbose=False)
+		experimental.Experiment(preamble, report.on_error("Inferring Types"), verbose=False)
 	if report.issues:
-		front_end.complain(report)
+		report.complain_to_console()
 		raise RuntimeError()
 	else:
 		primitive.LIST = preamble.globals['list'].typ

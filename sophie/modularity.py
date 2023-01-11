@@ -51,7 +51,7 @@ class Loader:
 			type_module(module, self._report)
 		if self._experimental and not self._report.issues:
 			from sophie.experimental import Experiment
-			Experiment(module, self._report.on_error("Experimental Pass"), verbose=False)
+			Experiment(module, self._report.on_error("Inferring Types"), verbose=False)
 		return module
 	
 	def _interpret_the_import_directives(self, module:Module, base_path):
