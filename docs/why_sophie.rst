@@ -35,10 +35,9 @@ Sophie is different on all accounts.
   latent problems that testing alone might not catch -- which can save you a whole mess of effort.
 
 .. note::
-    Ok, confession: That last point is still in progress.
-    It mostly works in an experimental mode,
-    but there are some edge cases and inefficiencies I'd like to fix
-    before the type-checker becomes standard operating procedure.
+    The type checker is now always on, since it is *mostly* finished and it doesn't cause a problem in practice.
+    It can still be too permissive around record field access,
+    but this discrepancy will soon be cleaned up, and hopefully in a nice generic way.
 
 Moreover, learning Sophie will affect you in different ways from learning a conventional starter-language.
 Sophie teaches you how to think about problems and design solutions effectively.

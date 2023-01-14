@@ -1,0 +1,12 @@
+define:
+	double(x) = x + x;
+	square(x) = x * x;
+	area_of_rectangle(length, width) = length * width;
+	five = 5;
+begin:
+	double(five);          # 10
+	square(five);           # 25
+	double(square(five));    # 50
+	square(double(five));     # 100
+	area_of_rectangle(20, 30);  # 600
+end.

@@ -9,6 +9,10 @@ For example:
 
 will run program.sg if possible, or else try to explain why not.
 
+    py -m sophie -h
+
+will explain all the arguments.
+
 For more information, see:
 
 Documentation: https://sophie.readthedocs.io/en/latest/
@@ -26,8 +30,8 @@ parser = argparse.ArgumentParser(
 	description="Interpreter for the Sophie programming langauge.",
 )
 parser.add_argument("program", help="try examples/turtle.sg for example.")
+parser.add_argument('-c', "--check", action="store_true", help="Check syntax and types verbosely; Don't actually run the program.")
 parser.add_argument('-n', "--no-preamble", action="store_true", help="Don't load the preamble.")
-parser.add_argument('-x', "--experimental", action="store_true", help="Run the experimental pass.")
 
 def run(args):
 	if args.no_preamble:
@@ -38,7 +42,7 @@ def run(args):
 	from sophie.diagnostics import Report
 	from sophie.modularity import Loader
 	report = Report()
-	loader = Loader(root, report, args.experimental)
+	loader = Loader(root, report, args.check)
 	try:
 		module = loader.need_module(os.getcwd(), args.program)
 	except FileNotFoundError:
@@ -47,6 +51,8 @@ def run(args):
 	if report.issues:
 		report.complain_to_console()
 		return 1
+	elif args.check:
+		pass
 	elif module.main:
 		from sophie.simple_evaluator import run_program
 		run_program(loader.module_sequence)

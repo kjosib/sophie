@@ -17,7 +17,7 @@ The design goals, *in priority order,* are:
 6. Turtle graphics.
 7. A modular import system, probably with explicit exports.
 8. Strong type-inference so run-time troubles are few and far between.
-9. Event-driven concurrency over a sensible (maybe pluggable?) process-model.
+9. Event-driven concurrency over a sensible (maybe pluggable?) process-model. (Probably actors, as in Erlang.)
 10. Other nice things to have.
 
 When all is said and done, I'd like Sophie to be a viable alternative for learning (or deepening one's grasp of) comp-sci.
@@ -26,13 +26,17 @@ but should produce excellent habits.
 
 Things on Deck
 ----------------
-
 The next increment will probably focus on one of:
 
-* Bringing type inference out of experimental-mode.
+* String-oriented functions.
+* Adding "Onion" types to the type algebra.
+* Simple (nay, even simplistic!) console interaction
 
+Open Design Problems:
+---------------------
 * Better error messages. (I have an idea related to sentential forms.)
-* Approximate solution to the halting problem, thus to reject (some useful subset of) programs that would hang.
+* *rest*-parameters
+* Actor Model
 
 Other Nice Things to Have
 --------------------------
@@ -51,6 +55,7 @@ In no particular order:
 * Some pattern for resilience -- likely *Tree-of-Supervisors* .
 * More polymorphism.
 * A proper GUI toolkit. This will have to wait for several other features, though.
+* Approximate solution to the halting problem, thus to reject (some useful subset of) programs that would hang.
 * Native Code, or perhaps running on JVM or CLR. (Transpiling is a viable option.)
 * Distributed computing -- but respecting Byzantine Generals and propagation delay.
 * A foreign-function interface, perhaps plugged into some high-speed numerical juice.
