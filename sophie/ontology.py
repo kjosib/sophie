@@ -8,16 +8,13 @@ class Nom:
 	def __repr__(self): return "<Name %r>" % self.text
 	def key(self): return self.text
 
-class Term:
+class SophieType:
 	""" A term re-writing system computes types. """
 	def visit(self, visitor):
 		""" Implement the visitor pattern... """
 		raise NotImplementedError(type(self))
 	def fresh(self, gamma: dict): raise NotImplementedError(type(self))
 	def phylum(self): raise NotImplementedError(type(self))
-	def render(self, gamma: dict, delta) -> str:
-		""" Return a string representation of the term. """
-		raise NotImplementedError(type(self))
 	def poll(self, seen:set):
 		""" Find all the type-variables used in the term. """
 		raise NotImplementedError(type(self))
@@ -38,7 +35,7 @@ class Symbol:
 	but there can also be built-in or imported symbols.
 	"""
 	nom: Nom  # fill in during parsing.
-	typ: Term  # fill in variously.
+	typ: SophieType  # fill in variously.
 	static_depth: int  # fill during StaticDepthPass.
 	def __repr__(self): return self.nom.text
 	def head(self): return self.nom.head()

@@ -87,8 +87,8 @@ def _init():
 	if not report.issues:
 		manifest.type_module(preamble, report)
 	if not report.issues:
-		from . import experimental
-		experimental.Experiment(preamble, report.on_error("Inferring Types"), verbose=False)
+		from . import type_inference
+		type_inference.infer_types(preamble, report, verbose=False)
 	if report.issues:
 		report.complain_to_console()
 		raise RuntimeError()

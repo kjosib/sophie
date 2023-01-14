@@ -1,7 +1,7 @@
 import inspect
 from functools import lru_cache
 from .ontology import NS, Symbol, Nom
-from .algebra import Term, Product, Arrow, TypeVariable, Nominal
+from .algebra import SophieType, Product, Arrow, TypeVariable, Nominal
 
 root_namespace = NS(place=None)
 ops = {}
@@ -49,7 +49,7 @@ literal_flag = _built_in_type("flag")
 def _arrow_of_math(arity:int) -> Arrow:
 	return _arrow_of(literal_number, arity)
 
-def _arrow_of(typ:Term, arity:int) -> Arrow:
+def _arrow_of(typ:SophieType, arity:int) -> Arrow:
 	assert arity > 0
 	return Arrow(Product((typ,) * arity), typ)
 

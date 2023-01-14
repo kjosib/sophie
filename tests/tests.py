@@ -5,22 +5,22 @@ from unittest import mock
 from sophie.front_end import parse_file, parse_text
 from sophie.resolution import resolve_words
 from sophie.preamble import static_root
-from sophie import syntax, simple_evaluator, manifest, diagnostics, experimental, modularity
+from sophie import syntax, primitive, simple_evaluator, manifest, diagnostics, algebra, type_inference, modularity
 
 base_folder = Path(__file__).parent.parent
 example_folder = base_folder/"examples"
 zoo_fail = base_folder/"zoo/fail"
+zoo_ok = base_folder/"zoo/ok"
 
 def _load_good_example(which) -> list[syntax.Module]:
 	report = diagnostics.Report()
-	loader = modularity.Loader(static_root, report, experimental=True)
+	loader = modularity.Loader(static_root, report, verbosity=0)
 	loader.need_module(example_folder, which+".sg")
 	if report.issues:
 		report.complain_to_console()
 		assert False
 	else:
 		return loader.module_sequence
-
 
 class ExampleSmokeTests(unittest.TestCase):
 	""" Run all the examples; Test for no smoke. """
@@ -39,7 +39,7 @@ class ExampleSmokeTests(unittest.TestCase):
 	def test_turtle_compiles(self):
 		_load_good_example("turtle")
 
-class ZooOfFailTests(unittest.TestCase):
+class ZooOfFail(unittest.TestCase):
 	""" Tests that assert about failure modes. """
 	
 	def test_mismatched_where(self):
@@ -106,7 +106,7 @@ class ZooOfFailTests(unittest.TestCase):
 				manifest.type_module(sut, report)
 				assert not report.issues
 				# When
-				experimental.Experiment(sut, report.on_error("Type Checking"))
+				type_inference.infer_types(sut, report)
 				# Then
 				assert len(report.issues)
 	
@@ -115,33 +115,78 @@ class ZooOfFailTests(unittest.TestCase):
 			with self.subTest(bogon):
 				# Given
 				report = diagnostics.Report()
-				loader = modularity.Loader(static_root, report, experimental=False)
+				loader = modularity.Loader(static_root, report, verbosity=0)
 				# When
 				module = loader.need_module(zoo_fail, bogon + ".sg")
 				# Then
 				assert len(report.issues)
 				assert type(module) is syntax.Module
 
-class TypeInferenceTests(unittest.TestCase):
-	def test_01(self):
-		from sophie.experimental import Experiment
-		text = """
-		type:
-			A[x,y] is case: bc(h:x, t:A[y,x]); na; esac;
-		define:
-			biMap(fa, fb, xs) = case xs:
-				na -> na;
-				bc -> bc(fa(xs.h), biMap(fb, fa, xs.tail));
-			esac;
-		end.
-		"""
-		report = diagnostics.Report()
-		module = parse_text(text, __file__, report)
-		assert not report.issues
-		resolve_words(module, static_root, report)
-		assert not report.issues
-		manifest.type_module(module, report)
-		experimental.Experiment(module, report.on_error("Inferring Types"), True)
+class ThingsThatShouldConverge(unittest.TestCase):
+	""" These assert that things which should converge, do. For the contrapositive, see the ZooOfFail. """
+	
+	def setUp(self) -> None:
+		algebra.TypeVariable._counter = 0
+		self.report = diagnostics.Report()
+	
+	def load(self, folder, which):
+		report = self.report
+		loader = modularity.Loader(static_root, report, verbosity=0)
+		module = loader.need_module(folder, which + ".sg")
+		if report.issues:
+			report.complain_to_console()
+			assert False
+		else:
+			type_inference.infer_types(module, self.report, verbose=True)
+			return module
+	
+	def test_Newton(self):
+		module = self.load(example_folder, "Newton")
+		assert not self.report.issues, self.report.complain_to_console()
+		assert_convergent(module.globals['iterate_four_times'])
+		root = module.globals['root']
+		assert_convergent(root)
+		assert isinstance(root.typ, algebra.Arrow)
+		arg = root.typ.arg
+		assert isinstance(arg, algebra.Product)
+		assert len(arg.fields) == 1
+		a0 = arg.fields[0]
+		assert isinstance(a0, algebra.Nominal)
+		assert a0.dfn is primitive.literal_number.dfn
+	
+	def test_bipartite(self):
+		module = self.load(zoo_ok, "bipartite_list")
+		assert not self.report.issues, self.report.complain_to_console()
+		cmap = module.globals['cmap']
+		assert_convergent(cmap)
+		assert isinstance(cmap.typ, algebra.Arrow)
+		res = cmap.typ.res
+		assert isinstance(res, algebra.Nominal)
+		assert res.dfn.nom.text == "critter"
+		assert res.params[0] != res.params[1]
+	
+	def test_recur(self):
+		""" (number, number) -> list[<a>] is the wrong type for a recurrence relation. """
+		module = self.load(zoo_ok, "recur")
+		assert not self.report.issues, self.report.complain_to_console()
+		assert_convergent(module.globals['recur'])
+
+def assert_convergent(sym):
+	# Maybe a function's type is "convergent" when it has no free variables in the result.
+	# In other words, all the type-variables in the result appear somewhere in a binding context:
+	# either its own parameters, or those of its parent functions.
+	assert isinstance(sym, syntax.Function)
+	typ = sym.typ
+	assert isinstance(typ, algebra.Arrow), typ
+	arg = set()
+	typ.arg.poll(arg)
+	
+	res = set()
+	typ.res.poll(res)
+	
+	free = res - arg
+	
+	assert not free, (typ.visit(algebra.Render()), free)
 
 if __name__ == '__main__':
 	unittest.main()
