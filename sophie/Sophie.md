@@ -134,7 +134,7 @@ case_expr -> CASE semicolon_list(when_clause) else_clause ESAC :CaseWhen
 when_clause -> .WHEN .expr THEN .expr
 else_clause -> ELSE expr ';'
 ```
-For a while, that was all. But then Sophie got pattern-matching based on variant-types:
+For a while, that was all. But then Sophie got type-matching based on variant-types:
 ```
 match_expr -> CASE .subject ':' .semicolon_list(alternative) .optional(else_clause) ESAC  :match_expr
 subject -> name | expr AS name :SubjectWithExpr

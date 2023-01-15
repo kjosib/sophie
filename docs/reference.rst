@@ -15,6 +15,18 @@ The primary authority is at `the literate grammar file <https://github.com/kjosi
 which -- despite reading mostly like a reference document -- is actually what the implementation uses internally.
 (If you must know, it's input to `this system <https://pypi.org/project/booze-tools/>`_.)
 
+Sophie is not exactly *block-structured:* module files have sections dedicated to:
+
+* Exports
+* Imports
+* Type definitions
+* Function definitions
+* "Main-Program" Behavior
+
+Every section is optional, but if it appears, it must appear in exactly that order.
+
+Within each section but the last, there is no ordering constraint.
+There is neither the need for, nor any concept of, *forward-declaration* of any kind.
 
 Semantics
 -----------
@@ -43,6 +55,8 @@ Semantics
 
 * Right now, the ``begin:`` clause lists expressions and the run-time prints the value of the expressions.
   However, if an expression is a ``turtle`` record, then the result is a turtle-graphics drawing. (See below.)
+
+* Module imports may not form a cycle.
 
 Intrinsics
 ------------
@@ -79,4 +93,38 @@ Predefined functions include:
 
 If you'd like to see how that's all been done,
 you can find the standard preamble `here <https://github.com/kjosib/sophie/blob/main/sophie/preamble.py>`_.
+
+
+Modularity, Imports, and Exports
+--------------------------------
+
+Sophie has nothing to say about how you name your module files.
+They're yours to name and organize as you wish.
+If you want spaces in your filenames, that should be no problem at all.
+So Sophie separates the notion of *where to find the module's code*
+from the notion of *how to refer, in code, to the module.*
+
+Simple Whole-Module Imports
+............................
+
+Suppose we have a module called ``path/to/feline.sg`` which defines a function called ``tabby``.
+And suppose further that you wish to call ``tabby`` from some other module.
+Then, you can first import the module, perhaps assigning it the (local) module-identifier ``cat``::
+
+    import:
+    "path/to/feline.sg" as cat;
+
+Now ``cat`` shows up as a named-namespace from which you can draw qualified-names.
+You can refer to the aforementioned ``tabby`` function as follows::
+
+    define:
+    foo = tabby@cat(123);  # expression must explicitly qualify cat-module reference
+
+Note that the module-identifier ``cat`` comes *after* the function name.
+This works like an internet e-mail address: You specify just enough to find the thing in context.
+
+Importing Specific Symbols
+...........................
+
+Not yet. Soon.
 

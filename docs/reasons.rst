@@ -16,6 +16,28 @@ to see where the thought-process began.
 Basically, a thought-experiment took on the characteristics of a proper hobby-project.
 And then ... here we are.
 
+Has Strictly Ordered Sections
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Dividing modules into named, ordered sections may seem like an outdated idea:
+Cobol and Standard Pascal have it; C++ and Python do not.
+But actually, it's just a design a continuum: Lisp is older than dirt and has no sections.
+
+Even in languages that do not *enforce* a particular grouping of elements by kind,
+you see just such a consistency in the wild. Programmers need a mental model
+of the "table of contents" for each file. In a free-form language,
+programmers must spend mental effort on building that table.
+To minimize wasted effort, certain patterns naturally emerge.
+The ordering between sections is neither arbitrary nor random, but informed by experience.
+
+Sophie consolidates decades of experience looking at what programmers *naturally* impose on themselves,
+and elevates convention to the rank of a grammatical imperative.
+You learn this ordering *once,* and then that's the way it is.
+
+It's the same with human languages and patterns like subject-verb agreement for person and number,
+or gender agreement for nouns and adjectives in Spanish:
+they take amortized-zero mental effort over the long haul once the learner internalizes the rule.
+
 Is Pure-Functional
 ~~~~~~~~~~~~~~~~~~~
 

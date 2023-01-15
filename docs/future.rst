@@ -10,39 +10,29 @@ This chapter is a stream-of-consciousness about uncertain design questions.
 Module System
 -----------------
 
-Stage One
+Status Quo
 ............
-The simplest imaginable "module system" would simply allow something like::
-
-    import:
-    "path/to/feline" as cat;
-    define:
-    foo = tabby@cat(123);  # expression must explicitly qualify cat-module reference
-
-and then ``cat`` shows up as a named-namespace from which you can draw qualified-names.
 Probably these names ought to be mentioned in the target module's ``export:`` list,
 but enforcing that stricture can come later if at all.
 
-To implement this, perhaps a module-object gets a name-space of imports.
-I add grammar to represent a qualified-name and hook it into the right places::
+Benefits:
+    You can see at a glance where every name comes from, wherever the reference may be buried.
+    This can be important in a several-hundred-line source file that orchestrates several other modules.
 
-    qualified_name -> name | name '@' name
+    The bulk of code is decoupled from how the modules may be laid out in the filesystem,
+    and can use convenient local names for imported units.
 
-Hurdles:
+    Namespace conflicts are essentially impossible, because there is nothing to conflict.
 
-* Currently, ``TypeCall`` and ``Lookup`` assume exactly a name-token. Their handlers would need an update.
-* The import mechanism would need to take control at a specific point in processing.
-* Presumably, relative paths should be interpreted relative to the script using them.
-* The import mechanism must not get into a loop. This means keeping track of active absolute paths.
-* Error reports currently don't track which file is relevant. That mechanism would completely change.
-* Type-checking should take place module-by-module, so that's another update.
+Points of possible aggravation:
+    Tagging every mention of an imported symbol with te
+    typecase syntax has the program recite the names of constructors *as visible,*
+    but they necessarily must form cohorts according to the variant-in-common.
 
-One point of possible aggravation: Right now match-patterns are just constructor names,
-but they necessarily must form cohorts according to the variant-in-common.
-If that variant is in an imported module, but the constructors are not brought into the local namespace,
-then today the patterns would need to mention the same module over and over again, which is bananas.
-It should be possible to just once hint at where to find a variant's definition,
-and then not mention it again.
+    If that variant is in an imported module, but the constructors are not brought into the local namespace,
+    then today the patterns would need to mention the same module over and over again, which is bananas.
+    It should be possible to just once hint at where to find a variant's definition,
+    and then not mention it again.
 
 
 Stage Two
