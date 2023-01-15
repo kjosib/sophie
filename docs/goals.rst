@@ -30,6 +30,7 @@ The next increment will probably focus on one of:
 
 * String-oriented functions.
 * Adding "Onion" types to the type algebra.
+* Improving the import mechanism.
 * Simple (nay, even simplistic!) console interaction
 
 Open Design Problems:
