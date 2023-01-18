@@ -419,3 +419,29 @@ On the surface, they also seem to benefit from something like reflection and run
 Yet Sophie deliberately eschews these, at least for now.
 Can a language like Sophie plug into this?
 The answer may change Sophie.
+
+Integrated Development
+-----------------------
+
+Sophie's surface syntax was designed with *code in notepad* in mind.
+Adding syntax highlights in Notepad++, for example, might be a fun adjunct project.
+
+Deep integration with VSCode would require constructing a language server.
+That could be nice project in itself. One thing of consequence:
+it pretty much requires a nontrivial approach to parse-error recovery.
+
+.. note::
+    I don't want to clutter the grammar reference with recovery heuristics.
+    I have something else in mind. This fact alone may motivate me to write a new parse-engine
+    based on the same tables. That could eventually feed back upstream.
+
+Finally, Sophie's syntax was originally designed to make it easy to host code in a database
+rather than files: there was a forest of functions each with a single body-expression.
+*A certain uncomfortable compromise with the type system presently undermines that conceptual purity:*
+*typecase alternatives can host local functions that pick up on the surrounding type hypothesis.*
+*This makes portions of the translator a touch more complex: Any expression may contain function definitions.*
+This, along with the unordered nature of each sort of definition (within its kind) mean that
+it should be straightforward to design a browser-hosted code editor that shows everything very nicely,
+similar in spirit perhaps to the Smalltalk-80 *System Browser.*
+
+But that's not what happened. (Yet?)
