@@ -14,7 +14,7 @@ zoo_ok = base_folder/"zoo/ok"
 
 def _load_good_example(which) -> list[syntax.Module]:
 	report = diagnostics.Report()
-	loader = modularity.Loader(static_root, report, verbosity=0)
+	loader = modularity.Loader(static_root, report, verbose=False)
 	loader.need_module(example_folder, which+".sg")
 	if report.issues:
 		report.complain_to_console()
@@ -115,7 +115,7 @@ class ZooOfFail(unittest.TestCase):
 			with self.subTest(bogon):
 				# Given
 				report = diagnostics.Report()
-				loader = modularity.Loader(static_root, report, verbosity=0)
+				loader = modularity.Loader(static_root, report, verbose=False)
 				# When
 				module = loader.need_module(zoo_fail, bogon + ".sg")
 				# Then
@@ -131,7 +131,7 @@ class ThingsThatShouldConverge(unittest.TestCase):
 	
 	def load(self, folder, which):
 		report = self.report
-		loader = modularity.Loader(static_root, report, verbosity=0)
+		loader = modularity.Loader(static_root, report, verbose=False)
 		module = loader.need_module(folder, which + ".sg")
 		if report.issues:
 			report.complain_to_console()

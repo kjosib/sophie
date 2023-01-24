@@ -14,7 +14,7 @@ class _CircularDependencyError(Exception):
 	""" This can only happen during a nested recursive call, so the exception is private. """
 
 class Loader:
-	def __init__(self, root, report:Report, verbose):
+	def __init__(self, root, report:Report, verbose:bool):
 		self._root = root
 		self._report = report
 		self._on_error = report.on_error("Loading Modules")
@@ -43,7 +43,7 @@ class Loader:
 		return module
 	
 	def _load_normal_file(self, abs_path):
-		if self._verbose >= 1:
+		if self._verbose:
 			print("Loading", abs_path)
 		module = parse_file(abs_path, self._report)
 		if not self._report.issues:
