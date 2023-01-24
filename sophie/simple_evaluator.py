@@ -6,7 +6,7 @@ No longer quite the simplest, most straight-forward possible implementation.
 from typing import Any, Union, Sequence
 from collections import namedtuple, deque
 import abc
-from .preamble import static_root
+from .preamble import static_root, do_turtle_graphics
 from . import syntax, primitive, ontology
 
 STATIC_LINK = object()
@@ -215,17 +215,15 @@ def run_program(each_module: Sequence[syntax.Module]):
 	for module in each_module:
 		_prepare_global_scope(SOPHIE_GLOBALS, module.globals.local.items())
 		for expr in module.main:
-			result = evaluate(expr, SOPHIE_GLOBALS)
-			if isinstance(result, Thunk): result = actual_value(result)
+			result = strict(expr, SOPHIE_GLOBALS)
 			if isinstance(result, dict):
-				dethunk(result)
 				tag = result.get("")
+				if tag == 'drawing':
+					do_turtle_graphics(actual_value, NIL, result)
+					continue
+				dethunk(result)
 				if tag == 'cons':
 					result = decons(result)
-				elif tag == 'drawing':
-					steps = decons(result['steps'])
-					do_turtle_graphics(steps)
-					result = None
 			if result is not None:
 				print(result)
 	return result
@@ -259,33 +257,6 @@ _ignore_these = {
 	primitive.NativeValue,
 }
 
-def do_turtle_graphics(steps):
-	import turtle, tkinter
-	root = tkinter.Tk()
-	root.focus_force()
-	root.title("Sophie: Turtle Graphics")
-	screen = tkinter.Canvas(root, width=1000, height=1000)
-	screen.pack()
-	t = turtle.RawTurtle(screen)
-	t.hideturtle()
-	t.speed(0)
-	t.screen.tracer(1 + int(len(steps)/1000))
-	t.screen.delay(0)
-	t.setheading(90)
-	for s in steps:
-		args = dict(s)  # Make a copy because of (deliberate) aliasing.
-		tag = args.pop("")
-		fn = getattr(t, tag)
-		fn(*args.values())  # Insertion-order is assured.
-	t.screen.update()
-	text = str(len(steps))+" turtle steps. Click the drawing or press any key to dismiss it."
-	print(text)
-	label = tkinter.Label(root, text=text)
-	label.pack()
-	root.bind("<ButtonRelease>", lambda event: root.destroy())
-	root.bind("<KeyPress>", lambda event: root.destroy())
-	tkinter.mainloop()
-
 def dethunk(result:dict):
 	"""
 	This can be considered as (most of) the first and most trivial I/O driver.
@@ -300,13 +271,13 @@ def dethunk(result:dict):
 			if isinstance(v, Thunk): work_dict[k] = v = actual_value(v)
 			if isinstance(v, dict): dict_queue.append(v)
 
-def decons(cons:dict) -> list:
+def decons(item:dict) -> list:
 	result = []
-	while isinstance(cons, dict) and cons.get("") == 'cons':
-		result.append(cons['head'])
-		cons = cons['tail']
-	if cons is not NIL:
-		result.append(cons)
+	while isinstance(item, dict) and item.get("") == 'cons':
+		result.append(item['head'])
+		item = item['tail']
+	if item is not NIL:
+		result.append(item)
 	return result
 
 SOPHIE_GLOBALS = {}
