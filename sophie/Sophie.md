@@ -29,7 +29,13 @@ typedef_section -> TYPE ':' semicolon_list(type_declaration)   | :empty
 define_section  -> DEFINE ':' semicolon_list(function)         | :empty
 main_section    -> BEGIN ':' semicolon_list(expr)              | :empty
 
-one_import -> short_string AS name
+one_import -> short_string AS name  :ImportModule
+            | FOREIGN short_string WHERE semicolon_list(ffi_group) END   :ImportForeign
+
+ffi_group -> comma_list(ffi_symbol) AS simple_type   :FFI_Group
+ffi_symbol -> name
+            | name '@' short_string   :FFI_Rename
+
 ```
 
 Since I'd like Sophie to support a unit/module system,

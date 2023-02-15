@@ -5,7 +5,7 @@ import os.path
 from boozetools.support.symtab import SymbolAlreadyExists
 from .diagnostics import Report
 from .front_end import parse_file
-from .syntax import Module, Literal
+from .syntax import Module, ImportModule
 from .resolution import resolve_words
 from .manifest import type_module
 from .type_inference import infer_types
@@ -58,16 +58,16 @@ class Loader:
 	
 	def _interpret_the_import_directives(self, module:Module, base_path):
 		""" Interpret the import directives in a module... """
-		for module_path, nom in module.imports:
-			assert isinstance(module_path, Literal), module_path
+		for directive in module.imports:
+			assert isinstance(directive, ImportModule)
 			try:
-				dependency = self.need_module(base_path, module_path.value)
-				module.module_imports[nom.text] = dependency.globals
+				dependency = self.need_module(base_path, directive.relative_path.value)
+				module.module_imports[directive.nom.text] = dependency.globals
 			except FileNotFoundError:
-				self._on_error([module_path], "Sorry, there's no such file.")
+				self._on_error([directive.relative_path], "Sorry, there's no such file.")
 			except _CircularDependencyError as cde:
 				cycle_text = "\n".join(["Confused by a circular dependency.", *cde.args[0]])
-				self._on_error([module_path], cycle_text)
+				self._on_error([directive.relative_path], cycle_text)
 			except SymbolAlreadyExists:
-				self._on_error([nom], "This module-alias is already used earlier.")
+				self._on_error([directive.nom], "This module-alias is already used earlier.")
 
