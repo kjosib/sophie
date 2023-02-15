@@ -17,8 +17,9 @@ The design goals, *in priority order,* are:
 6. Turtle graphics.
 7. A modular import system, probably with explicit exports.
 8. Strong type-inference so run-time troubles are few and far between.
-9. Event-driven concurrency over a sensible (maybe pluggable?) process-model. (Probably actors, as in Erlang.)
-10. Other nice things to have.
+9. Foreign Function Interface.
+10.. Event-driven concurrency over a sensible (maybe pluggable?) process-model. (Probably actors, as in Erlang.)
+11. Other nice things to have.
 
 When all is said and done, I'd like Sophie to be a viable alternative for learning (or deepening one's grasp of) comp-sci.
 The call-by-need pure-functional design gives Sophie a very different flavor from your average introductory language,
@@ -28,10 +29,12 @@ Things on Deck
 ----------------
 The next increment will probably focus on one of:
 
-* String-oriented functions.
-* Adding "Onion" types to the type algebra.
+* A usable subset of an FFI.
+* String-oriented functions -- by way of an FFI.
+* Adding "Onion Types" to the type algebra to attain *row polymorphism*.
 * Improving the import mechanism.
 * Simple (nay, even simplistic!) console interaction
+
 
 Open Design Problems:
 ---------------------
