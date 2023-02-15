@@ -36,9 +36,9 @@ class QualifiedReference(Reference):
 SIMPLE_TYPE = Union["TypeCall", "ArrowSpec", "ImplicitType"]
 
 class ArrowSpec(TypeExpr):
-	lhs: Sequence["SIMPLE_TYPE"]
+	lhs: Sequence[SIMPLE_TYPE]
 	_head: slice
-	rhs: Optional["SIMPLE_TYPE"]
+	rhs: Optional[SIMPLE_TYPE]
 	
 	def __init__(self, lhs, _head, rhs):
 		self.lhs = lhs
@@ -259,7 +259,7 @@ class SubjectWithExpr(NamedTuple):
 class Alternative(ValExpr):
 	pattern: Reference
 	sub_expr: ValExpr
-	where: Sequence["Function"]
+	where: Sequence[Function]
 	
 	namespace: NS  # WordDefiner fills
 	proxy: MatchProxy  # WordDefiner fills
@@ -304,7 +304,31 @@ def match_expr(subject, alternatives: list[Alternative], otherwise: Optional[Val
 		assert isinstance(subject, SubjectWithExpr)
 		return WithExpr(subject.expr, subject.nom, MatchExpr(subject.nom, alternatives, otherwise))
 
+class ImportDirective: pass
+
+class ImportModule(ImportDirective):
+	def __init__(self, relative_path:Literal, nom:Nom):
+		self.relative_path = relative_path
+		self.nom = nom
+
+class FFI_Rename:
+	def __init__(self, nom:Nom, foreign_name:Literal):
+		self.nom = nom
+		self.foreign_name = foreign_name
+
+class FFI_Group:
+	def __init__(self, symbols:list[Union[Nom, FFI_Rename]], type_expr:Union[TypeCall, ArrowSpec]):
+		self.symbols = symbols
+		self.type_expr = type_expr
+
+class ImportForeign(ImportDirective):
+	def __init__(self, source:Literal, groups:list[FFI_Group]):
+		self.source = source
+		self.groups = groups
+
 class Module:
+	imports: list[ImportModule]
+	foreign: list[ImportForeign]
 	module_imports: NameSpace[NS]  # Modules imported with an "as" clause.
 	wildcard_imports: NS  # Names imported with a wildcard. Sits underneath globals.
 	globals: NS  # WordDefiner pass creates this.
@@ -314,9 +338,10 @@ class Module:
 	all_record_specs: list[RecordSpec]  # Handy to save trouble around variants.
 	all_variant_specs: list[VariantSpec]
 	all_subtype_specs: list[SubTypeSpec]
-	def __init__(self, exports:list, imports:list, types:list, functions:list, main:list):
+	def __init__(self, exports:list, imports:list[ImportDirective], types:list, functions:list, main:list):
 		self.exports = exports
-		self.imports = imports
+		self.imports = [i for i in imports if isinstance(i, ImportModule)]
+		self.foreign = [i for i in imports if isinstance(i, ImportForeign)]
 		self.types = types
 		self.outer_functions = functions
 		self.main = main
