@@ -24,23 +24,17 @@ Quick primer on reading the grammar:
 start -> export_section import_section typedef_section define_section main_section END '.' :Module
 
 export_section  -> EXPORT ':' comma_list(name) ';'             | :empty
-import_section  -> IMPORT ':' semicolon_list(one_import)       | :empty
+import_section  -> IMPORT ':' semicolon_list(import_directive) | :empty
 typedef_section -> TYPE ':' semicolon_list(type_declaration)   | :empty
 define_section  -> DEFINE ':' semicolon_list(function)         | :empty
 main_section    -> BEGIN ':' semicolon_list(expr)              | :empty
-
-one_import -> short_string AS name  :ImportModule
-            | FOREIGN short_string WHERE semicolon_list(ffi_group) END   :ImportForeign
-
-ffi_group -> comma_list(ffi_symbol) AS simple_type   :FFI_Group
-ffi_symbol -> name
-            | name '@' short_string   :FFI_Rename
-
 ```
 
 Since I'd like Sophie to support a unit/module system,
-she needs a way to navigate namespaces. Here is that way:
+she needs a way to import modules and to navigate namespaces. Here is that way:
 ```
+import_directive -> short_string AS name  :ImportModule
+
 reference -> name     :PlainReference
   | name '@' name     :QualifiedReference
 ```
@@ -149,7 +143,26 @@ pattern -> reference
 ```
 Experience may later suggest expanding the `pattern` grammar, but this will do for now.
 
+-----
+
+**Foreign Function Interface**
+
+Most Sophie users won't need to worry about these rules,
+so they get their own section.
+```
+import_directive -> FOREIGN short_string WHERE semicolon_list(ffi_group) END   :ImportForeign
+
+ffi_group -> comma_list(ffi_symbol) ':' simple_type   :FFI_Group
+ffi_symbol -> name                    :FFI_Symbol
+            | name '@' short_string   :FFI_Alias
+```
+
+-----
+
 **Grammar Macros:**
+
+These grammar meta-rules make it easier to write the remainder of the grammar.
+With any luck, their names are clear enough.
 ```
 comma_separated_list(x) -> x :first | _ ',' x :more
 comma_list(x) ->  comma_separated_list(x) | comma_separated_list(x) ','

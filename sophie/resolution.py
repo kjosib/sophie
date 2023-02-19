@@ -4,6 +4,7 @@ By the time this pass is finished, every name points to its symbol table entry,
 from which we can find the kind, type, and definition.
 """
 from collections import defaultdict
+from importlib import import_module
 from boozetools.support.foundation import Visitor, strongly_connected_components_hashable
 from boozetools.support.symtab import NoSuchSymbol, SymbolAlreadyExists
 from . import syntax
@@ -76,12 +77,18 @@ class WordDefiner(WordPass):
 	globals : NS
 	
 	def __init__(self, module:syntax.Module, outer:NS, on_error):
-		self.redef = []
+		self.redef, self.missing_foreign, self.broken_foreign = [], [], []
 		self.globals = module.globals = outer.new_child(module)
 		self.all_match_expressions = module.all_match_expressions = []
 		self.all_functions = module.all_functions = []
 		for td in module.types:
 			self.visit(td)
+		for d in module.foreign:
+			self.visit(d, module.globals)
+		if self.missing_foreign:
+			on_error(self.missing_foreign, "Some foreign code could not be found.")
+		if self.broken_foreign:
+			on_error(self.broken_foreign, "Attempting to import this module threw an exception.")
 		for fn in module.outer_functions:  # Can't iterate all-functions yet; must build it first.
 			self.visit(fn, module.globals)
 		if self.redef:
@@ -150,6 +157,22 @@ class WordDefiner(WordPass):
 		for sub_ex in alt.where:
 			self.visit(sub_ex, inner)
 		self.visit(alt.sub_expr, inner)
+	
+	def visit_ImportForeign(self, d:syntax.ImportForeign, env:NS):
+		try: py_module = import_module(d.source.value)
+		except ModuleNotFoundError: self.missing_foreign.append(d.source)
+		except ImportError: self.broken_foreign.append(d.source)
+		else:
+			for group in d.groups:
+				for sym in group.symbols:
+					self.visit(sym, env, py_module)
+	
+	def visit_FFI_Alias(self, sym:syntax.FFI_Alias, env:NS, py_module):
+		key = sym.nom.text if sym.alias is None else sym.alias.value
+		try: sym.val = getattr(py_module, key)
+		except KeyError: self.missing_foreign.append(sym)
+		else: self._install(env, sym)
+	
 
 class StaticDepthPass(WordPass):
 	# Assign static depth to the definitions of all parameters and functions.
@@ -194,6 +217,8 @@ class WordResolver(WordPass):
 		self.module = module
 		for td in module.types:
 			self.visit(td)
+		for d in module.foreign:
+			self.visit(d)
 		for fn in module.all_functions:
 			self.visit(fn)
 		for expr in module.main:
@@ -266,6 +291,10 @@ class WordResolver(WordPass):
 		if dfn is not None and not dfn.has_value_domain():
 			self.non_value.append(expr.ref)
 
+	def visit_ImportForeign(self, d:syntax.ImportForeign):
+		for group in d.groups:
+			self.visit(group.type_expr, self.module.globals)
+
 def build_match_dispatch_tables(module: syntax.Module, on_error):
 	""" The simple evaluator uses these. """
 	for mx in module.all_match_expressions:
@@ -293,6 +322,8 @@ class AliasChecker(Visitor):
 		self.graph = defaultdict(list)
 		for td in module.types:
 			self.visit(td)
+		for d in module.foreign:
+			self.visit(d)
 		for fn in module.all_functions:
 			self.visit_Function(fn)
 		for expr in module.main:
@@ -405,3 +436,8 @@ class AliasChecker(Visitor):
 	
 	def visit_ExplicitList(self, l:syntax.ExplicitList):
 		pass
+	
+	def visit_ImportForeign(self, d:syntax.ImportForeign):
+		for group in d.groups:
+			self.visit(group.type_expr)
+

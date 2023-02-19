@@ -116,6 +116,7 @@ def _eval_match_expr(expr:syntax.MatchExpr, dynamic_env:dict):
 	return delay(dynamic_env, branch)
 
 def _lookup_udf(udf: syntax.Function, env: dict):
+	# I guess this is where memoization comes from.
 	try: return env[udf]
 	except KeyError:
 		env[udf] = it = Closure(env, udf) if udf.params else delay(env, udf.expr)
@@ -123,9 +124,6 @@ def _lookup_udf(udf: syntax.Function, env: dict):
 
 def _lookup_by_name(dfn, env:dict):
 	return env[dfn.nom.text]
-
-def _lookup_NativeValue(dfn, _:dict):
-	return dfn.val
 
 def _lookup_all_else(dfn, env:dict):
 	return env[dfn]
@@ -143,8 +141,8 @@ LOOKUP : dict[type, callable] = {
 	syntax.MatchProxy: _lookup_by_name,
 	syntax.TypeDecl: _lookup_all_else,
 	syntax.SubTypeSpec: _lookup_all_else,
-	primitive.NativeFunction: _lookup_all_else,
-	primitive.NativeValue: _lookup_NativeValue,
+	syntax.FFI_Alias: _lookup_all_else,
+	ontology.Native: _lookup_all_else,
 }
 
 def lookup(dfn:ontology.Symbol, env:dict) -> LAZY_VALUE:
@@ -183,18 +181,13 @@ class Closure(Procedure):
 
 class Primitive(Procedure):
 	""" All parameters to primitive procedures are strict. Also a kind of value, like a closure. """
-	def __init__(self, key:str, native:primitive.NativeFunction):
-		assert isinstance(key, str)
-		self._key = key
-		self._native = native.fn
-		self._arity = native.arity
+	def __init__(self, fn:callable):
+		self._fn = fn
 		
 	def apply(self, caller_env:dict, args:list[syntax.ValExpr]) -> STRICT_VALUE:
-		if self._arity != len(args):
-			message = "Native procedure %s expected %d args, got %d."
-			raise TypeError(message%(self._key, self._arity, len(args)))
+		# Can't have arity mismatch anymore; the type checker catches it. I think.
 		values = [actual_value(evaluate(a, caller_env)) for a in args]
-		return self._native(*values)
+		return self._fn(*values)
 
 class Constructor(Procedure):
 	def __init__(self, key:str, fields:list[str]):
@@ -241,12 +234,18 @@ def _prepare_global_scope(env:dict, items):
 				raise ValueError("Tagged scalars (%r) are not implemented."%key)
 		elif isinstance(dfn, syntax.Function):
 			env[dfn] = _lookup_udf(dfn, env)
-		elif isinstance(dfn, primitive.NativeFunction):
-			env[dfn] = Primitive(key, dfn)
+		elif isinstance(dfn, ontology.Native):
+			env[dfn] = _native_object(dfn)
 		elif type(dfn) in _ignore_these:
 			pass
 		else:
 			raise ValueError("Don't know how to deal with %r %r"%(type(dfn), key))
+
+def _native_object(dfn:ontology.Native):
+	if callable(dfn.val):
+		return Primitive(dfn.val)
+	else:
+		return dfn.val
 
 _ignore_these = {
 	# type(None),
@@ -254,7 +253,6 @@ _ignore_these = {
 	syntax.TypeCall,
 	syntax.VariantSpec,
 	primitive.PrimitiveType,
-	primitive.NativeValue,
 }
 
 def dethunk(result:dict):

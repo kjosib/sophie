@@ -1,7 +1,33 @@
 """
 # Built-in / primitive definitions and types are in the docstring of this Python file.
 # Native types flag, number, and string are installed separately in "native" Python.
-# Also for the moment, I import (most of) Python's math library directly into the primitive-root namespace.
+# Also for the moment, I import (most of) Python's math library.
+
+import:
+
+foreign "math" where
+
+	e, inf, nan, pi, tau : number;
+	
+	acos, acosh, asin, asinh, atan, atanh,
+	ceil, cos, cosh, degrees, erf, erfc, exp, expm1,
+	fabs, factorial, floor, gamma, gcd,
+	isqrt, lcm, lgamma, log, log10, log1p, log2,
+	modf, radians, sin, sinh, sqrt,
+	tan, tanh, trunc, ulp : (number) -> number;
+	
+	isfinite, isinf, isnan : (number) -> flag;
+	
+	atan2, comb, copysign, dist, fmod, ldexp, log_base@"log",
+	nextafter, perm, pow, remainder : (number, number) -> number;
+	
+end;
+
+# A few of Python's standard math functions are trouble (currently).
+	# ``log`` is bivalent: You can pass it one or two parameters. Sophie gets around this by aliasing ``log_base``.
+	# ``dist`` computes Euclidean distance between two points specified as vectors, but Sophie still lacks these.
+	# ``fsum``, ``prod``, and ``hypot`` also work on vectors; same problem. (Pure-Sophie versions are provided.)
+	# ``frexp`` returns a tuple, which would confuse the evaluator. It needs an adapter to a known record type.
 
 type:
 	list[x] is CASE:
@@ -72,6 +98,7 @@ define:
 	esac;
 	
 	sum(xs) = reduce(add, 0, xs) where add(a,b) = a+b; end sum;
+	product(xs) = reduce(mul, 1, xs) where mul(a,b) = a*b; end product;
 	hypot(xs) = sqrt(sum(map(square, xs))) where square(x) = x*x; end hypot;
 end.
 

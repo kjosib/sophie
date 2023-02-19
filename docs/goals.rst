@@ -18,7 +18,7 @@ The design goals, *in priority order,* are:
 7. A modular import system, probably with explicit exports.
 8. Strong type-inference so run-time troubles are few and far between.
 9. Foreign Function Interface.
-10.. Event-driven concurrency over a sensible (maybe pluggable?) process-model. (Probably actors, as in Erlang.)
+10. Event-driven concurrency over a sensible (maybe pluggable?) process-model. (Probably actors, as in Erlang.)
 11. Other nice things to have.
 
 When all is said and done, I'd like Sophie to be a viable alternative for learning (or deepening one's grasp of) comp-sci.
@@ -29,18 +29,17 @@ Things on Deck
 ----------------
 The next increment will probably focus on one of:
 
-* A usable subset of an FFI.
-* String-oriented functions -- by way of an FFI.
+* String-oriented functions (by way of the new FFI)
 * Adding "Onion Types" to the type algebra to attain *row polymorphism*.
-* Improving the import mechanism.
 * Simple (nay, even simplistic!) console interaction
-
 
 Open Design Problems:
 ---------------------
-* Better error messages. (I have an idea related to sentential forms.)
+* Better error messages. (For parse errors, I have an idea related to sentential forms.)
+* Better error display.
 * *rest*-parameters
-* Actor Model
+* Partial functions
+* Actor Model? Algebraic Effects? Pluggable Drivers?
 
 Other Nice Things to Have
 --------------------------

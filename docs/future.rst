@@ -446,121 +446,19 @@ similar in spirit perhaps to the Smalltalk-80 *System Browser.*
 
 But that's not what happened. (Yet?)
 
-String Functions and the Foreign Function Interface
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+String Functions and *IOlist*
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Herein, I'm going to use the abbreviation **FF** for "Foreign Function".
-In this usage, it may also stand for an ordinary value imported from elsewhere, such as ``pi`` or ``e``.
-Similarly, **FFI** means "Foreign Function Interface", which refers to the means by which
-one language (in this case Sophie) makes available functions written in another language.
-For this stage in Sophie's evolution, that normally means interfacing with Python.
-(This should come as no surprise, as Sophie is written in Python for the time being.)
+The beginnings of a viable FFI (Foreign Function Interface) are now defined.
+Soon enough, basic string manipulations in Sophie will be possible.
+I'll probably start with substring extraction, concatenation, and garden variety transforms.
 
-The Original Oversimplified FFI
--------------------------------------
+I should mention the Erlang concept of *IOList* here. Out of the box,
+Erlang aims to minimize pointless copying involved in preparing nontrivial data blocks.
+All of its output functions accept a branching-tree structure, the leaf-nodes of which
+represent either strings or things which can coerce to strings. I really like this idea
+(except for the coercion; Sophie shall have none of that) but I'm not planning to
+build it straight into the very *concept* of a string type. On the contrary,
+the Sophie incarnation of *IOlist* will be a distinct and proper type.
+For performance reasons, the conversion from *IOlist* to *string* will not be done in Sophie.
 
-Originally, ``primitive.py`` would:
-
-* install types ``number``, ``string``, and ``flag`` as ``PrimitiveType`` symbols in a root namespace.
-* install both implementations and functional-types of the syntactic operators (like ``+`` or ``<``)
-  into a special data structure for use by the evaluator and type-checker respectively.
-* install a mess of intrinsic math functions into the same root namespace as the primitive types,
-  backed by ``NativeValue`` and ``NativeFunction`` symbols.
-
-That last step might better be done some other way.
-(The middle step might someday fall to a similar argument, but I digress.)
-
-Many of the simplest string operations could be installed alongside the math intrinsics
-with no real innovation over how the math intrinsics were first done.
-Concat/join and substring-extraction are reasonably well-defined as functions over primitive types.
-
-But unlike the simple math imports of the earliest Sophie incarnations,
-it's typical to include various string-search mechanisms in modern languages.
-These rely on an option/maybe type for their return value.
-But the right way to define composite types is ordinary Sophie code.
-Like ``list``, a ``maybe`` type ought to be defined in the standard preamble.
-It's infeasible (or just pointlessly-tedious) to try push this stuff into ``primitive.py``.
-
-The original evaluator already assumes the standard preamble defines ``cons`` and ``nil``,
-so it's entirely reasonable to suppose that the string functions
-might rely on ``just`` and ``nope`` also.
-The question becomes how to make sure all the right composite types are
-loaded before trying to link in foreign functions.
-
-The Need For Improvement
--------------------------
-
-Native-style functional symbols must join a module's symbol-table some time between
-parsing and checking all the names. With a few tweaks to Sophie's import mechanism,
-this work could facilitate a more general foreign-function interface.
-
-The first step in this direction might be to move the math-intrinsic bits into the preamble module.
-Right now we don't construct the module's global namespace until ``WordDefiner`` begins.
-But we clearly need our new functions in said namespace before ``WordResolver`` does its thing.
-
-The beginning of a solution might be a "native appendix" to contain native symbols.
-The standard name-resolution pipeline could just consider that extra bit along the way.
-But how to populate such a thing? In particular, the type declarations could get weird.
-
-SmallTalk and Haskell both take the approach of special syntax to bring the very most
-primitive objects into being, and presumably something similar for FFI generally.
-This can work, as long as:
-
-* the implementation can find the native objects (e.g. Python functions) to import, and
-* the type declarations for these objects are completely proper.
-
-Implementation Issues
----------------------
-
-Matching data types across foreign interfaces is probably the most tedious problem.
-The original ``primitive.py`` could reasonably just iterate through Python's  ``math``-module
-attribute dictionary and use reflection to build a pre-resolved manifest-typed signature
-for the native-style symbols. But I don't think that's quite sufficient anymore.
-
-Keeping It Simple, Simon
-.........................
-**FF**s run in packs (equivalence classes) defined principally by their
-type signature. For example, there are quite a number of math intrinsics that
-take one number to another. Just a few take two numbers to another.
-This fact probably makes a useful organizing principle for bringing native functions into the fold.
-
-For those **FF**s where the inputs and outputs are all primitive types, it's all downhill from here.
-The simplest sort of binding just forces the inputs, calls the **FF**, and treats the result as a runtime value.
-
-"Too Simple" Is A Thing
-........................
-What if the function needs to deal in composite types or opaque types, or might raise exceptions?
-The Sophie-side definition might look the same (whatever that turns out to be)
-but the Sophie runtime must expect entry points that are savvy to Sophie's chosen representations
-for composite types and laziness.
-
-Since I moved the turtle-graphics implementation to ``preamble.py``,
-it's effectively the first savvy binding. That driver takes three parameters:
-
-* ``force`` is a function to de-thunk values.
-* ``NIL`` is the object-identity of the Sophie evaluator's NIL object.
-
-Passing ``NIL`` is a minor performance hack specific to the turtle-graphics driver.
-More generally, a savvy Python binding might need the distinguished runtime objects
-corresponding to any global name. So it's better to provide a general look-up function.
-
-At the moment, all global objects go in one dictionary called ``SOPHIE_GLOBALS``,
-where the keys are the corresponding static ``Symbol`` objects.
-
-If there's some natural correspondence between *savvy-binding python-modules* and Sophie modules,
-then these "native-code" modules could quite reasonably participate in the ordinary name-resolution
-and symbol-binding sequence, perhaps exposing standard-named entry points conforming to a "plug-in" API.
-
-This begins to suggest a standard format for this.
-Maybe Sophie code goes in the module's docstring,
-while the rest of the module conforms to an API.
-This model could then play along with a slightly-enhanced module loader bit.
-But:
-* How specifically should native-style objects declare their types?
-  One possible rule would be that every **FF** must have a named-type known to the corresponding Sophie module.
-  However, that name can absolutely be private.
-* This kinda-works for Python-hosted Sophie but doesn't really correlate to a language-agnostic FFI concept.
-
-Synthesis
-............
-In any case, it's also worth having a close look at how JNI does all this.

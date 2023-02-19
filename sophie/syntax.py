@@ -7,7 +7,7 @@ Class-level type annotations make peace with pycharm wherever later passes add f
 from typing import Optional, Any, Sequence, NamedTuple, Union
 from boozetools.parsing.interface import SemanticError
 from boozetools.support.symtab import NameSpace
-from .ontology import Nom, Symbol, NS, Reference, TypeExpr, ValExpr, MatchProxy
+from .ontology import Nom, Symbol, SophieType, Native, NS, Reference, TypeExpr, ValExpr, MatchProxy
 from . import algebra
 
 class TypeParameter(Symbol):
@@ -311,13 +311,18 @@ class ImportModule(ImportDirective):
 		self.relative_path = relative_path
 		self.nom = nom
 
-class FFI_Rename:
-	def __init__(self, nom:Nom, foreign_name:Literal):
+class FFI_Alias(Native):
+	def __init__(self, nom:Nom, alias:Optional[Literal]):
+		super().__init__(nom)
 		self.nom = nom
-		self.foreign_name = foreign_name
+		self.alias = alias
+
+def FFI_Symbol(nom:Nom):
+	return FFI_Alias(nom, None)
 
 class FFI_Group:
-	def __init__(self, symbols:list[Union[Nom, FFI_Rename]], type_expr:Union[TypeCall, ArrowSpec]):
+	typ: SophieType  # Fill during type manifesting.
+	def __init__(self, symbols:list[FFI_Alias], type_expr:Union[TypeCall, ArrowSpec]):
 		self.symbols = symbols
 		self.type_expr = type_expr
 
