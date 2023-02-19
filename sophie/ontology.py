@@ -1,3 +1,4 @@
+from typing import Any
 from boozetools.support.symtab import NameSpace
 
 class Nom:
@@ -40,6 +41,14 @@ class Symbol:
 	def __repr__(self): return self.nom.text
 	def head(self): return self.nom.head()
 	def has_value_domain(self) -> bool: raise NotImplementedError(type(self))
+
+class Native(Symbol):
+	""" Superclass of built-in and foreign (Python) symbols. """
+	static_depth = 0
+	val:Any  # Fill in during WordDefiner pass
+	def has_value_domain(self): return True
+	def __init__(self, nom:Nom):
+		self.nom = nom
 
 class Expr:
 	def head(self) -> slice:

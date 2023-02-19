@@ -64,22 +64,6 @@ class Nominal(SophieType):
 	def mentions(self, v):
 		return any(p.mentions(v) for p in self.params)
 
-class Arrow(SophieType):
-	def __init__(self, arg: SophieType, res: SophieType): self.arg, self.res = arg, res
-	def __repr__(self): return "%s -> %s" % (self.arg, self.res)
-	def visit(self, visitor): return visitor.on_arrow(self)
-	def fresh(self, gamma: dict): return Arrow(self.arg.fresh(gamma), self.res.fresh(gamma))
-	def unify_with(self, other, enq):
-		# Structural Equivalence
-		enq(self.arg, other.arg)
-		enq(self.res, other.res)
-	def phylum(self): return Arrow
-	def poll(self, seen:set):
-		self.arg.poll(seen)
-		self.res.poll(seen)
-	def mentions(self, v):
-		return self.arg.mentions(v) or self.res.mentions(v)
-
 class Product(SophieType):
 	def __init__(self, fields: Sequence[SophieType]): self.fields = fields
 	def __repr__(self): return "(%s)" % (",".join(map(str, self.fields)))
@@ -94,6 +78,22 @@ class Product(SophieType):
 		for k in self.fields: k.poll(seen)
 	def mentions(self, v):
 		return any(p.mentions(v) for p in self.fields)
+
+class Arrow(SophieType):
+	def __init__(self, arg: Product, res: SophieType): self.arg, self.res = arg, res
+	def __repr__(self): return "%s -> %s" % (self.arg, self.res)
+	def visit(self, visitor): return visitor.on_arrow(self)
+	def fresh(self, gamma: dict): return Arrow(self.arg.fresh(gamma), self.res.fresh(gamma))
+	def unify_with(self, other, enq):
+		# Structural Equivalence
+		enq(self.arg, other.arg)
+		enq(self.res, other.res)
+	def phylum(self): return Arrow
+	def poll(self, seen:set):
+		self.arg.poll(seen)
+		self.res.poll(seen)
+	def mentions(self, v):
+		return self.arg.mentions(v) or self.res.mentions(v)
 
 #########################
 

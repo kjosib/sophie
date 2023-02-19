@@ -2,6 +2,7 @@
 Things related to the manifest portion of the type information.
 
 """
+import inspect
 from boozetools.support.foundation import Visitor
 from . import syntax, algebra, ontology
 
@@ -36,6 +37,8 @@ class TypeBuilder(Visitor):
 		for td in module.types:
 			if isinstance(td.body, syntax.VariantSpec): self._patch_variant(td.body)
 			elif isinstance(td.body, syntax.RecordSpec): self._patch_record(td.body)
+		for d in module.foreign:
+			self.visit(d)
 		for fn in module.all_functions:
 			self.visit_Function(fn)
 
@@ -80,9 +83,32 @@ class TypeBuilder(Visitor):
 		fp.typ = it
 		return it
 	
+	def visit_ImportForeign(self, d:syntax.ImportForeign):
+		for group in d.groups:
+			typ = group.typ = self.visit(group.type_expr)
+			for sym in group.symbols:
+				sym.typ = typ
+			if isinstance(typ, algebra.Arrow):
+				probe = [None]*len(typ.arg.fields)
+				for sym in group.symbols:
+					self._check_arity(probe, sym)
+	
+	def _check_arity(self, probe, sym):
+		fn = sym.val
+		if not callable(fn):
+			self.on_error([sym.nom], "This thing is declared as a function, but the underlying Python object is not callable.")
+			return
+		try: signature = inspect.signature(fn)
+		except ValueError: return  # There are some broken signatures among the built-ins.
+		try: signature.bind(*probe)
+		except TypeError:
+			self.on_error([sym.nom], "This function won't accept %d (positional) parameters."%len(probe))
+		
+					
+
 def check_match_expressions(module:syntax.Module, on_error):
 	for mx in module.all_match_expressions:
-		patterns : list[ontology.Nom] = [alt.pattern for alt in mx.alternatives]
+		patterns : list[ontology.Reference] = [alt.pattern for alt in mx.alternatives]
 		bogons = [p for p in patterns if type(p.dfn) is not syntax.SubTypeSpec]
 		if bogons:
 			on_error(bogons, "This is not a subtype.")

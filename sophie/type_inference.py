@@ -160,8 +160,7 @@ class DeductionEngine(Visitor):
 		if isinstance(dfn, (
 				syntax.FormalParameter,
 				ontology.MatchProxy,
-				primitive.NativeFunction,
-				primitive.NativeValue,
+				ontology.Native,
 		)):
 			return dfn.typ
 		if isinstance(dfn, syntax.SubTypeSpec):

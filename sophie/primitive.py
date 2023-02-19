@@ -1,6 +1,5 @@
-import inspect
 from functools import lru_cache
-from .ontology import NS, Symbol, Nom
+from .ontology import NS, Symbol, Nom, Native
 from .algebra import SophieType, Product, Arrow, TypeVariable, Nominal
 
 root_namespace = NS(place=None)
@@ -17,24 +16,6 @@ class PrimitiveType(Symbol):
 	def __repr__(self): return "<%s>"%self.nom
 	def has_value_domain(self): return False  # .. HACK ..
 
-class Native(Symbol):
-	""" Superclass of built-in run-time things. """
-	static_depth = 0
-	def has_value_domain(self): return True
-
-class NativeValue(Native):
-	def __init__(self, name:str, value, typ):
-		self.nom = Nom(name, None)
-		self.val = value
-		self.typ = typ
-
-class NativeFunction(Native):
-	""" Distinct from NativeValue in that the runtime needs to deal well with calling native functions. """
-	def __init__(self, name:str, fn):
-		self.nom = Nom(name, None)
-		self.fn = fn
-		self.arity = len(inspect.signature(fn).parameters.keys())
-		self.typ = _arrow_of_math(self.arity)  # Cheap hack for now; must improve later.
 
 def _built_in_type(name:str) -> Nominal:
 	entry = PrimitiveType(name)
@@ -88,21 +69,13 @@ def _init():
 	ops["LogicalAnd"] = False, logical
 	ops["LogicalOr"] = True, logical
 	
-	NON_WORKING = {"hypot", "log"}
-	def install(symbol): root_namespace[symbol.nom.text] = symbol
-	def mathfn(name, native): install(NativeFunction(name, native))
-	for name in dir(math):
-		if not (name.startswith("_") or name in NON_WORKING):
-			val = getattr(math, name)
-			if isinstance(val, float):
-				install(NativeValue(name, val, literal_number))
-			elif callable(val):
-				mathfn(name, val)
-			else: raise ValueError(val)
-	mathfn('log', lambda x:math.log(x))
-	mathfn('log_base', lambda x,b: math.log(x, b))
-	install(NativeValue('yes', True, literal_flag))
-	install(NativeValue('no', False, literal_flag))
+	def install_flag(name: str, value):
+		symbol = Native(Nom(name, None))
+		symbol.val = value
+		symbol.typ = literal_flag
+		root_namespace[name] = symbol
+	install_flag('yes', True)
+	install_flag('no', False)
 
 _init()
 
