@@ -1,0 +1,29 @@
+# Infinite Sequences
+
+# The seq (sequence) type defined here is ill-founded.
+# By that I mean that the type has no base-case.
+# That's OK in a Sophie program so long as you understand what you're doing.
+# You can involve structures like these in your computations because evaluation is by-need.
+# You just need to make sure there's some other thing going on that guarantees
+# you'll only ever need a finite prefix of the infinite sequence.
+
+type:
+    seq[x] is (head:x, tail:seq[x]);
+
+define:
+    # With no annotations, the type checker should figure this out.
+    # Currently it plays dumb about structural recursion, but that should eventually resolve.
+    # It parses at least, so here it is.
+    m0(fn, s) = seq(fn(s.head), m0(fn, s.tail));
+
+    # With a simple generic annotation on the sequence type, everything works out:
+    m1(fn, s:seq[?z]) = seq(fn(s.head), m1(fn, s.tail));
+
+    # It should also work if we don't bother naming the element type:
+    m2(fn, s:seq[?]) = seq(fn(s.head), m2(fn, s.tail));
+
+    # And finally, we should be able to elide the type-parameters if they're to be inferred
+    # m3(fn, s:seq) = seq(fn(s.head), m3(fn, s.tail));
+    # But that part doesn't work yet.
+
+end.

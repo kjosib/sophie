@@ -83,6 +83,12 @@ class TypeBuilder(Visitor):
 		fp.typ = it
 		return it
 	
+	def visit_GenericType(self, gt:syntax.GenericType):
+		return gt.dfn.typ
+
+	def visit_ImplicitType(self, it:syntax.ImplicitType):
+		return algebra.TypeVariable()
+
 	def visit_ImportForeign(self, d:syntax.ImportForeign):
 		for group in d.groups:
 			typ = group.typ = self.visit(group.type_expr)

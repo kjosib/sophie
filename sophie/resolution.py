@@ -34,8 +34,14 @@ def resolve_words(module: syntax.Module, outside: NS, report):
 
 class WordPass(Visitor):
 	""" Simple pass-through for word-agnostic expression syntax. """
-	def visit_Literal(self, l:syntax.Literal, env:NS): pass
+	def visit_ArrowSpec(self, it: syntax.ArrowSpec, env: NS):
+		for a in it.lhs:
+			self.visit(a, env)
+		self.visit(it.rhs, env)
 	
+	def visit_Literal(self, l:syntax.Literal, env:NS): pass
+	def visit_ImplicitType(self, it:syntax.ImplicitType, env:NS): pass
+
 	def visit_ShortCutExp(self, it: syntax.ShortCutExp, env: NS):
 		self.visit(it.lhs, env)
 		self.visit(it.rhs, env)
@@ -105,42 +111,51 @@ class WordDefiner(WordPass):
 			self._install(td.namespace, param)
 			param.quantifiers = ()
 			quantifiers.append(param.typ)
-		self.visit(td.body)
+		self.visit(td.body, td.namespace)
 		self._install(self.globals, td)
 		td.quantifiers = tuple(quantifiers)
 
-	def visit_VariantSpec(self, vs:syntax.VariantSpec):
+	def visit_VariantSpec(self, vs:syntax.VariantSpec, env:NS):
 		vs.namespace = NS(place=vs)
 		for subtype in vs.subtypes:
 			assert isinstance(subtype, syntax.SubTypeSpec)
 			self._install(self.globals, subtype)
 			self._install(vs.namespace, subtype)
 			if subtype.body is not None:
-				self.visit(subtype.body)
+				self.visit(subtype.body, env)
 		return
 
-	def visit_RecordSpec(self, rs:syntax.RecordSpec):
+	def visit_RecordSpec(self, rs:syntax.RecordSpec, env:NS):
 		# Ought to have a local name-space with names having types.
 		rs.namespace = NS(place=rs)
 		for f in rs.fields:
 			self._install(rs.namespace, f)
 		return
 
-	def visit_ArrowSpec(self, it:syntax.ArrowSpec):
-		pass
-
-	def visit_TypeCall(self, it:syntax.TypeCall):
-		pass
+	def visit_TypeCall(self, it:syntax.TypeCall, env:NS):
+		for a in it.arguments:
+			self.visit(a, env)
 
 	def visit_Function(self, fn:syntax.Function, env:NS):
 		self.all_functions.append(fn)
 		self._install(env, fn)
 		inner = fn.namespace = env.new_child(fn)
 		for param in fn.params:
-			self._install(inner, param)
+			self.visit(param, inner)
+		if fn.result_type_expr is not None:
+			self.visit(fn.result_type_expr, inner)
 		for sub_fn in fn.where:
 			self.visit(sub_fn, inner)
-		self.visit(fn.expr, inner) # Might need to deal with let-expressions.
+		self.visit(fn.expr, inner)
+	
+	def visit_FormalParameter(self, fp:syntax.FormalParameter, env:NS):
+		self._install(env, fp)
+		if fp.type_expr is not None:
+			self.visit(fp.type_expr, env)
+	
+	def visit_GenericType(self, gt:syntax.GenericType, env:NS):
+		if gt.nom.text not in env:
+			self._install(env, syntax.TypeParameter(gt.nom))
 	
 	def visit_Lookup(self, l:syntax.Lookup, env:NS): pass
 
@@ -231,11 +246,6 @@ class WordResolver(WordPass):
 	def visit_TypeDecl(self, td:syntax.TypeDecl):
 		self.visit(td.body, td.namespace)
 	
-	def visit_ArrowSpec(self, it: syntax.ArrowSpec, env: NS):
-		for a in it.lhs:
-			self.visit(a, env)
-		self.visit(it.rhs, env)
-	
 	def visit_VariantSpec(self, vs:syntax.VariantSpec, env:NS):
 		for st in vs.subtypes:
 			if st.body is not None:
@@ -261,6 +271,9 @@ class WordResolver(WordPass):
 		space = self._lookup(ref.space, self.module.module_imports)
 		ref.dfn = self._lookup(ref.nom, space) if space else None
 	
+	def visit_GenericType(self, ref:syntax.GenericType, env:NS):
+		ref.dfn = self._lookup(ref.nom, env)
+	
 	def visit_TypeCall(self, tc:syntax.TypeCall, env:NS):
 		self.visit(tc.ref, env)
 		for p in tc.arguments:
@@ -269,9 +282,9 @@ class WordResolver(WordPass):
 	def visit_Function(self, fn:syntax.Function):
 		for param in fn.params:
 			if param.type_expr is not None:
-				self.visit(param.type_expr, self.module.globals)
+				self.visit(param.type_expr, fn.namespace)
 		if fn.result_type_expr is not None:
-			self.visit(fn.result_type_expr, self.module.globals)
+			self.visit(fn.result_type_expr, fn.namespace)
 		self.visit(fn.expr, fn.namespace)
 
 	def visit_MatchExpr(self, mx:syntax.MatchExpr, env:NS):
@@ -391,6 +404,9 @@ class AliasChecker(Visitor):
 			self.graph[expr].append(expr.rhs)
 			self.visit(expr.rhs)
 
+	def visit_GenericType(self, expr:syntax.GenericType):pass
+	def visit_ImplicitType(self, it:syntax.ImplicitType): pass
+
 	def visit_Function(self, fn:syntax.Function):
 		for p in fn.params:
 			self.visit(p)
@@ -398,6 +414,10 @@ class AliasChecker(Visitor):
 			self.visit(fn.result_type_expr)
 		self.graph[fn].append(fn.expr)
 		self.visit(fn.expr)
+
+	def visit_FieldReference(self, fr:syntax.FieldReference):
+		self.graph[fr].append(fr.lhs)
+		self.visit(fr.lhs)
 
 	def visit_MatchExpr(self, mx: syntax.MatchExpr):
 		self.graph[mx].append(mx.subject_dfn)
@@ -431,11 +451,8 @@ class AliasChecker(Visitor):
 		else:
 			self.non_values.append(lu.ref)
 	
-	def visit_Literal(self, l:syntax.Literal):
-		pass
-	
-	def visit_ExplicitList(self, l:syntax.ExplicitList):
-		pass
+	def visit_Literal(self, l:syntax.Literal): pass
+	def visit_ExplicitList(self, l:syntax.ExplicitList): pass
 	
 	def visit_ImportForeign(self, d:syntax.ImportForeign):
 		for group in d.groups:
