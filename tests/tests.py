@@ -170,6 +170,14 @@ class ThingsThatShouldConverge(unittest.TestCase):
 		module = self.load(zoo_ok, "recur")
 		assert not self.report.issues, self.report.complain_to_console()
 		assert_convergent(module.globals['recur'])
+	
+	def test_sequence(self):
+		""" Structural recursion should do the right thing. """
+		module = self.load(zoo_ok, "sequence")
+		assert not self.report.issues, self.report.complain_to_console()
+		assert_convergent(module.globals['m1'])
+		assert_convergent(module.globals['m2'])
+	
 
 def assert_convergent(sym):
 	# Maybe a function's type is "convergent" when it has no free variables in the result.

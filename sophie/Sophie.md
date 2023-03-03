@@ -67,15 +67,14 @@ field -> name ':' simple_type   :FormalParameter
 
 simple_type -> named_type | arrow_type
 
-named_type     -> reference optional(type_argument)              :TypeCall
-arrow_type     -> '(' .comma_list(simple_type) ')' .'->' .simple_type              :ArrowSpec
+named_type     -> reference optional(square_list(simple_type))              :TypeCall
+arrow_type     -> round_list(simple_type) '->' simple_type          :ArrowSpec
 
-type_argument  -> '[' comma_list(simple_type) ']'
 ```
 
 **The general structure of a function:**
 ```
-function -> name optional(parameter_list) annotation '=' expr optional(where_clause) :Function
+function -> name optional(round_list(parameter)) annotation '=' expr optional(where_clause) :Function
 where_clause -> WHERE semicolon_list(function) END name :WhereClause
 ```
 
@@ -84,17 +83,13 @@ You can leave off the type for a name,
 or use a question-mark anywhere a type-name would normally go,
 and the system will deal with it sensibly.
 ```
-parameter_list  -> '(' comma_list(parameter) ')'
-parameter       ->   name annotation   :FormalParameter
+parameter  ->   name annotation   :FormalParameter
 annotation ->  :nothing   |  ':' param_type
 
-param_type -> reference             :TypeCall
-| reference param_type_arg          :TypeCall
-| .'?'                              :anonymous_type_variable
-| '?' name                          :TypeParameter
-| .param_type_arg .'->' .param_type :ArrowSpec
+param_type ->  '?' optional(name)                  :genericity
+|   reference optional(square_list(param_type))    :TypeCall
+|   round_list(param_type) '->' param_type         :ArrowSpec
 
-param_type_arg = '[' comma_list(param_type) ']'
 ```
 
 **The Expression Grammar:**
@@ -127,8 +122,7 @@ expr -> integer | real | short_string | list_expr | case_expr | match_expr
 | expr '(' comma_list(expr) ')' :Call
 | expr list_expr :call_upon_list
 
-list_expr -> '[' list_body ']'
-list_body -> comma_list(expr) :ExplicitList
+list_expr -> square_list(expr) :ExplicitList
 
 case_expr -> CASE semicolon_list(when_clause) else_clause ESAC :CaseWhen
 when_clause -> .WHEN .expr THEN .expr
@@ -168,6 +162,9 @@ comma_separated_list(x) -> x :first | _ ',' x :more
 comma_list(x) ->  comma_separated_list(x) | comma_separated_list(x) ','
 semicolon_list(x) ->  x ';' :first  | _ x ';' :more
 optional(x) -> :nothing | x
+
+square_list(x) -> '[' comma_list(x) ']'
+round_list(x) -> '(' comma_list(x) ')'
 ```
 
 ## Precedence
@@ -191,7 +188,7 @@ This next bit tells the parser-generator how to tell which terminals have semant
 and therefore get passed to a production rule's action:
 ```
 %void_set UPPER
-%void '(' ')' '[' ']' '.' ',' ';' ':' '=' '->' '@'
+%void '(' ')' '[' ']' '.' ',' ';' ':' '=' '@'
 ```
 
 ## Definitions

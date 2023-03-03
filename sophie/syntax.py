@@ -10,13 +10,6 @@ from boozetools.support.symtab import NameSpace
 from .ontology import Nom, Symbol, SophieType, Native, NS, Reference, TypeExpr, ValExpr, MatchProxy
 from . import algebra
 
-class TypeParameter(Symbol):
-	nom: Nom
-	quantifiers = ()
-	def __init__(self, nom:Nom):
-		self.nom = nom
-		self.typ = algebra.TypeVariable()
-
 class PlainReference(Reference):
 	nom: Nom
 	def __init__(self, nom:Nom):
@@ -33,14 +26,15 @@ class QualifiedReference(Reference):
 	def head(self) -> slice:
 		return slice(self.nom.head().start, self.space.head().stop)
 
-SIMPLE_TYPE = Union["TypeCall", "ArrowSpec", "ImplicitType"]
+SIMPLE_TYPE = Union["TypeCall", "ArrowSpec", "ImplicitType", "GenericType"]
 
 class ArrowSpec(TypeExpr):
 	lhs: Sequence[SIMPLE_TYPE]
 	_head: slice
-	rhs: Optional[SIMPLE_TYPE]
+	rhs: SIMPLE_TYPE
 	
 	def __init__(self, lhs, _head, rhs):
+		assert rhs is not None
 		self.lhs = lhs
 		self._head = _head
 		self.rhs = rhs
@@ -56,6 +50,23 @@ class TypeCall(TypeExpr):
 
 class ImplicitType(TypeExpr):
 	""" Stand-in as the relevant type-expression for when the syntax doesn't bother. """
+	_head: slice
+	def __init__(self, _head):
+		self._head = _head
+	def head(self) -> slice:
+		return self._head
+
+class GenericType(Reference):
+	nom: Nom
+	def __init__(self, _hook, nom:Nom):
+		self._hook = _hook
+		self.nom = nom
+	def head(self) -> slice:
+		return slice(self._hook.head().start, self.nom.head().stop)
+
+def genericity(_hook, nom:Optional[Nom]):
+	if nom is None: return ImplicitType(_hook)
+	else: return GenericType(_hook, nom)
 
 class FormalParameter(Symbol):
 	def has_value_domain(self): return True
@@ -92,6 +103,16 @@ class VariantSpec(TypeExpr):
 	def __init__(self, _kw: slice, subtypes: list[SubTypeSpec]):
 		self._kw = _kw
 		self.subtypes = subtypes
+
+class TypeParameter(Symbol):
+	quantifiers = ()
+	def __init__(self, nom:Nom):
+		self.nom = nom
+		self.typ = algebra.TypeVariable()
+	def head(self) -> slice:
+		return self.nom.head()
+	def has_value_domain(self) -> bool:
+		return False
 
 class TypeDecl(Symbol):
 	namespace: NS
@@ -173,6 +194,7 @@ class Lookup(ValExpr):
 	def head(self) -> slice: return self.ref.head()
 
 class FieldReference(ValExpr):
+	fn_typ: SophieType  # Fill during type inference / CallSitePreparation.
 	def __init__(self, lhs: ValExpr, field_name: Nom): self.lhs, self.field_name = lhs, field_name
 	def __str__(self): return "(%s.%s)" % (self.lhs, self.field_name.text)
 	def head(self) -> slice: return self.field_name.head()
@@ -264,8 +286,9 @@ class Alternative(ValExpr):
 	namespace: NS  # WordDefiner fills
 	proxy: MatchProxy  # WordDefiner fills
 	
-	def __init__(self, pattern:Reference, sub_expr:ValExpr, where:WhereClause):
+	def __init__(self, pattern:Reference, _head, sub_expr:ValExpr, where:WhereClause):
 		self.pattern = pattern
+		self._head = _head
 		self.sub_expr = sub_expr
 		if where:
 			_bookend(pattern.nom, where.end_name)
@@ -273,7 +296,7 @@ class Alternative(ValExpr):
 		else:
 			self.where = ()
 	def head(self) -> slice:
-		return self.pattern.head()
+		return self._head
 	
 class MatchExpr(ValExpr):
 	subject: Nom
