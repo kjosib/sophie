@@ -23,6 +23,19 @@ foreign "math" where
 	
 end;
 
+foreign "builtins" where
+	chr : (number) -> string;
+	len, ord : (string) -> number;
+end;
+
+foreign "sophie.yarn" where
+	mid : (string, number, number) -> string;
+end;
+
+foreign "operator" where
+	strcat@"add" : (string, string) -> string;
+end;
+
 # A few of Python's standard math functions are trouble (currently).
 	# ``log`` is bivalent: You can pass it one or two parameters. Sophie gets around this by aliasing ``log_base``.
 	# ``dist`` computes Euclidean distance between two points specified as vectors, but Sophie still lacks these.
@@ -100,6 +113,19 @@ define:
 	sum(xs) = reduce(add, 0, xs) where add(a,b) = a+b; end sum;
 	product(xs) = reduce(mul, 1, xs) where mul(a,b) = a*b; end product;
 	hypot(xs) = sqrt(sum(map(square, xs))) where square(x) = x*x; end hypot;
+	
+	## Sophie's first namespace conflict:
+	# left(s, n) = mid(s, 0, n);
+	# right(s, n) = mid(s, len(s)-n, len(s));
+	
+	join(ss) = reduce(strcat, "", ss);  # Yes, this is O(n^2). Fixing that from within is nontrivial.
+	
+	interleave(x, ys) = skip(1, flat(map(prefix, ys))) where prefix(y)=cons(x, cons(y, nil)); end interleave;
+	
+	each_chr(s) = from(0) where
+		from(n) = nil if n >= len(s) else cons(mid(s,n,1), from(n+1));
+	end each_chr;
+	
 end.
 
 """

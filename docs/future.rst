@@ -349,7 +349,8 @@ comfortably with ``result`` types.
 Stronger Guarantees
 ~~~~~~~~~~~~~~~~~~~~~~
 
-Right now, Sophie has a traditional H-M generic type inference engine under construction.
+Right now, Sophie has a traditional H-M generic type inference engine with let-polymorphism.
+I'm in the middle of adding row-polymorphism so that you can write functions that access fields generically.
 
 Partial Evaluation
 ---------------------
