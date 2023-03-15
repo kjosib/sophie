@@ -208,7 +208,7 @@ As with the parser, the scan-actions are given by `:words`.
 ```
 {wholeNumber}      :integer
 {real}             :real
-{alpha}{word}*     :word
+[{alpha}_]{word}*     :word
 \"[^"\v]*\"        :short_string
 \s+|\#.*           :ignore
 [<:>!=]=|[-=]>|{punct}  :punctuation
