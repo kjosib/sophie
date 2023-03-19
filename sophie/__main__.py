@@ -32,6 +32,7 @@ parser = argparse.ArgumentParser(
 parser.add_argument("program", help="try examples/turtle.sg for example.")
 parser.add_argument('-c', "--check", action="store_true", help="Check syntax and types verbosely; Don't actually run the program.")
 parser.add_argument('-n', "--no-preamble", action="store_true", help="Don't load the preamble.")
+parser.add_argument('-x', "--experimental", action="store_true", help="Opt into whatever experiment is current, if any.")
 
 def run(args):
 	if args.no_preamble:
