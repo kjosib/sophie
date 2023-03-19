@@ -47,12 +47,16 @@ and then take notes on how things go.
 
 * Sophie has Turtle-graphics! (See [here](https://github.com/kjosib/sophie/blob/main/examples/turtle.sg) for examples.)
 * The evaluator can run programs and display results, including turtle graphics as mentioned.
-* Type checking is a work in progress. Run-time errors are still possible, but this will soon change.
-* It checks the validity of all identifiers (but not yet field names, which depend on type checking).
+* Type checking mostly works, but it needs a few loose ends tied up around field access.
+  Eventually I'd like to build a much better checker, but that might be a Sophie 2.0 project. 
+* It checks the validity of all identifiers (but field names may go unchecked until run-time under certain conditions).
 * List comprehension (expressions like `[expr FOR name IN expr]`) are removed from the syntax for now.
   Something will take its place, but it will take some work.
-* There is no interactivity. It will depend on the _Functional Process Abstraction_ which also doesn't exist yet.
-* Imports and exports are waiting on a proper module system, so they don't do anything yet.
+  I need to figure out how I want to support variable-arity functions.
+  Until then, we'll need the equivalent of `map2` and `map3` and etc.
+* There is no interactivity yet. I'll probably end up with a concurrent actor model.
+* There is a basic module system, so imports work. It's not yet possible to restrict exports.                                                                                                                                                                                                                                                                                                                                                                                       
+* There is also an FFI (into Python) although it has certain limits. I should standardize a way to call back into Sophie.
 
 For FPA, maybe controlling a bank of elevators would be a good concrete example problem?
 The pipe-dream is an asynchronous and resilient processes network similar to Erlang.
