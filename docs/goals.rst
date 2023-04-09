@@ -30,7 +30,7 @@ Things on Deck
 The next increment will probably focus on one of:
 
 * String-oriented functions (by way of the new FFI)
-* Adding "Onion Types" to the type algebra to attain *row polymorphism*.
+* Abstract interpretation to check the global type-correctness of a program.
 * Simple (nay, even simplistic!) console interaction
 
 Open Design Problems:
