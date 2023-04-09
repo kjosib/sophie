@@ -273,6 +273,8 @@ class ExplicitList(ValExpr):
 		for e in elts:
 			assert isinstance(e, ValExpr), e
 		self.elts = elts
+	def head(self) -> slice:
+		raise AssertionError
 
 class SubjectWithExpr(NamedTuple):
 	expr: ValExpr
