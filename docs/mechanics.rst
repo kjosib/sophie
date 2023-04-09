@@ -8,6 +8,123 @@ I'll add notes as they seem necessary while the overall system fills out.
     :local:
     :depth: 2
 
+High-Order Type Checking (HOT)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. note:: This feature is under development, so the precise details may change.
+
+I would like a rather precise up-front analysis phase based on what we can infer about the types of variables,
+but I do not mean to impose burdens normally associated with *dependent-type* systems.
+
+In concept, my approach is to just run the program as-is, but in the realm of types rather than values.
+This is a whole-program approach to the question type-correctness:
+The same function might be safe-or-not depending on how you call it.
+
+My algorithm is something like:
+
+1. Simplify the Representation: Rewrite the value-program into a type-program.
+2. Simplify the Problem: Fold constant-expressions and reduce the rest to lowest terms.
+3. Determine the dynamic type-dependency front.
+4. Evaluate the Type-Program in the realm of types, without falling down the infinite-recursion rabbit hole.
+
+Simplify the Representation
+---------------------------
+At ``sophie.hot.lift_pass`` lives ``class RewriteIntoTypeRealm`` which converts the rich Sophie expression syntax
+into a smaller core of type-transformer expression-nodes defined at ``sophie.hot.tdx``.
+This simplifies the remainder of type-analysis and checking because there are fewer distinct cases to worry about.
+
+Simplify the Problem
+---------------------
+Let us fold constants and combine like terms. Something akin to value-numbering (but for types) will do nicely.
+Incidentally, that numbering table may come in quite handy during evaluation,
+because it's also a way to manage the memoization structure.
+
+Items are equivalent when they have the same operator and operand-numbers.
+An explicit type-parameter may be treated as a special unique constant for this purpose.
+
+
+Dynamic Type Dependency Front
+------------------------------
+Formally, this is the set of parameters upon which a function's type may depend.
+We want that so that the evaluator can *properly* memoize the results of its type computations.
+
+Naively this would be the set of all parameters that the function's body mentions.
+However, that's not quite right:
+If function A calls function B, and function B mentions parameter P not its own,
+then the type of P influences the type of B which in turn influences the type of A.
+
+This is another data-flow problem. Start by associating all the non-local data dependencies,
+then flow these through that partial call-graph consisting of calls to non-global functions.
+
+(We found a different partial call graph earlier, in ``AliasChecker``, but it was only looking for circular definitions.)
+
+Finally, add the local variable dependencies specifically if they are mentioned.
+(This is because a function ``(a,b)->b`` does not depend on the type of ``a``.)
+
+The type-dependency front will inform the memoization layer.
+
+Evaluate the Type-Program
+---------------------------
+The structure of ``sophie.hot.type_evaluator`` should bear a striking resemblance to that of ``sophie.simple_evaluator``.
+However, I intend some different semantics. The type-evaluator can use memoization with eager/strict evaluation.
+It will also need a way to detect recursion, and a sensible theory of how to close such loops.
+
+    The usual approach is a *mu*-type, but that's only relevant if I bother with the optional simplification feature.
+
+On entry to a function, I take note of the fact it's been entered with these (type-)arguments.
+Using a scheme like value-numbering (but applied to types) it's easy to notice a recursive call.
+
+Dealing with Recursion
+.......................
+
+Having reached a recursive call, there is a least-fixpoint problem.
+One idea is as follows:
+
+At first, hypothesize that the function returns *nothing.*
+Not a *maybe-monad* style ``nothing``, for that would be *something.*
+I mean more like a *Never-Ending Story* kind of nothing.
+(See the film with your kids, if you haven't already done.)
+
+In the land of type theory, the *nothing* has a type and that type is called "Bottom".
+Note in particular the following algebraic **laws of Bottom:**
+
+1. Bottom is a universal *subtype:* ``union(X, Bottom) => X``.
+2. Bottom is a universal *intersection:* ``Bottom.foo => Bottom``.
+3. Bottom is a universal *argument:* ``(A->B)(Bottom) => B``.
+4. Bottom is a universal *function:* ``Bottom(foo) => Bottom``.
+
+    Each of these laws also corresponds to a constraint about a particular bottom-typed value.
+    It's *mostly* pointless to chase that rabbit. Rather than, for example, discerning
+    that *X* must be a record (or a function, respectively), we can rely on the type-evaluator
+    to get around to that point with a specific *X* type.
+
+At the end of this preliminary round of inference,
+we have a sensible lower-bound return-type for the function *as it was actually called.*
+
+If that preliminary lower-bound is *Bottom*, then the function's induction lacks a base-case,
+which is an error. Otherwise:
+
+* Put this lower-bound return-type in the cache line for this type-context.
+* Mark the entry as *provisional*.
+* Later, work to solve the provisions.
+
+Solving Provisional Types
+..........................
+
+Any expression whose type depends on a provisional type is itself provisionally-typed.
+In fact, the provisionality of types forms a directed dependency graph.
+To handle this on the level of individual expressions might be too much detail,
+but we can create a provisionality graph between function result-type cache entries.
+
+With that graph, we can work in SCC order to finalize the types of functions.
+
+Take a leaf-cycle in this graph: Some function's type depends upon itself, or there's a mutual dependency.
+Make progress by running the basic algorithm on that cycle.
+If all the result-types *and provisions* stay the same, and restricted to the SCC,
+then that SCC has reached its least-fixpoint, so drop all provisions pointing at its members.
+
+
+
 Resolving Imports
 ~~~~~~~~~~~~~~~~~~~~
 
