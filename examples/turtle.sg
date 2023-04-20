@@ -20,9 +20,9 @@ define:
     repeat(n, portion) = nil if n < 1 else cat(portion, repeat(n-1, portion));
     range(a, b) = nil if a > b else cons(a, range(a+1, b));
     cycle(xs) = cat(xs, cycle(xs));  # You can have an infinite list as long as you don't try to use the whole thing.
-    map2(fn, xs, ys) = case xs:  # Work-around for lack of proper zip/apply forms.
+    map2(fn, xs, ys) = case xs of  # Work-around for lack of proper zip/apply forms.
         nil -> nil;
-        cons -> case ys:
+        cons -> case ys of
             nil -> nil;
             cons -> cons(fn(xs.head, ys.head), map2(fn, xs.tail, ys.tail));
        esac;
@@ -79,12 +79,12 @@ define:
 
     hilbert_curve(order) = cat(prepare, L_system(order, translate, rewrite, [h_alpha])) where
         prepare = [penup, goto(start, start), pendown];
-        rewrite(x) = case x:
+        rewrite(x) = case x of
             h_alpha -> [h_right, h_beta, h_fwd, h_left, h_alpha, h_fwd, h_alpha, h_left, h_fwd, h_beta, h_right];
             h_beta -> [h_left, h_alpha, h_fwd, h_right, h_beta, h_fwd, h_beta, h_right, h_fwd, h_alpha, h_left];
             else [x];
         esac;
-        translate(x) = case x:
+        translate(x) = case x of
             h_left -> turn_left;
             h_right -> turn_right;
             h_fwd -> walk_forward;

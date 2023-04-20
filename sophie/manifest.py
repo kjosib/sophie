@@ -4,29 +4,43 @@ Things related to the manifest portion of the type information.
 """
 import inspect
 from boozetools.support.foundation import Visitor
-from . import syntax, algebra, ontology
-
+from . import syntax, ontology
+from .hot.concrete import ConcreteTypeVisitor, TypeVariable, Nominal, Arrow, Product
 
 def type_module(module: syntax.Module, report):
 	TypeBuilder(module, report.on_error("Building Types"))
 	if not report.issues:
-		check_match_expressions(module, report.on_error("Checking Type-Case Matches"))
+		for mx in module.all_match_expressions:
+			check_match_expressions(mx, report.on_error("Checking Type-Case Matches"))
 	pass
 
-
+class Rewrite(ConcreteTypeVisitor):
+	# Relatively trivial re-write to build the type of an alias during the manifest phase.
+	# Also comes in handy when
+	def __init__(self, mapping:dict):
+		self._mapping = mapping
+	def on_variable(self, v: TypeVariable):
+		return self._mapping.get(v,v)
+	def on_nominal(self, n: Nominal):
+		return n if not n.params else Nominal(n.dfn, [p.visit(self) for p in n.params])
+	def on_arrow(self, a: Arrow):
+		return Arrow(a.arg.visit(self), a.res.visit(self))
+	def on_product(self, p: Product):
+		return Product(tuple(f.visit(self) for f in p.fields))
+	
 class TypeBuilder(Visitor):
 	""" Evaluate all the type-expressions into (potentially-generic) types; bind these to names / variables.  """
 	def __init__(self, module:syntax.Module, on_error):
 		self.on_error = on_error
 		for td in module.types:
 			if isinstance(td.body, syntax.RecordSpec):
-				td.typ = algebra.Nominal(td, td.quantifiers)
+				td.typ = Nominal(td, td.quantifiers)
 			elif isinstance(td.body, syntax.VariantSpec):
-				td.typ = algebra.Nominal(td, td.quantifiers)
+				td.typ = Nominal(td, td.quantifiers)
 				for st in td.body.subtypes:
 					st.variant = td
 					if st.body is None or isinstance(st.body, syntax.RecordSpec):
-						st.typ = algebra.Nominal(st, td.quantifiers)
+						st.typ = Nominal(st, td.quantifiers)
 					else:
 						assert isinstance(st.body, (syntax.ArrowSpec, syntax.TypeCall))
 						raise RuntimeError(st)
@@ -55,12 +69,12 @@ class TypeBuilder(Visitor):
 			typ = self.visit(f.type_expr)
 			f.typ = typ
 			product.append(typ)
-		rs.product_type = algebra.Product(tuple(product))
+		rs.product_type = Product(tuple(product))
 
 	def visit_ArrowSpec(self, spec: syntax.ArrowSpec):
-		arg = algebra.Product(tuple(self.visit(a) for a in spec.lhs))
+		arg = Product(tuple(self.visit(a) for a in spec.lhs))
 		res = self.visit(spec.rhs)
-		return algebra.Arrow(arg, res)
+		return Arrow(arg, res)
 
 	def visit_TypeCall(self, tc:syntax.TypeCall):
 		inner = tc.ref.dfn.typ
@@ -68,18 +82,18 @@ class TypeBuilder(Visitor):
 		formals = tc.ref.dfn.quantifiers
 		if len(args) != len(formals): self.on_error([tc], "Got %d type-arguments; expected %d"%(len(args), len(formals)))
 		mapping = {Q: self.visit(arg) for Q, arg in zip(formals, tc.arguments)}
-		return inner.visit(algebra.Rewrite(mapping))
+		return inner.visit(Rewrite(mapping))
 	
 	def visit_Function(self, fn: syntax.Function):
-		typ = self.visit(fn.result_type_expr) if fn.result_type_expr else algebra.TypeVariable()
+		typ = self.visit(fn.result_type_expr) if fn.result_type_expr else TypeVariable()
 		if fn.params:
-			arg = algebra.Product(tuple(self.visit(p) for p in fn.params))
-			typ = algebra.Arrow(arg, typ)
+			arg = Product(tuple(self.visit(p) for p in fn.params))
+			typ = Arrow(arg, typ)
 		fn.typ = typ
 		pass
 	
 	def visit_FormalParameter(self, fp: syntax.FormalParameter):
-		it = algebra.TypeVariable() if fp.type_expr is None else self.visit(fp.type_expr)
+		it = TypeVariable() if fp.type_expr is None else self.visit(fp.type_expr)
 		fp.typ = it
 		return it
 	
@@ -87,14 +101,14 @@ class TypeBuilder(Visitor):
 		return gt.dfn.typ
 
 	def visit_ImplicitType(self, it:syntax.ImplicitType):
-		return algebra.TypeVariable()
+		return TypeVariable()
 
 	def visit_ImportForeign(self, d:syntax.ImportForeign):
 		for group in d.groups:
-			typ = group.typ = self.visit(group.type_expr)
+			typ = self.visit(group.type_expr)
 			for sym in group.symbols:
 				sym.typ = typ
-			if isinstance(typ, algebra.Arrow):
+			if isinstance(typ, Arrow):
 				probe = [None]*len(typ.arg.fields)
 				for sym in group.symbols:
 					self._check_arity(probe, sym)
@@ -112,36 +126,45 @@ class TypeBuilder(Visitor):
 		
 					
 
-def check_match_expressions(module:syntax.Module, on_error):
-	for mx in module.all_match_expressions:
-		patterns : list[ontology.Reference] = [alt.pattern for alt in mx.alternatives]
-		bogons = [p for p in patterns if type(p.dfn) is not syntax.SubTypeSpec]
-		if bogons:
-			on_error(bogons, "This is not a subtype.")
-			return
-		first = mx.alternatives[0]
-		variant : syntax.TypeDecl = first.pattern.dfn.variant
-		for alt in mx.alternatives:
-			if alt.pattern.dfn.variant is not variant:
-				bogons.append(alt.pattern)
-		if bogons:
-			bogons.insert(0, first.pattern)
-			on_error(bogons, "These do not all come from the same variant type.")
-			return
-		local_mapping = {Q:algebra.TypeVariable() for Q in variant.quantifiers}
-		visitor = algebra.Rewrite(local_mapping)
-		mx.input_type = variant.typ.visit(visitor)
-		seen = set()
-		for alt in mx.alternatives:
-			subtype = alt.pattern.dfn
-			seen.add(subtype)
-			assert isinstance(subtype, syntax.SubTypeSpec)
-			alt.proxy.typ = subtype.typ.visit(visitor)
-		exhaustive = len(seen) == len(variant.body.subtypes)
-		if exhaustive and mx.otherwise:
-			on_error([mx, mx.otherwise], "This case-construction is exhaustive; the otherwise-clause cannot run.")
-		if not (exhaustive or mx.otherwise):
-			on_error([mx], "This case-construction does not cover all the cases of %s and lacks an otherwise-clause."%(variant.nom))
-		pass
+def check_match_expressions(mx:syntax.MatchExpr, on_error):
+	non_subtypes = []
+	duplicates = []
+	seen = set()
+	
+	subtypes : list[syntax.SubTypeSpec] = []
+	
+	for alt in mx.alternatives:
+		dfn = alt.pattern.dfn
+		if isinstance(dfn, syntax.SubTypeSpec):
+			subtypes.append(dfn)
+			if dfn in seen:
+				duplicates.append(alt.pattern)
+			else:
+				seen.add(dfn)
+		else:
+			non_subtypes.append(alt.pattern)
+			
+	variants = [dfn.variant for dfn in subtypes]
+	mistypes = [v for v in variants if v is not variants[0]]
+	
+	if mistypes:
+		on_error([variants[0]] + mistypes, "These do not all come from the same variant type.")
+	if non_subtypes:
+		on_error(non_subtypes, "This case is not a member of any variant.")
+	if duplicates:
+		on_error(duplicates, "This duplicates an earlier case.")
+	if non_subtypes or duplicates or mistypes:
+		return
+	
+	mx.variant = variants[0]
+	seen = set()
+	for alt in mx.alternatives:
+		seen.add(alt.pattern.dfn)
+	exhaustive = len(seen) == len(mx.variant.body.subtypes)
+	if exhaustive and mx.otherwise:
+		on_error([mx, mx.otherwise], "This case-construction is exhaustive; the otherwise-clause cannot run.")
+	if not (exhaustive or mx.otherwise):
+		on_error([mx], "This case-construction does not cover all the cases of %s and lacks an otherwise-clause." % mx.variant.nom)
+	pass
 
 		

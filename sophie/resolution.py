@@ -8,7 +8,7 @@ from importlib import import_module
 from boozetools.support.foundation import Visitor, strongly_connected_components_hashable
 from boozetools.support.symtab import NoSuchSymbol, SymbolAlreadyExists
 from . import syntax
-from .ontology import NS, Symbol, Nom, MatchProxy
+from .ontology import NS, Symbol
 from .primitive import PrimitiveType
 
 def resolve_words(module: syntax.Module, outside: NS, report):
@@ -161,17 +161,18 @@ class WordDefiner(WordPass):
 
 	def visit_MatchExpr(self, mx:syntax.MatchExpr, env:NS):
 		self.all_match_expressions.append(mx)
+		self.visit(mx.subject.expr, env)
+		inner = mx.namespace = env.new_child(mx)
+		self._install(inner, mx.subject)
 		for alt in mx.alternatives:
-			self.visit(alt, env, mx.subject)
+			self.visit(alt, inner)
 		if mx.otherwise is not None:
-			self.visit(mx.otherwise, env)
+			self.visit(mx.otherwise, inner)
 
-	def visit_Alternative(self, alt: syntax.Alternative, env: NS, subject: Nom):
-		inner = alt.namespace = env.new_child(alt)
-		inner[subject.text] = alt.proxy = MatchProxy(subject)
+	def visit_Alternative(self, alt: syntax.Alternative, env: NS):
 		for sub_ex in alt.where:
-			self.visit(sub_ex, inner)
-		self.visit(alt.sub_expr, inner)
+			self.visit(sub_ex, env)
+		self.visit(alt.sub_expr, env)
 	
 	def visit_ImportForeign(self, d:syntax.ImportForeign, env:NS):
 		try: py_module = import_module(d.source.value)
@@ -208,8 +209,9 @@ class StaticDepthPass(WordPass):
 			self.visit_Function(sub_fn, inner)
 		
 	def visit_MatchExpr(self, mx:syntax.MatchExpr, depth:int):
+		mx.subject.static_depth = depth
+		self.visit(mx.subject.expr, depth)
 		for alt in mx.alternatives:
-			alt.proxy.static_depth = depth
 			self.visit(alt.sub_expr, depth)
 		if mx.otherwise is not None:
 			self.visit(mx.otherwise, depth)
@@ -288,15 +290,14 @@ class WordResolver(WordPass):
 		self.visit(fn.expr, fn.namespace)
 
 	def visit_MatchExpr(self, mx:syntax.MatchExpr, env:NS):
-		mx.subject_dfn = self._lookup(mx.subject, env)
+		self.visit(mx.subject.expr, env)
 		for alt in mx.alternatives:
 			self.visit(alt.pattern, self.module.globals)
-			inner = alt.namespace
-			self.visit(alt.sub_expr, inner)
+			self.visit(alt.sub_expr, mx.namespace)
 			for sub_ex in alt.where:
 				self.visit(sub_ex)
 		if mx.otherwise is not None:
-			self.visit(mx.otherwise, env)
+			self.visit(mx.otherwise, mx.namespace)
 			
 	def visit_Lookup(self, expr: syntax.Lookup, env: NS):
 		self.visit(expr.ref, env)
@@ -326,12 +327,13 @@ class AliasChecker(Visitor):
 	Check for aliases being well-founded, up front before getting caught in a loop later:
 	There should be no cycles in the aliasing dependency graph, and no wrong-kind references.
 	Also re-orders type definitions in order of alias topology.
+	
+	Stop worrying about function cycles; I'll catch that problem in the type checker.
 	"""
 	
 	def __init__(self, module: syntax.Module, on_error):
 		self.on_error = on_error
 		self.non_types = []
-		self.non_values = []
 		self.graph = defaultdict(list)
 		for td in module.types:
 			self.visit(td)
@@ -339,12 +341,8 @@ class AliasChecker(Visitor):
 			self.visit(d)
 		for fn in module.all_functions:
 			self.visit_Function(fn)
-		for expr in module.main:
-			self.visit(expr)
 		if self.non_types:
 			self.on_error(self.non_types, "Need a type-name here; found this instead.")
-		if self.non_values:
-			self.on_error(self.non_values, "Need a value-name or constructor here; found this type-name instead.")
 		alias_order = []
 		ok = True
 		for scc in strongly_connected_components_hashable(self.graph):
@@ -412,48 +410,7 @@ class AliasChecker(Visitor):
 			self.visit(p)
 		if fn.result_type_expr:
 			self.visit(fn.result_type_expr)
-		self.graph[fn].append(fn.expr)
-		self.visit(fn.expr)
 
-	def visit_FieldReference(self, fr:syntax.FieldReference):
-		self.graph[fr].append(fr.lhs)
-		self.visit(fr.lhs)
-
-	def visit_MatchExpr(self, mx: syntax.MatchExpr):
-		self.graph[mx].append(mx.subject_dfn)
-	
-	def visit_Cond(self, expr: syntax.Cond):
-		self.graph[expr].append(expr.if_part)
-		self.visit(expr.if_part)
-	
-	def visit_Call(self, expr: syntax.Call):
-		self.graph[expr].append(expr.fn_exp)
-		self.visit(expr.fn_exp)
-	
-	def visit_BinExp(self, expr: syntax.BinExp):
-		for s in expr.lhs, expr.rhs:
-			self.graph[expr].append(s)
-			self.visit(s)
-	
-	def visit_ShortCutExp(self, expr: syntax.ShortCutExp):
-		self.graph[expr].append(expr.lhs)
-		self.visit(expr.lhs)
-	
-	def visit_UnaryExp(self, expr: syntax.UnaryExp):
-		self.graph[expr].append(expr.arg)
-		self.visit(expr.arg)
- 	
-	def visit_Lookup(self, lu: syntax.Lookup):
-		dfn = lu.ref.dfn
-		# Allow functions, parameters, and proper constructors.
-		if dfn.has_value_domain():
-			self.graph[lu].append(dfn)
-		else:
-			self.non_values.append(lu.ref)
-	
-	def visit_Literal(self, l:syntax.Literal): pass
-	def visit_ExplicitList(self, l:syntax.ExplicitList): pass
-	
 	def visit_ImportForeign(self, d:syntax.ImportForeign):
 		for group in d.groups:
 			self.visit(group.type_expr)

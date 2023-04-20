@@ -7,8 +7,8 @@ Class-level type annotations make peace with pycharm wherever later passes add f
 from typing import Optional, Any, Sequence, NamedTuple, Union
 from boozetools.parsing.interface import SemanticError
 from boozetools.support.symtab import NameSpace
-from .ontology import Nom, Symbol, SophieType, Native, NS, Reference, TypeExpr, ValExpr, MatchProxy
-from . import algebra
+from .ontology import Nom, Symbol, Native, NS, Reference, TypeExpr, ValExpr
+from .hot.concrete import Product, TypeVariable
 
 class PlainReference(Reference):
 	nom: Nom
@@ -71,14 +71,15 @@ def genericity(_hook, nom:Optional[Nom]):
 class FormalParameter(Symbol):
 	def has_value_domain(self): return True
 	def __init__(self, nom:Nom, type_expr: Optional[SIMPLE_TYPE]):
-		self.nom, self.type_expr = nom, type_expr
+		super().__init__(nom)
+		self.type_expr = type_expr
 	def head(self) -> slice: return self.nom.head()
 	def key(self): return self.nom.key()
 	def __repr__(self): return "<:%s:%s>"%(self.nom.text, self.type_expr)
 
 class RecordSpec(TypeExpr):
 	namespace: NS  # WordDefiner pass fills this in.
-	product_type: algebra.Product  # TypeBuilder pass sets this.
+	product_type: Product  # TypeBuilder pass sets this.
 	def __init__(self, fields: list[FormalParameter]):
 		self.fields = fields
 	
@@ -91,7 +92,7 @@ class SubTypeSpec(Symbol):
 	static_depth = 0
 	def has_value_domain(self): return True
 	def __init__(self, nom:Nom, body=None):
-		self.nom = nom
+		super().__init__(nom)
 		self.body = body
 	def head(self) -> slice: return self.nom.head()
 	def key(self): return self.nom.key()
@@ -107,8 +108,8 @@ class VariantSpec(TypeExpr):
 class TypeParameter(Symbol):
 	quantifiers = ()
 	def __init__(self, nom:Nom):
-		self.nom = nom
-		self.typ = algebra.TypeVariable()
+		super().__init__(nom)
+		self.typ = TypeVariable()
 	def head(self) -> slice:
 		return self.nom.head()
 	def has_value_domain(self) -> bool:
@@ -119,7 +120,7 @@ class TypeDecl(Symbol):
 	nom: Nom
 	parameters: Sequence[TypeParameter]
 	body: Union[TypeCall, VariantSpec, RecordSpec]
-	quantifiers: list[algebra.TypeVariable]  # phase: WordDefiner
+	quantifiers: list[TypeVariable]  # phase: WordDefiner
 	static_depth = 0
 	def __str__(self): return self.nom.text
 	def __repr__(self):
@@ -127,7 +128,7 @@ class TypeDecl(Symbol):
 		return "{td:%s%s = %s}"%(self.nom.text, p, self.body)
 	
 	def __init__(self, nom, parameters: Sequence[Nom], body) -> None:
-		self.nom = nom
+		super().__init__(nom)
 		self.parameters = [TypeParameter(p) for p in parameters or ()]
 		self.body = body
 	def head(self) -> slice:
@@ -161,7 +162,7 @@ class Function(Symbol):
 			expr: ValExpr,
 			where: Optional["WhereClause"]
 	):
-		self.nom = nom
+		super().__init__(nom)
 		self.params = params or ()
 		self.result_type_expr = expr_type
 		self.expr = expr
@@ -194,7 +195,6 @@ class Lookup(ValExpr):
 	def head(self) -> slice: return self.ref.head()
 
 class FieldReference(ValExpr):
-	fn_typ: SophieType  # Fill during type inference / CallSitePreparation.
 	def __init__(self, lhs: ValExpr, field_name: Nom): self.lhs, self.field_name = lhs, field_name
 	def __str__(self): return "(%s.%s)" % (self.lhs, self.field_name.text)
 	def head(self) -> slice: return self.field_name.head()
@@ -286,7 +286,6 @@ class Alternative(ValExpr):
 	where: Sequence[Function]
 	
 	namespace: NS  # WordDefiner fills
-	proxy: MatchProxy  # WordDefiner fills
 	
 	def __init__(self, pattern:Reference, _head, sub_expr:ValExpr, where:WhereClause):
 		self.pattern = pattern
@@ -300,34 +299,35 @@ class Alternative(ValExpr):
 	def head(self) -> slice:
 		return self._head
 	
+class Subject(Symbol):
+	""" Within a match-case, a name must reach a different symbol with the particular subtype """
+	expr: ValExpr
+	def __init__(self, expr: ValExpr, nom: Nom):
+		super().__init__(nom)
+		self.expr = expr
+	def has_value_domain(self) -> bool: return True
+
+def simple_subject(nom:Nom):
+	return Subject(Lookup(PlainReference(nom)), nom)
+
 class MatchExpr(ValExpr):
-	subject: Nom
-	subject_dfn:Symbol  # WordDefiner must fill
+	subject:Subject  # Symbol in scope within alternative expressions; contains the value of interest
+	hint: Optional[Reference]
 	alternatives: list[Alternative]
 	otherwise: Optional[ValExpr]
 	
-	dispatch: dict[Optional[str]:ValExpr]
-	input_type: VariantSpec  # TypeBuilder pass fills this.
+	namespace: NS  # WordDefiner fills
 	
-	def __init__(self, nom: Nom, alternatives: list[Alternative], otherwise: Optional[ValExpr]):
-		self.subject = nom
+	variant:TypeDecl  # check_match_expressions infers this from the patterns
+	dispatch: dict[Optional[str]:ValExpr]
+	
+	def __init__(self, subject:Subject, hint:Optional[Reference], alternatives: list[Alternative], otherwise: Optional[ValExpr]):
+		self.subject = subject
+		self.hint = hint
 		self.alternatives, self.otherwise = alternatives, otherwise
 	
 	def head(self) -> slice:
 		return self.subject.head()
-
-class WithExpr(ValExpr):
-	# Represent a block-local scope for a name bound to an expression.
-	def __init__(self, expr: ValExpr, nom: Nom, body: ValExpr):
-		self.expr, self.nom, self.body = expr, nom, body
-	def head(self) -> slice: return self.nom.head()
-
-def match_expr(subject, alternatives: list[Alternative], otherwise: Optional[ValExpr]):
-	if isinstance(subject, Nom):
-		return MatchExpr(subject, alternatives, otherwise)
-	else:
-		assert isinstance(subject, SubjectWithExpr)
-		return WithExpr(subject.expr, subject.nom, MatchExpr(subject.nom, alternatives, otherwise))
 
 class ImportDirective: pass
 
@@ -346,7 +346,6 @@ def FFI_Symbol(nom:Nom):
 	return FFI_Alias(nom, None)
 
 class FFI_Group:
-	typ: SophieType  # Fill during type manifesting.
 	def __init__(self, symbols:list[FFI_Alias], type_expr:Union[TypeCall, ArrowSpec]):
 		self.symbols = symbols
 		self.type_expr = type_expr

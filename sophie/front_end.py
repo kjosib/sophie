@@ -55,10 +55,15 @@ sophie_parser = SophieParser(_tables)
 
 def parse_file(pathname, report:Report):
 	"""Read file given by name; pass contents to next phase."""
-	with open(pathname, "r") as fh:
-		text = fh.read()
-	report.set_path(pathname)
-	return parse_text(text, pathname, report)
+	try:
+		with open(pathname, "r") as fh:
+			text = fh.read()
+	except FileNotFoundError:
+		report.error("Reading Code", [], "Sorry, there's no such file as %r"%pathname)
+	except OSError:
+		report.error("Reading Code", [], "Something went pear-shaped while trying to read file %r"%pathname)
+	else:
+		return parse_text(text, pathname, report)
 
 def parse_text(text:str, pathname:Path, report:Report) -> Union[syntax.Module, Issue]:
 	""" Submit text to parser; submit the resulting tree to subsequent pass """

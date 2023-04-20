@@ -64,11 +64,7 @@ Super-Fancy Calculator
 
 Here's a small program showing how math (and comments) in Sophie appears::
 
-    begin:
-        3 + 4 * 5;            # Precedence works like you learned in school.
-        ( 3 + 4 ) * 5;        # You can always override that with parentheses
-        sqrt(1+1);            # A number of mathematical functions and constants are built-in.
-    end.
+.. literalinclude:: ../examples/simple_calculations.sg
 
 You can't miss the explanatory text on each line.
 Sophie sees the ``#`` mark and concludes that the remainder of that line is a comment.
@@ -261,21 +257,7 @@ More Fun with Functions
 You can do quite a bit with functions.
 Consider this example::
 
-    define:
-        iterate_four_times(fn, x) = fn( fn( fn( fn( x ) ) ) );
-
-        root(square) = iterate_four_times(newton, 1) where
-            newton(guess) = (guess + square/guess) / 2;
-        end root;
-
-    begin:
-        root(2);   # 1.4142135623746899 -- good to 13 digits!
-    # Exact value is 1.4142135623730951
-
-        root(17);  # 4.126106627581331 -- Only the first three digits are correct,
-    # Exact value is 4.123105625617661 -- but it's all downhill from there.
-    end.
-
+.. literalinclude:: ../examples/Newton.sg
 
 This program illustrates Isaac Newton's method for figuring square-roots.
 The method achieves excellent accuracy after just a few steps if you start with a decent guess.
@@ -319,26 +301,7 @@ Case Study: Age Classifier
 ...........................
 Here's an example of a not-always-totally-respectful age-classifier::
 
-    define:
-
-    age(years) = case
-        when years < 0.3 then "infant";
-        when years < 1.5 then "baby";
-        when years < 3 then "toddler";
-        when years < 8 then "child";
-        when years < 13 then "big kid";
-        when years < 20 then "teenager";
-        when years < 25 then "young adult";
-        when years < 65 then "grown adult";
-        when years < 80 then "senior citizen";
-        else "geriatric";
-    esac;
-
-    begin:
-    	age(1);
-    	age(10);
-    	age(100);
-    end.
+.. literalinclude:: ../examples/case_when.sg
 
 The ``case`` - ``when`` - ``then`` - ``else`` - ``esac`` structure
 represents a multi-way decision.
@@ -363,6 +326,10 @@ If no ``when`` clause is true, then Sophie evaluates the ``else`` clause instead
 	in each of these scenarios, and why that is the result you expect.
 
 * Exercise:
+    We haven't yet seen the ``map`` function. Based on how it's used here,
+    what do you suppose it might do?
+
+* Exercise:
 	Actually run the example code.
 	See how things line up with your expectations.
 
@@ -383,23 +350,8 @@ You may have noticed that it did significantly better with ``root(2)`` than with
 To get a better answer for larger numbers, one approach we could take is to iterate Newton's method more times.
 We could do this::
 
-    define:
-        iterate_six_times(fn, x) = fn( fn( fn( fn( fn( fn( x ) ) ) ) ) );
 
-        root(square) = iterate_six_times(newton, 1) where
-            newton(guess) = (guess + square/guess) / 2;
-        end root;
-
-    begin:
-        root(2);   # 1.414213562373095   -- As good as we're going to get.
-        sqrt(2);   # 1.4142135623730951  -- That last digit is a topic for another day.
-
-        root(17);  # 4.123105625617805   -- Quite a bit better now,
-        sqrt(17);  # 4.123105625617661   -- but still not quite perfect.
-
-        root(170_000);  # 2677.54397787486   -- Ack! Horribly wrong.
-        sqrt(170_000);  # 412.31056256176606  -- It should be 100x that for 17.
-    end.
+.. literalinclude:: ../examples/Newton_2.sg
 
 ..
 
@@ -417,26 +369,7 @@ Feed a big enough number into the ``root(...)`` function and it stops too soon.
 It would be nice if we could let Sophie figure out when to stop.
 Perhaps we come up with a function like this::
 
-    define:
-        root(square) = iterated(newton(1), 1) where               # Note 6
-            newton(root) = (root + square/root) / 2;
-            iterated(x, y) =                                      # Note 2
-              x if good_enough else iterated(newton(x), x) where  # Note 1
-                good_enough = relative_difference < 1e-14;        # Note 3, 4
-                relative_difference = fabs(x-y) / (x+y) ;         # Note 5
-             end iterated;
-        end root;
-
-    begin:
-        root(2);        # 1.414213562373095    # Note 7
-        sqrt(2);        # 1.4142135623730951
-
-        root(17);       # 4.123105625617661
-        sqrt(17);       # 4.123105625617661
-
-        root(170000);   # 412.31056256176606
-        sqrt(170000);   # 412.31056256176606
-    end.
+.. literalinclude:: ../examples/Newton_3.sg
 
 Success! But ... What just happened? There's a lot going on in this case-study.
 
@@ -580,7 +513,7 @@ but when you're composing lists functionally it's handy to have the other.
 Now, you might be wondering how to get at data in lists.
 This is a good time to look at the code for the ``map`` built-in function::
 
-	map(fn, xs) = case xs:
+	map(fn, xs) = case xs of
 		nil -> nil;
 		cons -> cons(fn(xs.head), map(fn, xs.tail));
 	esac;
@@ -646,14 +579,7 @@ What I'd like to do instead is define the infinite list of Fibonacci numbers,
 and then have a convenient way to get a prefix of that list.
 Here's one way to do it::
 
-	define:
-	Fibonacci = recur(1,1) where              # Note 2
-		recur(a,b) = cons(a, recur(b, a+b));  # Note 1
-	end Fibonacci;
-
-	begin:
-	take(20, Fibonacci);                      # Note 3
-	end.
+.. literalinclude:: ../examples/Fibonacci.sg
 
 Discussion:
 
@@ -672,7 +598,7 @@ Discussion:
    It takes a *size* (here, ``20``) and a source-list to produce a new list with at most *size* elements.
    For reference, here is the source code for ``take``::
 
-	take(n, xs) = nil if n < 1 else case xs:
+	take(n, xs) = nil if n < 1 else case xs of
 		nil -> nil;
 		cons -> cons(xs.head, take(n-1, xs.tail));
 	esac;
@@ -757,21 +683,9 @@ Case Study: Simple Designs
 ............................
 
 You can display drawings by composing ``drawing`` objects containing a list of ``turtle_step`` items.
-Here's an example turtle-program that generates a couple designs::
+Here's an example turtle-program that generates a couple designs:
 
-    define:
-        square(size) = repeat(4, [forward(size), right(90)]);
-
-        rosette = repeat(12, petal) where
-            petal = flat[square(150), [right(15)], square(75), [right(15)]];
-        end rosette;
-
-        repeat(n, portion) = nil if n < 1 else cat(portion, repeat(n-1, portion));
-
-    begin:
-        "Square:"; drawing(square(200));
-        "Rosette:"; drawing(rosette);
-    end.
+.. literalinclude:: ../examples/simple_designs.sg
 
 At this point, you can begin to make your own designs. Try it out; it's fun!
 
@@ -785,7 +699,7 @@ The system pre-defines two data types for turtle graphics::
 
 	drawing is (steps: list[turtle_step]);
 
-	turtle_step is case
+	turtle_step is case:
 		forward(distance:number);
 		backward(distance:number);
 		right(angle:number);
@@ -813,7 +727,7 @@ Case Study: Color Spiral
 
 That's a pretty picture. Let's see the code for it:
 
-.. literalinclude:: color_spiral.sg
+.. literalinclude:: ../examples/color_spiral.sg
 
 At this point, interpreting the code is mostly left as an exercise for the reader.
 Here are a couple of comments:

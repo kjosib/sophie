@@ -1,6 +1,6 @@
 from functools import lru_cache
 from .ontology import NS, Symbol, Nom, Native
-from .algebra import SophieType, Product, Arrow, TypeVariable, Nominal
+from .hot.concrete import ConcreteType, Product, Arrow, TypeVariable, Nominal
 
 root_namespace = NS(place=None)
 ops = {}
@@ -30,7 +30,7 @@ literal_flag = _built_in_type("flag")
 def _arrow_of_math(arity:int) -> Arrow:
 	return _arrow_of(literal_number, arity)
 
-def _arrow_of(typ:SophieType, arity:int) -> Arrow:
+def _arrow_of(typ:ConcreteType, arity:int) -> Arrow:
 	assert arity > 0
 	return Arrow(Product((typ,) * arity), typ)
 
@@ -41,7 +41,7 @@ def _init():
 	
 	It's special because it's pre-typed.
 	"""
-	import math, operator
+	import operator
 	binary = _arrow_of_math(2)
 	ops["PowerOf"] = operator.pow, binary
 	ops["Mul"] = operator.mul, binary

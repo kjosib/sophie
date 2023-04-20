@@ -9,23 +9,6 @@ class Nom:
 	def __repr__(self): return "<Name %r>" % self.text
 	def key(self): return self.text
 
-class SophieType:
-	""" A term re-writing system computes types. """
-	def visit(self, visitor):
-		""" Implement the visitor pattern... """
-		raise NotImplementedError(type(self))
-	def fresh(self, gamma: dict): raise NotImplementedError(type(self))
-	def phylum(self): raise NotImplementedError(type(self))
-	def poll(self, seen:set):
-		""" Find all the type-variables used in the term. """
-		raise NotImplementedError(type(self))
-	def mentions(self, v):
-		"""
-		Determine whether type variable v occurs within the term.
-		Does not need gamma because v is guaranteed not to be mentioned there.
-		"""
-		raise NotImplementedError(type(self))
-
 class Symbol:
 	"""
 	Any named defined thing that may be found in some name-space.
@@ -36,9 +19,12 @@ class Symbol:
 	but there can also be built-in or imported symbols.
 	"""
 	nom: Nom  # fill in during parsing.
-	typ: SophieType  # fill in variously.
 	static_depth: int  # fill during StaticDepthPass.
-	def __repr__(self): return self.nom.text
+	def __init__(self, nom:Nom):
+		self.nom = nom
+	def __repr__(self):
+		return "{%s:%s}" % (self.nom.text, type(self).__name__)
+	def __str__(self): return self.nom.text
 	def head(self): return self.nom.head()
 	def has_value_domain(self) -> bool: raise NotImplementedError(type(self))
 
@@ -47,8 +33,6 @@ class Native(Symbol):
 	static_depth = 0
 	val:Any  # Fill in during WordDefiner pass
 	def has_value_domain(self): return True
-	def __init__(self, nom:Nom):
-		self.nom = nom
 
 class Expr:
 	def head(self) -> slice:
@@ -67,8 +51,3 @@ class ValExpr(Expr):
 
 NS = NameSpace[Symbol]
 
-class MatchProxy(Symbol):
-	""" Within a match-case, a name must reach a different symbol with the particular subtype """
-	def __init__(self, nom:Nom):
-		self.nom = nom
-	def has_value_domain(self) -> bool: return True

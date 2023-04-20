@@ -1,0 +1,19 @@
+# This version uses more iterations
+
+define:
+    iterate_six_times(fn, x) = fn( fn( fn( fn( fn( fn( x ) ) ) ) ) );
+
+    root(square) = iterate_six_times(newton, 1) where
+        newton(guess) = (guess + square/guess) / 2;
+    end root;
+
+begin:
+    root(2);   # 1.414213562373095   -- As good as we're going to get.
+    sqrt(2);   # 1.4142135623730951  -- That last digit is a topic for another day.
+
+    root(17);  # 4.123105625617805   -- Quite a bit better now,
+    sqrt(17);  # 4.123105625617661   -- but still not quite perfect.
+
+    root(170_000);  # 2677.54397787486   -- Ack! Horribly wrong.
+    sqrt(170_000);  # 412.31056256176606  -- It should be 100x that for 17.
+end.

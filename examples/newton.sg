@@ -1,12 +1,16 @@
-# Demonstration of Newton's Method as an iteration function.
+# Simplistic demonstration of Newton's Method as an iterated function.
 
 define:
     iterate_four_times(fn, x) = fn( fn( fn( fn( x ) ) ) );
 
     root(square) = iterate_four_times(newton, 1) where
-        newton(root) = (root + square/root) / 2;
+        newton(guess) = (guess + square/guess) / 2;
     end root;
+
 begin:
-    root(2);
-    root(17);
+    root(2);   # 1.4142135623746899 -- good to 13 digits!
+# Exact value is 1.4142135623730951
+
+    root(17);  # 4.126106627581331 -- Only the first three digits are correct,
+# Exact value is 4.123105625617661 -- but it's all downhill from there.
 end.
