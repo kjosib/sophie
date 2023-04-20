@@ -6,7 +6,7 @@ No longer quite the simplest, most straight-forward possible implementation.
 from typing import Any, Union, Sequence
 from collections import namedtuple, deque
 import abc
-from .preamble import static_root, do_turtle_graphics
+from .preamble import do_turtle_graphics
 from . import syntax, primitive, ontology
 
 STATIC_LINK = object()
@@ -105,7 +105,7 @@ def _eval_explicit_list(expr:syntax.ExplicitList, dynamic_env:dict):
 	return it
 
 def _eval_match_expr(expr:syntax.MatchExpr, dynamic_env:dict):
-	subject = actual_value(dynamic_env[expr.subject.text])
+	dynamic_env[expr.subject] = subject = actual_value(evaluate(expr.subject.expr, dynamic_env))
 	tag = subject[""]
 	try:
 		branch = expr.dispatch[tag]
@@ -138,7 +138,7 @@ def evaluate(expr:EVALUABLE, dynamic_env:dict) -> LAZY_VALUE:
 LOOKUP : dict[type, callable] = {
 	syntax.Function: _lookup_udf,
 	syntax.FormalParameter: _lookup_by_name,
-	syntax.MatchProxy: _lookup_by_name,
+	syntax.Subject: _lookup_all_else,
 	syntax.TypeDecl: _lookup_all_else,
 	syntax.SubTypeSpec: _lookup_all_else,
 	syntax.FFI_Alias: _lookup_all_else,
@@ -201,9 +201,8 @@ class Constructor(Procedure):
 			structure[field] = delay(caller_env, expr)
 		return structure
 
-def run_program(each_module: Sequence[syntax.Module]):
-	SOPHIE_GLOBALS.clear()
-	SOPHIE_GLOBALS.update(ROOT_GLOBALS)
+def run_program(static_root, each_module: Sequence[syntax.Module]):
+	_prepare_root_environment(static_root)
 	result = None  # Pacify the IDE
 	for module in each_module:
 		_prepare_global_scope(SOPHIE_GLOBALS, module.globals.local.items())
@@ -220,6 +219,21 @@ def run_program(each_module: Sequence[syntax.Module]):
 			if result is not None:
 				print(result)
 	return result
+
+SOPHIE_GLOBALS = {}
+NIL:dict
+CONS:Constructor
+
+def _prepare_root_environment(static_root):
+	global NIL, CONS
+	SOPHIE_GLOBALS.clear()
+	_prepare_global_scope(SOPHIE_GLOBALS, primitive.root_namespace.local.items())
+	_prepare_global_scope(SOPHIE_GLOBALS, static_root.local.items())
+	if 'nil' in static_root:
+		NIL = SOPHIE_GLOBALS[static_root['nil']]
+		CONS = SOPHIE_GLOBALS[static_root['cons']]
+	else:
+		NIL, CONS = None, None
 
 def _prepare_global_scope(env:dict, items):
 	for key, dfn in items:
@@ -278,12 +292,6 @@ def decons(item:dict) -> list:
 		result.append(item)
 	return result
 
-SOPHIE_GLOBALS = {}
-ROOT_GLOBALS = {}
-_prepare_global_scope(ROOT_GLOBALS, primitive.root_namespace.local.items())
-_prepare_global_scope(ROOT_GLOBALS, static_root.local.items())
-NIL = ROOT_GLOBALS[static_root['nil']]
-CONS = ROOT_GLOBALS[static_root['cons']]
 
 EVALUATE = {}
 for _k, _v in list(globals().items()):

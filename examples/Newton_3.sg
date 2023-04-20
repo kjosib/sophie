@@ -1,0 +1,22 @@
+# This version uses logic to decide when to stop.
+
+define:
+    root(square) = iterated(newton(1), 1) where               # Note 6
+        newton(root) = (root + square/root) / 2;
+        iterated(x, y) =                                      # Note 2
+          x if good_enough else iterated(newton(x), x) where  # Note 1
+            good_enough = relative_difference < 1e-14;        # Note 3, 4
+            relative_difference = fabs(x-y) / (x+y) ;         # Note 5
+         end iterated;
+    end root;
+
+begin:
+    root(2);        # 1.414213562373095    # Note 7
+    sqrt(2);        # 1.4142135623730951
+
+    root(17);       # 4.123105625617661
+    sqrt(17);       # 4.123105625617661
+
+    root(170000);   # 412.31056256176606
+    sqrt(170000);   # 412.31056256176606
+end.

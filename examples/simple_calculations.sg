@@ -1,0 +1,5 @@
+begin:
+    3 + 4 * 5;            # Precedence works like you learned in school.
+    ( 3 + 4 ) * 5;        # You can always override that with parentheses
+    sqrt(1+1);            # A number of mathematical functions and constants are built-in.
+end.

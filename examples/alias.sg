@@ -18,7 +18,7 @@ type:
 
 define:
 
-treemap(fn, t) = case t:
+treemap(fn, t) = case t of
     leaf -> leaf(fn(t.item));
     node -> node(treemap(fn, t.left), treemap(fn, t.right));
 esac;

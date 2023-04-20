@@ -1,13 +1,12 @@
 # How about a nice recurrence relation?
 
 define:
-
-Fibonacci = recur(1,1) where
-    recur(a,b) = cons(a, recur(b, a+b));
+Fibonacci = recur(1,1) where              # Note 2
+    recur(a,b) = cons(a, recur(b, a+b));  # Note 1
 end Fibonacci;
 
 begin:
-take(20, Fibonacci);
-
+take(20, Fibonacci);                      # Note 3
 end.
+
 

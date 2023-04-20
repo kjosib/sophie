@@ -47,15 +47,14 @@ and then take notes on how things go.
 
 * Sophie has Turtle-graphics! (See [here](https://github.com/kjosib/sophie/blob/main/examples/turtle.sg) for examples.)
 * The evaluator can run programs and display results, including turtle graphics as mentioned.
-* Type checking mostly works, but it needs a few loose ends tied up around field access.
-  Eventually I'd like to build a much better checker, but that might be a Sophie 2.0 project. 
+* Type checking used to mostly work, but I've ripped out the old checker and I'm starting a new one that should be much more precise.
 * It checks the validity of all identifiers (but field names may go unchecked until run-time under certain conditions).
 * List comprehension (expressions like `[expr FOR name IN expr]`) are removed from the syntax for now.
   Something will take its place, but it will take some work.
   I need to figure out how I want to support variable-arity functions.
   Until then, we'll need the equivalent of `map2` and `map3` and etc.
-* There is no interactivity yet. I'll probably end up with a concurrent actor model.
-* There is a basic module system, so imports work. It's not yet possible to restrict exports.                                                                                                                                                                                                                                                                                                                                                                                       
+* There is no interactivity yet. I currently lean towards an event-driven model as simplest to get working.
+* There is a basic module system, so imports work. It's not yet possible to restrict exports.
 * There is also an FFI (into Python) although it has certain limits. I should standardize a way to call back into Sophie.
 
 For FPA, maybe controlling a bank of elevators would be a good concrete example problem?

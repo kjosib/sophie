@@ -7,9 +7,9 @@ define:
 
     range(a, b) = nil if a > b else cons(a, range(a+1, b));
 
-    map2(fn, xs, ys) = case xs:
+    map2(fn, xs, ys) = case xs of
         nil -> nil;
-        cons -> case ys:
+        cons -> case ys of
             nil -> nil;
             cons -> cons(fn(xs.head, ys.head), map2(fn, xs.tail, ys.tail));
        esac;

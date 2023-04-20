@@ -1,5 +1,5 @@
 define:
-bad_flat(xss) = case xs:  # Note the wrong name "xs".
+bad_flat(xss) = case xs of  # Note the wrong name "xs".
     nil -> nil;
     cons -> cat(xss.head, bad_flat(xss.tail));
 esac;

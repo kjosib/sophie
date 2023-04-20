@@ -123,7 +123,14 @@ Make progress by running the basic algorithm on that cycle.
 If all the result-types *and provisions* stay the same, and restricted to the SCC,
 then that SCC has reached its least-fixpoint, so drop all provisions pointing at its members.
 
+Implementation Phases
+----------------------
 
+1. Tag what's out there as a release.
+2. Turn off the existing type inference engine.
+3. Interpret the run-time semantics of nontrivial type-case expressions.
+4. ???
+5. Profit!
 
 Resolving Imports
 ~~~~~~~~~~~~~~~~~~~~

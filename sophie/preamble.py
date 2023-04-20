@@ -70,42 +70,42 @@ type:
 	
 define:
 	id(x) = x;
-	any(xs) = case xs: nil -> no; cons -> xs.head or any(xs.tail); esac;
-	all(xs) = case xs: nil -> yes; cons -> xs.head and all(xs.tail); esac;
+	any(xs) = case xs of nil -> no; cons -> xs.head or any(xs.tail); esac;
+	all(xs) = case xs of nil -> yes; cons -> xs.head and all(xs.tail); esac;
 	
-	map(fn, xs) = case xs:
+	map(fn, xs) = case xs of
 		nil -> nil;
 		cons -> cons(fn(xs.head), map(fn, xs.tail));
 	esac;
 	
-	filter(predicate, xs) = case xs:
+	filter(predicate, xs) = case xs of
 		nil -> nil;
 		cons -> cons(xs.head, rest) if predicate(xs.head) else rest where
 			rest = filter(predicate, xs.tail);
 		end cons;
 	esac;
 
-	reduce(fn, a, xs) = case xs:
+	reduce(fn, a, xs) = case xs of
 		nil -> a;
 		cons -> reduce(fn, fn(a, xs.head), xs.tail);
 	esac;
 	
-	cat(xs,ys) = case xs:
+	cat(xs,ys) = case xs of
 		nil -> ys;
 		cons -> cons(xs.head, cat(xs.tail, ys));
 	esac;
 	
-	flat(xss) = case xss:
+	flat(xss) = case xss of
 		nil -> nil;
 		cons -> cat(xss.head, flat(xss.tail));
 	esac;
 	
-	take(n, xs) = nil if n < 1 else case xs:
+	take(n, xs) = nil if n < 1 else case xs of
 		nil -> nil;
 		cons -> cons(xs.head, take(n-1, xs.tail));
 	esac;
 	
-	skip(n, xs) = xs if n < 1 else case xs:
+	skip(n, xs) = xs if n < 1 else case xs of
 		nil -> nil;
 		cons -> skip(n-1, xs.tail);
 	esac;
@@ -131,25 +131,17 @@ end.
 """
 
 def _init():
-	from . import front_end, resolution, primitive, diagnostics, manifest
+	from . import front_end, diagnostics, primitive, resolution, manifest
 	report = diagnostics.Report()
 	report.set_path(__file__)
-	preamble = front_end.parse_text(__doc__, __file__, report)
-	if not report.issues:
-		resolution.resolve_words(preamble, primitive.root_namespace, report)
-	if not report.issues:
-		manifest.type_module(preamble, report)
-	if not report.issues:
-		from . import type_inference
-		type_inference.infer_types(preamble, report, verbose=False)
-	if report.issues:
-		report.complain_to_console()
-		raise RuntimeError()
-	else:
-		primitive.LIST = preamble.globals['list'].typ
-		return preamble.globals
-
-static_root = _init()
+	module = front_end.parse_text(__doc__, __file__, report)
+	report.assert_no_issues()
+	resolution.resolve_words(module, primitive.root_namespace, report)
+	report.assert_no_issues()
+	manifest.type_module(module, report)
+	report.assert_no_issues()
+	primitive.LIST = module.globals['list']
+	return module.globals
 
 def do_turtle_graphics(force, NIL, drawing):
 	import turtle, tkinter
@@ -183,3 +175,4 @@ def do_turtle_graphics(force, NIL, drawing):
 	root.bind("<KeyPress>", lambda event: root.destroy())
 	tkinter.mainloop()
 
+static_root = _init()

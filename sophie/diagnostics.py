@@ -1,14 +1,15 @@
-from typing import Sequence
+from typing import Sequence, Optional
 from boozetools.support.failureprone import SourceText, Issue, Evidence, Severity
 from .ontology import Expr
 
 class Report:
 	""" Might this end up participating in a result-monad? """
 	issues : list[Issue]
-	_path : str
+	_path : Optional[str]
 	
 	def __init__(self):
 		self.issues = []
+		self._path = None
 	
 	def set_path(self, path):
 		""" Let the report know which file is under consideration, for in case of error. """
@@ -18,7 +19,7 @@ class Report:
 	def error(self, phase: str, guilty: Sequence[slice], msg: str):
 		""" Actually make an entry of an issue """
 		assert all(isinstance(g, slice) for g in guilty)
-		evidence = {"": [Evidence(s, "") for s in guilty]}
+		evidence = {self._path: [Evidence(s, "") for s in guilty]}
 		self.issues.append(Issue(phase, Severity.ERROR, msg, evidence))
 
 	def on_error(self, phase:str):
@@ -33,8 +34,22 @@ class Report:
 		# Assuming an early-exit policy, so the issues aren't tied to files. Yet.
 		# Type conflicts could reasonably have messages that incorporate facts from different modules,
 		# but cross that bridge upon arrival.
-		with open(self._path) as fh:
-			text = fh.read()
-		source = SourceText(text, filename=self._path)
 		for i in self.issues:
-			i.emit(lambda x: source)
+			i.emit(_fetch)
+			
+	def assert_no_issues(self):
+		""" Does what it says on the tin """
+		if self.issues:
+			self.complain_to_console()
+			assert False
+
+			
+def _fetch(path):
+	if path:
+		with open(path) as fh:
+			return SourceText(fh.read(), filename=path)
+	else:
+		import sys
+		return SourceText(sys.modules["sophie.preamble"].__doc__)
+
+

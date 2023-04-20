@@ -23,15 +23,25 @@ Sooner or later this will get even easier.
 
 3. Download the code for Sophie.
 
-   Save `this link <https://github.com/kjosib/sophie/archive/refs/heads/main.zip>`_
-   to your computer somewhere you can find it easily.
+   Option One: Get a stable release
+        `Click here <https://github.com/kjosib/sophie/releases>`_
+        and fetch the most recent "Source code (zip)" asset
+        to your computer somewhere you can find it easily.
 
-   That's a direct link to an up-to-the-minute version of all of Sophie.
+        If you use this option, you should look for the corresponding version
+        of the documentation, for there have been a few changes in the language.
+
+   Option Two: Get the bleeding edge
+        Save `this link <https://github.com/kjosib/sophie/archive/refs/heads/main.zip>`_
+        to your computer somewhere you can find it easily.
+        That's a direct link to an up-to-the-minute version of all of Sophie.
+
    If you'd prefer to browse the repository online, it's `here <https://github.com/kjosib/sophie>`_.
 
 4. Extract the zip archive and place the juicy bits somewhere nice.
 
    Apparently GitHub bundles this up in several layers of ``sophie-main`` which you can strip out.
+   (If you got a version-coded release, then ``main`` is replaced by the version-code.)
    Mainly, you'll want the ``sophie`` folder.
 
 5. Try an example. Here's how it looks in Windows command line::

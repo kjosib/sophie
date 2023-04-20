@@ -30,36 +30,25 @@ parser = argparse.ArgumentParser(
 	description="Interpreter for the Sophie programming langauge.",
 )
 parser.add_argument("program", help="try examples/turtle.sg for example.")
-parser.add_argument('-c', "--check", action="store_true", help="Check syntax and types verbosely; Don't actually run the program.")
-parser.add_argument('-n', "--no-preamble", action="store_true", help="Don't load the preamble.")
-parser.add_argument('-x', "--experimental", action="store_true", help="Opt into whatever experiment is current, if any.")
+parser.add_argument('-c', "--check", action="store_true", help="Check the program verbosely but do not actually execute the program.")
+# parser.add_argument('-p', "--no-preamble", action="store_true", help="Don't load the preamble.")
+parser.add_argument('-x', "--experimental", action="store_true", help="Opt into experimental code, which is presently the new type checker.")
 
 def run(args):
-	if args.no_preamble:
-		from sophie.primitive import root_namespace as root
-	else:
-		from sophie.preamble import static_root as root
+	# if args.no_preamble:
 	
 	from sophie.diagnostics import Report
 	from sophie.modularity import Loader
 	report = Report()
-	loader = Loader(root, report, args.check)
-	try:
-		module = loader.need_module(os.getcwd(), args.program)
-	except FileNotFoundError:
-		print("There's no such file.", file=sys.stderr)
-		return 1
+	loader = Loader(report, verbose=args.check, experimental=args.experimental)
+	loader.load_program(os.getcwd(), args.program)
 	if report.issues:
 		report.complain_to_console()
 		return 1
 	elif args.check:
 		pass
-	elif module.main:
-		from sophie.simple_evaluator import run_program
-		run_program(loader.module_sequence)
 	else:
-		print("That module has no `begin:` section and thus is not a main program.", file=sys.stderr)
-		return 1
+		loader.run()
 		
 if len(sys.argv) > 1:
 	exit(run(parser.parse_args()))

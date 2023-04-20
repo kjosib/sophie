@@ -1,0 +1,13 @@
+define:
+    square(size) = repeat(4, [forward(size), right(90)]);
+
+    rosette = repeat(12, petal) where
+        petal = flat[square(150), [right(15)], square(75), [right(15)]];
+    end rosette;
+
+    repeat(n, portion) = nil if n < 1 else cat(portion, repeat(n-1, portion));
+
+begin:
+    "Square:"; drawing(square(200));
+    "Rosette:"; drawing(rosette);
+end.

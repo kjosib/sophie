@@ -21,7 +21,10 @@ Quick primer on reading the grammar:
 * You occasionally see a dot before a symbol, as in `.CASE`. You can ignore these dots.
 
 ```
-start -> export_section import_section typedef_section define_section main_section END '.' :Module
+start -> module_definition
+       | module_definition END '.'
+
+module_definition -> export_section import_section typedef_section define_section main_section :Module
 
 export_section  -> EXPORT ':' comma_list(name) ';'             | :empty
 import_section  -> IMPORT ':' semicolon_list(import_directive) | :empty
@@ -130,8 +133,10 @@ else_clause -> ELSE expr ';'
 ```
 For a while, that was all. But then Sophie got type-matching based on variant-types:
 ```
-match_expr -> CASE .subject ':' .semicolon_list(alternative) .optional(else_clause) ESAC  :match_expr
-subject -> name | expr AS name :SubjectWithExpr
+match_expr -> CASE subject optional(type_hint) OF semicolon_list(alternative) optional(else_clause) ESAC  :MatchExpr
+subject -> name     :simple_subject
+  | expr AS name    :Subject
+type_hint -> ':' reference
 alternative -> pattern '->' expr optional(where_clause) :Alternative
 pattern -> reference
 ```
