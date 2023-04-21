@@ -22,7 +22,7 @@ Conveniently, type-numbering is just an equivalence classification scheme.
 I can reuse the one from booze-tools.
 
 """
-from typing import Sequence
+from typing import Iterable
 from boozetools.support.foundation import EquivalenceClassifier
 from ..ontology import Symbol
 
@@ -57,7 +57,7 @@ class TypeVariable(ConcreteType):
 
 class Nominal(ConcreteType):
 	""" Either a record directly, or a variant-type. Details are in the symbol table. """
-	def __init__(self, dfn: Symbol, params: Sequence[ConcreteType]):
+	def __init__(self, dfn: Symbol, params: Iterable[ConcreteType]):
 		assert isinstance(dfn, Symbol)
 		self.dfn = dfn
 		self.params = tuple(p.exemplar() for p in params)
@@ -65,9 +65,9 @@ class Nominal(ConcreteType):
 	def visit(self, visitor:ConcreteTypeVisitor): return visitor.on_nominal(self)
 
 class Product(ConcreteType):
-	def __init__(self, fields: Sequence[ConcreteType]):
+	def __init__(self, fields: Iterable[ConcreteType]):
 		self.fields = tuple(p.exemplar() for p in fields)
-		super().__init__(self.fields)
+		super().__init__(*(p.number for p in self.fields))
 	def visit(self, visitor:ConcreteTypeVisitor): return visitor.on_product(self)
 	
 class Arrow(ConcreteType):
