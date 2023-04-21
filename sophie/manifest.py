@@ -85,11 +85,12 @@ class TypeBuilder(Visitor):
 		return inner.visit(Rewrite(mapping))
 	
 	def visit_Function(self, fn: syntax.Function):
-		typ = self.visit(fn.result_type_expr) if fn.result_type_expr else TypeVariable()
+		body_typ = self.visit(fn.result_type_expr) if fn.result_type_expr else TypeVariable()
 		if fn.params:
 			arg = Product(tuple(self.visit(p) for p in fn.params))
-			typ = Arrow(arg, typ)
-		fn.typ = typ
+			fn.typ = Arrow(arg, body_typ)
+		else:
+			fn.typ = body_typ
 		pass
 	
 	def visit_FormalParameter(self, fp: syntax.FormalParameter):

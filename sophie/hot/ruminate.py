@@ -8,8 +8,9 @@ well-typed with that type. Otherwise, the value-level program is at serious risk
 experiencing a type-error in practice.
 
 This module in particular represents the type-level execution mechanism.
+The type side of things can be call-by-value, which is a bit easier I think.
 
-For now, I'll take the task of the ruminant to be printing the types of the top-level expressions in each module.
+For now, the ruminant's task is to print the types of the top-level expressions in each module.
 Later, I can worry about a constant-folding pass.
 """
 
@@ -22,6 +23,24 @@ STATIC_LINK = object()
 
 _rewriter = lift_pass.RewriteIntoTypeRealm()
 
+class Closure:
+	def __init__(self, static_link: dict, udf: syntax.Function):
+		self.udf = udf
+		self._static_link = static_link
+	
+	def _name(self): return self.udf.nom.text
+	
+	def bind(self, arg_typ:Product) -> dict:
+		assert isinstance(arg_typ, Product)
+		args = arg_typ.fields
+		arity = len(self.udf.params)
+		if arity != len(args):
+			raise TypeError("Procedure %s expected %d args, got %d."%(self._name(), arity, len(args)))
+		inner_env = {STATIC_LINK:self._static_link}
+		for formal, actual in zip(self.udf.params, args):
+			inner_env[formal] = actual
+		return inner_env
+	
 class DeductionEngine(Visitor):
 	def __init__(self, report:diagnostics.Report, verbose:bool):
 		self._stx = {}  # Symbol's Type Expression
@@ -40,6 +59,31 @@ class DeductionEngine(Visitor):
 	@staticmethod
 	def visit_Constant(x:tdx.Constant, env:dict):
 		return x.term
+	
+	def visit_Apply(self, a:tdx.Apply, env:dict):
+		op_typ = self.visit(a.operation, env)
+		arg_typ = self.visit(a.argument, env)
+		if isinstance(op_typ, Arrow):
+			return apply_arrow(op_typ, arg_typ)
+		elif isinstance(op_typ, Closure):
+			return self.perform(op_typ.udf, op_typ.bind(arg_typ))
+		assert False, (op_typ, arg_typ)
+	
+	def perform(self, sym:syntax.Symbol, env:dict):
+		return self.visit(self._stx[sym], env)
+	
+	def visit_ProductType(self, p:tdx.ProductType, env:dict):
+		return Product(self.visit(x, env) for x in p.args)
+	
+	def visit_GlobalSymbol(self, gs:tdx.GlobalSymbol, env:dict):
+		""" Could be looking up a global function, a record-type, or something wrongly-typed. """
+		if isinstance(gs.sym, syntax.Function):
+			if gs.sym.params:
+				return Closure(self._global_env, gs.sym)
+			else:
+				return self.perform(gs.sym, self._global_env)
+		else:
+			assert False, gs
 	
 	# def visit_LookupSymbol(self, x:tdx.LookupSymbol, env:dict):
 	# 	sym = x.sym
@@ -65,10 +109,6 @@ class DeductionEngine(Visitor):
 	#
 	# pass
 
-class Closure:
-	def __init__(self, x:tdx.TDX, static:dict):
-		self.x, self.static = x, static
-		
 class Render(ConcreteTypeVisitor):
 	""" Return a string representation of the term. """
 	def __init__(self):

@@ -4,7 +4,7 @@ Bits that convert a value-domain program into a type-domain program form-by-form
 
 from boozetools.support.foundation import Visitor
 from .. import syntax, primitive
-from . import tdx
+from . import tdx, concrete
 
 FLAG = tdx.Constant(primitive.literal_flag)
 NUMBER = tdx.Constant(primitive.literal_number)
@@ -22,14 +22,11 @@ class RewriteIntoTypeRealm(Visitor):
 	"""
 	The first step in abstract interpretation is to map the concrete code into an
 	abstracted version of itself that specifically focuses on the topic of type safety.
-	This class represents that translation
+	This class represents that translation.
 	"""
 	
 	def visit_Function(self, fn:syntax.Function) -> tdx.TDX:
-		if fn.params:
-			pass
-		else:
-			return self.visit(fn.expr)
+		return self.visit(fn.expr)
 	
 	@staticmethod
 	def visit_Literal(expr: syntax.Literal) -> tdx.TDX:
@@ -56,9 +53,9 @@ class RewriteIntoTypeRealm(Visitor):
 		# and answers with the union of the (types of the) branches.
 		
 		# Technique: The match expression itself adds a symbol to the scope
-		subject = tdx.LookupSymbol(mx.subject_dfn)
-		patterns = [tdx.LookupSymbol(alt.pattern.dfn, 0) for alt in mx.alternatives]
-		branches = {alt.pattern.dfn:self.visit(alt.sub_expr) for alt in mx.alternatives}
+		subject = self.visit(mx.subject.expr)
+		patterns = [tdx.GlobalSymbol(alt.pattern.dfn) for alt in mx.alternatives]
+		branches = [self.visit(alt.sub_expr) for alt in mx.alternatives]
 		if mx.otherwise is not None:
 			branches.append(self.visit(mx.otherwise))
 		return tdx.Apply(subject, tdx.Operator(tdx.Union(patterns), tdx.Union(branches)))
@@ -78,5 +75,5 @@ class RewriteIntoTypeRealm(Visitor):
 		return self._call_site(OPS[expr.glyph], (expr.arg,))
 	
 	def visit_ExplicitList(self, expr: syntax.ExplicitList) -> tdx.TDX:
-		param = tdx.Union([self.visit(x) for x in expr.elts])
+		param = tdx.Union(self.visit(x) for x in expr.elts)
 		return tdx.Syntactic(primitive.LIST, [param])

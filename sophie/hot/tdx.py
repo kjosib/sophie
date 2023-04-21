@@ -3,7 +3,7 @@ Type Domain Expressions:
 The syntax of the high order typer
 """
 
-from typing import Sequence
+from typing import Iterable
 from ..ontology import Nom, Symbol, Reference
 from .concrete import ConcreteType, Nominal
 
@@ -27,9 +27,9 @@ class GlobalSymbol(TDX):
 class StackSymbol(TDX):
 	def __init__(self, sym:Symbol, hops:int):
 		assert isinstance(sym, Symbol)
-		assert isinstance(source_depth, int)
+		assert isinstance(hops, int)
 		self.sym = sym
-		self.source_depth = source_depth
+		self.hops = hops
 	def __str__(self):
 		return repr(self.sym)
 
@@ -59,21 +59,21 @@ class Operator(TDX):
 		return "[ %s *-> %s ]" % (self.parameter, self.result)
 
 class Union(TDX):
-	def __init__(self, args: Sequence[TDX]):
-		self.args = args
+	def __init__(self, args: Iterable[TDX]):
+		self.args = tuple(args)
 	def __str__(self):
 		return "or(%s)" % (','.join(map(str, self.args)))
 
 class ProductType(TDX):
-	def __init__(self, args: Sequence[TDX]):
-		self.args = args
+	def __init__(self, args: Iterable[TDX]):
+		self.args = tuple(args)
 	def __str__(self):
 		return "pr(%s)" % (','.join(map(str, self.args)))
 
 class Syntactic(TDX):
-	def __init__(self, nominal: Nominal, args: Sequence[TDX]):
+	def __init__(self, nominal: Nominal, args: Iterable[TDX]):
 		self.nominal = nominal
-		self.args = args
+		self.args = tuple(args)
 	def __str__(self):
 		return "%s[%s]" % (self.nominal.dfn.nom.text, ','.join(map(str, self.args)))
 
