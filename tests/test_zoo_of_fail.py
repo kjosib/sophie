@@ -2,8 +2,8 @@ from pathlib import Path
 import unittest
 from unittest import mock
 
-from sophie.front_end import parse_file, parse_text
-from sophie.resolution import resolve_words
+from sophie.front_end import parse_file
+from sophie.resolution import resolve_words, AliasChecker, check_all_match_expressions
 from sophie import syntax, primitive, diagnostics, modularity
 
 base_folder = Path(__file__).parent.parent
@@ -25,13 +25,13 @@ def _should_not_parse(basename, reason=""):
 	report = diagnostics.Report()
 	report.complain_to_console = mock.Mock()
 	with mock.patch("boozetools.macroparse.runtime.print", lambda *x,file=None:None):
-		assert _parse(basename, report) is None
+		assert _parse("parse/"+basename, report) is None
 	_expect_issue(report, reason)
 	assert 0 == report.complain_to_console.call_count
 
 def _should_not_resolve(basename, reason=""):
 	report = diagnostics.Report()
-	sut = _parse(basename, report)
+	sut = _parse("resolve/"+basename, report)
 	assert isinstance(sut, syntax.Module), (basename, sut)
 	report.assert_no_issues()
 	resolve_words(sut, primitive.root_namespace, report)
@@ -54,28 +54,25 @@ class ZooOfFail(unittest.TestCase):
 	def test_03_defined_twice(self):
 		_should_not_resolve("defined_twice")
 	
-	def test_04_well_founded(self):
-		from sophie import preamble
-		for bogon in [
-			"define: bogus(arg:yes) = arg; end.",  # "yes" is not a type.
-			"type: a is a; end.",
-			"type: a is b; b is a; end.",
-			"type: a is list[a]; end.",
-			# "type: a[x] is x; end.",  # Strange, but not strictly erroneous.
-			"type: a[x] is x[a]; end.",  # This definitely is.
-			"type: a[x] is x[list]; end.",  # This would imply second-order types, which .. no. Not now, anyway.
-			"type: L is list[number]; begin: L; end.",
-			"begin: number; end.",
-			# "define: i = i; end.",  # These will be for the new type-checker to catch.
-			# "define: i = 1 + i; end.",
-			# "define: i = j; j=k; k=i; end.",
-		]:
-			with self.subTest(bogon):
+	def test_04_bad_type_aliasing(self):
+		for basename in (
+			"alias_as_nominal_parameter",
+			"alias_as_structural_component",
+			"alias_circular_mutually",
+			"alias_circular_trivially",
+			"alias_subtype",
+			"alias_switcheroo",
+			"function_as_manifest_type",
+			"parameter_as_generic",
+		):
+			with self.subTest(basename):
 				report = diagnostics.Report()
-				report.set_path(bogon)
-				module = parse_text(bogon, __file__, report)
+				sut = _parse("type_alias/"+basename, report)
+				assert isinstance(sut, syntax.Module), (basename, sut)
 				report.assert_no_issues()
-				resolve_words(module, preamble.static_root, report)
+				resolve_words(sut, primitive.root_namespace, report)
+				report.assert_no_issues()
+				AliasChecker(sut, report)
 				_expect_issue(report)
 		
 	def test_05_module_breakage(self):
@@ -85,9 +82,27 @@ class ZooOfFail(unittest.TestCase):
 				report = diagnostics.Report()
 				loader = modularity.Loader(report, verbose=False)
 				# When
-				module = loader.need_module(zoo_fail, bogon + ".sg")
+				module = loader.need_module(zoo_fail/"import", bogon + ".sg")
 				# Then
 				assert type(module) is syntax.Module
+				_expect_issue(report)
+	
+	def test_06_bad_type_cases(self):
+		for basename in (
+			"not_exhaustive",
+			"confused",
+			"bad_else",
+		):
+			with self.subTest(basename):
+				report = diagnostics.Report()
+				sut = _parse("type_case_match/"+basename, report)
+				assert isinstance(sut, syntax.Module), (basename, sut)
+				report.assert_no_issues()
+				resolve_words(sut, primitive.root_namespace, report)
+				report.assert_no_issues()
+				AliasChecker(sut, report)
+				report.assert_no_issues()
+				check_all_match_expressions(sut, report)
 				_expect_issue(report)
 
 # def test_02_does_not_type(self):
