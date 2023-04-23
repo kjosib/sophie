@@ -4,18 +4,18 @@ Bits that convert a value-domain program into a type-domain program form-by-form
 
 from boozetools.support.foundation import Visitor
 from .. import syntax, primitive
-from . import tdx, concrete
+from . import calculus
 
-FLAG = tdx.Constant(primitive.literal_flag)
-NUMBER = tdx.Constant(primitive.literal_number)
+FLAG = primitive.literal_flag
+NUMBER = primitive.literal_number
 _literal_type_map = {
-	str : tdx.Constant(primitive.literal_string),
+	str : primitive.literal_string,
 	bool : FLAG,
 	int : NUMBER,
 	float : NUMBER,
 }
 
-OPS = {glyph:tdx.Constant(typ) for glyph, (op, typ) in primitive.ops.items()}
+OPS = {glyph:typ for glyph, (op, typ) in primitive.ops.items()}
 
 
 class RewriteIntoTypeRealm(Visitor):

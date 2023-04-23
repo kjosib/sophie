@@ -44,58 +44,57 @@ reference -> name     :PlainReference
 
 **The grammar of type declarations**
 
-At the moment, the intended semantics are typical of Hindley-Milner type algebras,
-but with some niceties around variants / sum-types.
-
-I've decided to do without nil as a special-case key-word for the time being.
-That makes the type engine easier to work on.
-
 ```
 
-type_declaration -> name optional(type_parameters) IS type_body :TypeDecl
+type_declaration -> type_name_is OPAQUE         :Opaque
+                  | type_name_is simple_type    :TypeAlias
+                  | type_name_is record_spec    :Record
+                  | type_name_is variant_spec   :Variant
 
-type_parameters -> '[' comma_list(name) ']'
+type_name_is -> name type_parameters IS   :Generic
+type_parameters -> optional_square_list(name)
 
-type_body -> simple_type | record_type | variant_type
+record_spec -> round_list(field)  :RecordSpec
+field -> name ':' simple_type   :FormalParameter
 
-record_type -> '(' comma_list(field) ')'   :RecordSpec
+variant_spec -> CASE ':' semicolon_list(subtype) ESAC
 
-variant_type -> .CASE ':' .semicolon_list(subtype) ESAC  :VariantSpec
-
-subtype  -> name record_type    :SubTypeSpec
+subtype  -> name record_spec    :SubTypeSpec
           | name simple_type    :SubTypeSpec
           | name                :SubTypeSpec
 
-field -> name ':' simple_type   :FormalParameter
-
 simple_type -> named_type | arrow_type
-
-named_type     -> reference optional(square_list(simple_type))              :TypeCall
-arrow_type     -> round_list(simple_type) '->' simple_type          :ArrowSpec
-
+named_type  -> reference optional_square_list(simple_type)    :TypeCall
+arrow_type  -> round_list(simple_type) '->' simple_type       :ArrowSpec
 ```
+**Caveat:** Opaque type declarations should not have type-parameters.
 
 **The general structure of a function:**
 ```
-function -> name optional(round_list(parameter)) annotation '=' expr optional(where_clause) :Function
+function -> name optional(round_list(parameter)) annotation '=' expr optional(where_clause)    :UserDefinedFunction
 where_clause -> WHERE semicolon_list(function) END name :WhereClause
 ```
 
 Parameters to a function allow things to be implied.
 You can leave off the type for a name,
 or use a question-mark anywhere a type-name would normally go,
-and the system will deal with it sensibly.
+and Sophie will deal with it sensibly.
 ```
 parameter  ->   name annotation   :FormalParameter
-annotation ->  :nothing   |  ':' param_type
+annotation ->  :nothing | ':' arg_type
 
-param_type ->  '?' optional(name)                  :genericity
-|   reference optional(square_list(param_type))    :TypeCall
-|   round_list(param_type) '->' param_type         :ArrowSpec
-
+arg_type ->  '?'                               :ImplicitTypeVariable
+  | '?' name                                   :ExplicitTypeVariable
+  | reference optional_square_list(arg_type)   :TypeCall
+  | round_list(arg_type) '->' arg_type         :ArrowSpec
 ```
+I suppose it bears mention that all Sophie functions are implicitly generic
+to whatever extent the body-expression can support.
+
 
 **The Expression Grammar:**
+
+
 
 ```
 expr -> integer | real | short_string | list_expr | case_expr | match_expr
@@ -125,6 +124,9 @@ expr -> integer | real | short_string | list_expr | case_expr | match_expr
 | expr '(' comma_list(expr) ')' :Call
 | expr list_expr :call_upon_list
 
+| .YES   :truth
+| .NO    :falsehood
+
 list_expr -> square_list(expr) :ExplicitList
 
 case_expr -> CASE semicolon_list(when_clause) else_clause ESAC :CaseWhen
@@ -151,10 +153,12 @@ so they get their own section.
 ```
 import_directive -> FOREIGN short_string WHERE semicolon_list(ffi_group) END   :ImportForeign
 
-ffi_group -> comma_list(ffi_symbol) ':' simple_type   :FFI_Group
+ffi_group -> comma_list(ffi_symbol) ':' type_parameters simple_type  :FFI_Group
 ffi_symbol -> name                    :FFI_Symbol
             | name '@' short_string   :FFI_Alias
 ```
+
+One caveat: ImplicitTypeVariable is not acceptable in the arg_type mentioned in an FFI_Group.
 
 -----
 
@@ -168,6 +172,7 @@ comma_list(x) ->  comma_separated_list(x) | comma_separated_list(x) ','
 semicolon_list(x) ->  x ';' :first  | _ x ';' :more
 optional(x) -> :nothing | x
 
+optional_square_list(x) -> :empty | square_list(x) 
 square_list(x) -> '[' comma_list(x) ']'
 round_list(x) -> '(' comma_list(x) ')'
 ```

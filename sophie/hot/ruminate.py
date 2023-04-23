@@ -16,8 +16,8 @@ Later, I can worry about a constant-folding pass.
 
 from boozetools.support.foundation import Visitor
 from .. import syntax, diagnostics
-from . import lift_pass, tdx
-from .concrete import ConcreteTypeVisitor, TypeVariable, Nominal, Product, Arrow
+from . import lift_pass
+from .calculus import TypeVisitor, TypeVariable, Nominal, Product, Arrow
 
 STATIC_LINK = object()
 
@@ -85,6 +85,9 @@ class DeductionEngine(Visitor):
 		else:
 			assert False, gs
 	
+	def visit_Operator(self, o:tdx.Operator, env:dict):
+		pass
+	
 	# def visit_LookupSymbol(self, x:tdx.LookupSymbol, env:dict):
 	# 	sym = x.sym
 	# 	target_depth = sym.static_depth
@@ -109,7 +112,7 @@ class DeductionEngine(Visitor):
 	#
 	# pass
 
-class Render(ConcreteTypeVisitor):
+class Render(TypeVisitor):
 	""" Return a string representation of the term. """
 	def __init__(self):
 		self._var_names = {}

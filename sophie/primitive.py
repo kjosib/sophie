@@ -1,26 +1,18 @@
 from functools import lru_cache
-from .ontology import NS, Symbol, Nom, Native
-from .hot.concrete import ConcreteType, Product, Arrow, TypeVariable, Nominal
+from .ontology import NS, Nom
+from .syntax import Generic, Opaque, Variant
+from .hot.calculus import SophieType, Product, Arrow, TypeVariable, Nominal
 
 root_namespace = NS(place=None)
 ops = {}
 
-LIST : Nominal  # Generated in the preamble.
-
-class PrimitiveType(Symbol):
-	""" Presumably add clerical details here. """
-	quantifiers = ()
-	def __init__(self, name:str):
-		self.nom = Nom(name, None)
-		self.typ = Nominal(self, ())
-	def __repr__(self): return "<%s>"%self.nom
-	def has_value_domain(self): return False  # .. HACK ..
-
+LIST : Variant  # Generated in the preamble.
 
 def _built_in_type(name:str) -> Nominal:
-	entry = PrimitiveType(name)
-	term = Nominal(entry, ())
-	root_namespace[name] = entry
+	nom = Nom(name, None)
+	symbol = Opaque(Generic(nom, ()))
+	term = Nominal(symbol, ())
+	root_namespace[name] = symbol
 	return term
 literal_number = _built_in_type("number")
 literal_string = _built_in_type("string")
@@ -30,7 +22,7 @@ literal_flag = _built_in_type("flag")
 def _arrow_of_math(arity:int) -> Arrow:
 	return _arrow_of(literal_number, arity)
 
-def _arrow_of(typ:ConcreteType, arity:int) -> Arrow:
+def _arrow_of(typ:SophieType, arity:int) -> Arrow:
 	assert arity > 0
 	return Arrow(Product((typ,) * arity), typ)
 
@@ -69,13 +61,5 @@ def _init():
 	ops["LogicalAnd"] = False, logical
 	ops["LogicalOr"] = True, logical
 	
-	def install_flag(name: str, value):
-		symbol = Native(Nom(name, None))
-		symbol.val = value
-		symbol.typ = literal_flag
-		root_namespace[name] = symbol
-	install_flag('yes', True)
-	install_flag('no', False)
-
 _init()
 

@@ -46,7 +46,7 @@ def run(args):
 		report.complain_to_console()
 		return 1
 	elif args.check:
-		pass
+		print("Looks plausible to me.", file=sys.stderr)
 	else:
 		loader.run()
 		

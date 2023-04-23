@@ -1,0 +1,4 @@
+define:
+    foo=yes;
+    bogus(arg:foo) = arg;  # "foo" is not a type.
+end.

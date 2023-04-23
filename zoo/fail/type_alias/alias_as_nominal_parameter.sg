@@ -1,0 +1,4 @@
+type:
+    foo[x] is (bar:x, baz:flag);
+    a is foo[a];  # Nope!
+end.

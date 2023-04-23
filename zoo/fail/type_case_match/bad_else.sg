@@ -1,0 +1,16 @@
+type:
+    alpha is case:
+        foo;
+        bar;
+    esac;
+
+define:
+    a_value = foo;
+
+begin:
+    case a_value as x of
+        foo -> "meh.";
+        bar -> "ugh!";
+        else "error!";
+    esac;
+

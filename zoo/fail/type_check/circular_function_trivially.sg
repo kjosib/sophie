@@ -1,0 +1,3 @@
+define: i = i;
+begin: i;
+end.

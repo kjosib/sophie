@@ -15,6 +15,7 @@ type:
 	year is number;
 	track is (title:string, artist:string, published:year, recorded:year);
 	album is (title:string, published:year, tracks:list[track]);
+	list_of_numbers is list[number];
 
 define:
 

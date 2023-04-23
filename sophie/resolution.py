@@ -3,15 +3,13 @@ All the definition resolution stuff goes here.
 By the time this pass is finished, every name points to its symbol table entry,
 from which we can find the kind, type, and definition.
 """
-from collections import defaultdict
 from importlib import import_module
 from boozetools.support.foundation import Visitor, strongly_connected_components_hashable
 from boozetools.support.symtab import NoSuchSymbol, SymbolAlreadyExists
-from . import syntax
+from . import syntax, diagnostics
 from .ontology import NS, Symbol
-from .primitive import PrimitiveType
 
-def resolve_words(module: syntax.Module, outside: NS, report):
+def resolve_words(module: syntax.Module, outside: NS, report: diagnostics.Report):
 	"""
 	At the end of this action, every name-reference in the source text is visible where it's used.
 	That is, a corresponding definition-object is in scope. It may not make sense,
@@ -29,8 +27,6 @@ def resolve_words(module: syntax.Module, outside: NS, report):
 		WordResolver(module, report.on_error("Finding Definitions"))
 	if not report.issues:
 		build_match_dispatch_tables(module, report.on_error("Validating Match Cases"))
-	if not report.issues:
-		AliasChecker(module, report.on_error("Circular reasoning"))
 
 class WordPass(Visitor):
 	""" Simple pass-through for word-agnostic expression syntax. """
@@ -40,7 +36,7 @@ class WordPass(Visitor):
 		self.visit(it.rhs, env)
 	
 	def visit_Literal(self, l:syntax.Literal, env:NS): pass
-	def visit_ImplicitType(self, it:syntax.ImplicitType, env:NS): pass
+	def visit_ImplicitType(self, it:syntax.ImplicitTypeVariable, env:NS): pass
 
 	def visit_ShortCutExp(self, it: syntax.ShortCutExp, env: NS):
 		self.visit(it.lhs, env)
@@ -97,6 +93,8 @@ class WordDefiner(WordPass):
 			on_error(self.broken_foreign, "Attempting to import this module threw an exception.")
 		for fn in module.outer_functions:  # Can't iterate all-functions yet; must build it first.
 			self.visit(fn, module.globals)
+		for expr in module.main:  # Might need to define some case-match symbols here.
+			self.visit(expr, module.globals)
 		if self.redef:
 			on_error(self.redef, "I see the same name defined earlier in the same scope:")
 
@@ -104,39 +102,41 @@ class WordDefiner(WordPass):
 		try: namespace[dfn.nom.text] = dfn
 		except SymbolAlreadyExists: self.redef.append(dfn.nom)
 	
-	def visit_TypeDecl(self, td:syntax.TypeDecl):
-		td.namespace = self.globals.new_child(td)
-		quantifiers = []
-		for param in td.parameters:
-			self._install(td.namespace, param)
-			param.quantifiers = ()
-			quantifiers.append(param.typ)
-		self.visit(td.body, td.namespace)
+	def _declare_type(self, td:syntax.TypeDeclaration):
 		self._install(self.globals, td)
-		td.quantifiers = tuple(quantifiers)
+		ps = td.param_space = self.globals.new_child(place=td)
+		for p in td.parameters:
+			self._install(ps, p)
 
-	def visit_VariantSpec(self, vs:syntax.VariantSpec, env:NS):
-		vs.namespace = NS(place=vs)
-		for subtype in vs.subtypes:
-			assert isinstance(subtype, syntax.SubTypeSpec)
-			self._install(self.globals, subtype)
-			self._install(vs.namespace, subtype)
-			if subtype.body is not None:
-				self.visit(subtype.body, env)
-		return
+	
+	def visit_Variant(self, v:syntax.Variant):
+		self._declare_type(v)
+		ss = v.sub_space = NS(place=v)
+		for st in v.subtypes:
+			self._install(self.globals, st)
+			self._install(ss, st)
+			if st.body is not None:
+				self.visit(st.body)
+				
+	def visit_Record(self, r:syntax.Record):
+		self._declare_type(r)
+		self.visit(r.spec)
 
-	def visit_RecordSpec(self, rs:syntax.RecordSpec, env:NS):
+	def visit_TypeAlias(self, ta:syntax.TypeAlias):
+		self._declare_type(ta)
+		
+	def visit_RecordSpec(self, rs:syntax.RecordSpec):
 		# Ought to have a local name-space with names having types.
-		rs.namespace = NS(place=rs)
+		rs.field_space = NS(place=rs)
 		for f in rs.fields:
-			self._install(rs.namespace, f)
+			self._install(rs.field_space, f)
 		return
 
 	def visit_TypeCall(self, it:syntax.TypeCall, env:NS):
 		for a in it.arguments:
 			self.visit(a, env)
 
-	def visit_Function(self, fn:syntax.Function, env:NS):
+	def visit_UserDefinedFunction(self, fn:syntax.UserDefinedFunction, env:NS):
 		self.all_functions.append(fn)
 		self._install(env, fn)
 		inner = fn.namespace = env.new_child(fn)
@@ -153,7 +153,7 @@ class WordDefiner(WordPass):
 		if fp.type_expr is not None:
 			self.visit(fp.type_expr, env)
 	
-	def visit_GenericType(self, gt:syntax.GenericType, env:NS):
+	def visit_ExplicitTypeVariable(self, gt:syntax.ExplicitTypeVariable, env:NS):
 		if gt.nom.text not in env:
 			self._install(env, syntax.TypeParameter(gt.nom))
 	
@@ -195,18 +195,18 @@ class StaticDepthPass(WordPass):
 	# This pass cannot fail.
 	def __init__(self, module):
 		for fn in module.outer_functions:
-			self.visit_Function(fn, 0)
+			self.visit_UserDefinedFunction(fn, 0)
 		for expr in module.main:
 			self.visit(expr, 0)
 			
-	def visit_Function(self, fn:syntax.Function, depth:int):
+	def visit_UserDefinedFunction(self, fn:syntax.UserDefinedFunction, depth:int):
 		fn.static_depth = depth
 		inner = depth + (1 if fn.params else 0)
 		for param in fn.params:
 			param.static_depth = inner
 		self.visit(fn.expr, inner)
 		for sub_fn in fn.where:
-			self.visit_Function(sub_fn, inner)
+			self.visit_UserDefinedFunction(sub_fn, inner)
 		
 	def visit_MatchExpr(self, mx:syntax.MatchExpr, depth:int):
 		mx.subject.static_depth = depth
@@ -237,7 +237,7 @@ class WordResolver(WordPass):
 		for d in module.foreign:
 			self.visit(d)
 		for fn in module.all_functions:
-			self.visit(fn)
+			self.visit_UserDefinedFunction(fn)
 		for expr in module.main:
 			self.visit(expr, module.globals)
 		if self.undef:
@@ -245,14 +245,25 @@ class WordResolver(WordPass):
 		if self.non_value:
 			on_error(self.non_value, "This word is defined only in type context, not value context:")
 	
-	def visit_TypeDecl(self, td:syntax.TypeDecl):
-		self.visit(td.body, td.namespace)
-	
-	def visit_VariantSpec(self, vs:syntax.VariantSpec, env:NS):
-		for st in vs.subtypes:
+	# def visit_TypeDecl(self, td:syntax.TypeDeclaration):
+	# 	self.visit(td.body, td.namespace)
+	#
+	# def visit_VariantSpec(self, vs:syntax.VariantSpec, env:NS):
+	# 	for st in vs.subtypes:
+	# 		if st.body is not None:
+	# 			self.visit(st.body, env)
+	# 		pass
+
+	def visit_Variant(self, v:syntax.Variant):
+		for st in v.subtypes:
 			if st.body is not None:
-				self.visit(st.body, env)
-			pass
+				self.visit(st.body, v.param_space)
+	
+	def visit_Record(self, r:syntax.Record):
+		self.visit(r.spec, r.param_space)
+	
+	def visit_TypeAlias(self, ta:syntax.TypeAlias):
+		self.visit(ta.body, ta.param_space)
 	
 	def visit_RecordSpec(self, rs:syntax.RecordSpec, env:NS):
 		for f in rs.fields:
@@ -273,7 +284,7 @@ class WordResolver(WordPass):
 		space = self._lookup(ref.space, self.module.module_imports)
 		ref.dfn = self._lookup(ref.nom, space) if space else None
 	
-	def visit_GenericType(self, ref:syntax.GenericType, env:NS):
+	def visit_GenericType(self, ref:syntax.ExplicitTypeVariable, env:NS):
 		ref.dfn = self._lookup(ref.nom, env)
 	
 	def visit_TypeCall(self, tc:syntax.TypeCall, env:NS):
@@ -281,7 +292,7 @@ class WordResolver(WordPass):
 		for p in tc.arguments:
 			self.visit(p, env)
 
-	def visit_Function(self, fn:syntax.Function):
+	def visit_UserDefinedFunction(self, fn:syntax.UserDefinedFunction):
 		for param in fn.params:
 			if param.type_expr is not None:
 				self.visit(param.type_expr, fn.namespace)
@@ -324,6 +335,7 @@ def build_match_dispatch_tables(module: syntax.Module, on_error):
 
 class AliasChecker(Visitor):
 	"""
+	Check the arity of TypeCall forms.
 	Check for aliases being well-founded, up front before getting caught in a loop later:
 	There should be no cycles in the aliasing dependency graph, and no wrong-kind references.
 	Also re-orders type definitions in order of alias topology.
@@ -331,16 +343,16 @@ class AliasChecker(Visitor):
 	Stop worrying about function cycles; I'll catch that problem in the type checker.
 	"""
 	
-	def __init__(self, module: syntax.Module, on_error):
-		self.on_error = on_error
+	def __init__(self, module: syntax.Module, report: diagnostics.Report):
+		self.on_error = report.on_error("Circular reasoning")
 		self.non_types = []
-		self.graph = defaultdict(list)
+		self.graph = {td:[] for td in module.types}
 		for td in module.types:
 			self.visit(td)
 		for d in module.foreign:
 			self.visit(d)
 		for fn in module.all_functions:
-			self.visit_Function(fn)
+			self.visit(fn)
 		if self.non_types:
 			self.on_error(self.non_types, "Need a type-name here; found this instead.")
 		alias_order = []
@@ -349,8 +361,8 @@ class AliasChecker(Visitor):
 			if len(scc) == 1:
 				node = scc[0]
 				if node in self.graph[node]:
-					self.on_error([node], "This is a circular.")
-				elif isinstance(node, syntax.TypeDecl):
+					self.on_error([node], "This is a circular definition.")
+				elif isinstance(node, syntax.TypeDeclaration):
 					alias_order.append(node)
 			else:
 				self.on_error(scc, "These make a circular definition.")
@@ -360,58 +372,110 @@ class AliasChecker(Visitor):
 			module.types = alias_order
 	pass
 	
-	def visit_TypeDecl(self, td:syntax.TypeDecl):
-		self.graph[td].append(td.body)
-		self.visit(td.body)
+	def visit_TypeAlias(self, ta:syntax.TypeAlias):
+		self.graph[ta].append(ta.body)
+		self.visit(ta.body)
 	
-	def visit_FormalParameter(self, param:syntax.FormalParameter):
-		if param.type_expr is not None:
-			self.visit(param.type_expr)
-	
-	def visit_TypeCall(self, expr:syntax.TypeCall):
-		referent = expr.ref.dfn
-		arg_arity = len(expr.arguments)
-		if isinstance(referent, syntax.TypeDecl):
+	def visit_TypeCall(self, tc:syntax.TypeCall):
+		assert tc not in self.graph
+		self.graph[tc] = edges = list(tc.arguments)
+		referent = tc.ref.dfn
+		if isinstance(referent, syntax.TypeDeclaration):
 			param_arity = len(referent.parameters)
-			self.graph[expr].append(referent)
-		elif isinstance(referent, (PrimitiveType, syntax.TypeParameter)):
+			edges.append(referent)
+		elif isinstance(referent, syntax.TypeParameter):
 			param_arity = 0
 		else:
-			self.non_types.append(expr)
+			self.non_types.append(tc)
 			return
-		self.graph[expr].extend(expr.arguments)
 		# a. Do we have the correct arity?
+		arg_arity = len(tc.arguments)
 		if arg_arity != param_arity:
 			pattern = "%d type-arguments were given; %d are needed."
-			self.on_error([expr], pattern % (arg_arity, param_arity))
-		for arg in expr.arguments:
+			self.on_error([tc], pattern % (arg_arity, param_arity))
+		for arg in tc.arguments:
 			self.visit(arg)
 
-	def visit_VariantSpec(self, expr: syntax.VariantSpec):
-		for alt in expr.subtypes:
-			if alt.body is not None:
-				self.visit(alt.body)
+	def visit_Variant(self, v: syntax.Variant):
+		# A variant cannot participate in an aliasing cycle because it is a nominal type.
+		for st in v.subtypes:
+			if st.body is not None:
+				self.visit(st.body)
+	
+	def visit_Record(self, r:syntax.Record):
+		self.visit(r.spec)
+	
 	def visit_RecordSpec(self, expr: syntax.RecordSpec):
 		for f in expr.fields:
 			self.visit(f)
+	
+	def visit_FormalParameter(self, param: syntax.FormalParameter):
+		if param.type_expr is not None:
+			self.visit(param.type_expr)
+	
 	def visit_ArrowSpec(self, expr:syntax.ArrowSpec):
-		self.graph[expr].extend(expr.lhs)
+		assert expr not in self.graph
+		self.graph[expr] = list(expr.lhs)
 		for p in expr.lhs:
 			self.visit(p)
 		if expr.rhs is not None:
 			self.graph[expr].append(expr.rhs)
 			self.visit(expr.rhs)
 
-	def visit_GenericType(self, expr:syntax.GenericType):pass
-	def visit_ImplicitType(self, it:syntax.ImplicitType): pass
+	def visit_ExplicitTypeVariable(self, expr:syntax.ExplicitTypeVariable): pass
+	def visit_ImplicitTypeVariable(self, it:syntax.ImplicitTypeVariable): pass
 
-	def visit_Function(self, fn:syntax.Function):
+	def visit_UserDefinedFunction(self, fn:syntax.UserDefinedFunction):
 		for p in fn.params:
 			self.visit(p)
 		if fn.result_type_expr:
 			self.visit(fn.result_type_expr)
-
+	
 	def visit_ImportForeign(self, d:syntax.ImportForeign):
 		for group in d.groups:
 			self.visit(group.type_expr)
 
+def check_all_match_expressions(module: syntax.Module, report):
+	on_match_error = report.on_error("Checking Type-Case Matches")
+	for mx in module.all_match_expressions:
+		_check_one_match_expression(mx, on_match_error)
+
+def _check_one_match_expression(mx:syntax.MatchExpr, on_error):
+	non_subtypes = []
+	duplicates = []
+	seen = set()
+	
+	subtypes : list[syntax.SubTypeSpec] = []
+	
+	for alt in mx.alternatives:
+		dfn = alt.pattern.dfn
+		if isinstance(dfn, syntax.SubTypeSpec):
+			subtypes.append(dfn)
+			if dfn in seen:
+				duplicates.append(alt.pattern)
+			else:
+				seen.add(dfn)
+		else:
+			non_subtypes.append(alt.pattern)
+	
+	if non_subtypes:
+		on_error(non_subtypes, "This case is not a member of any variant.")
+	if duplicates:
+		on_error(duplicates, "This duplicates an earlier case.")
+	if non_subtypes or duplicates:
+		return
+	
+	primary_variant = subtypes[0].variant
+	mistypes = [alt.pattern for alt in mx.alternatives if alt.pattern.dfn.variant is not primary_variant]
+	
+	if mistypes:
+		on_error([mx.alternatives[0].pattern] + mistypes, "These do not all come from the same variant type.")
+		return
+
+	mx.variant = primary_variant
+	exhaustive = len(seen) == len(primary_variant.subtypes)
+	if exhaustive and mx.otherwise:
+		on_error([mx, mx.otherwise], "This case-construction is exhaustive; the else-clause cannot happen.")
+	if not (exhaustive or mx.otherwise):
+		on_error([mx], "This case-construction does not cover all the cases of <%s> and lacks an otherwise-clause." % mx.variant.nom.text)
+	pass

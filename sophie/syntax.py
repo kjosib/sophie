@@ -4,34 +4,65 @@ The parser calls these constructors with subordinate semantic-values in a bottom
 These constructors may add a touch of organization.
 Class-level type annotations make peace with pycharm wherever later passes add fields.
 """
+from abc import ABC, abstractmethod
 from typing import Optional, Any, Sequence, NamedTuple, Union
 from boozetools.parsing.interface import SemanticError
 from boozetools.support.symtab import NameSpace
-from .ontology import Nom, Symbol, Native, NS, Reference, TypeExpr, ValExpr
-from .hot.concrete import Product, TypeVariable
+from .ontology import (
+	Nom, Symbol, NativeFunction, NS, Reference,
+	Expr, Function,
+)
+
+
+class TypeParameter(Symbol):
+	static_depth = 0
+	def __init__(self, nom:Nom):
+		super().__init__(nom)
+	def head(self) -> slice:
+		return self.nom.head()
+	def has_value_domain(self) -> bool:
+		return False
+	def is_nominal(self) -> bool: return False
+
+class Generic(NamedTuple):
+	nom: Nom
+	param_names: Sequence[Nom]
+
+class TypeDeclaration(Symbol, ABC):
+	param_space: NS   # Will address the type parameters. Word-definer fills this.
+	parameters: tuple[TypeParameter]
+	static_depth = 0
+	
+	def __init__(self, generic:Generic):
+		assert isinstance(generic, Generic)
+		super().__init__(generic.nom)
+		self.parameters = tuple(TypeParameter(n) for n in generic.param_names)
+
+class SimpleType(Expr, ABC):
+	@abstractmethod
+	def is_nominal(self) -> bool: pass
+
+class ValExpr(Expr):
+	pass
 
 class PlainReference(Reference):
-	nom: Nom
-	def __init__(self, nom:Nom):
-		self.nom = nom
 	def head(self) -> slice:
 		return self.nom.head()
 
 class QualifiedReference(Reference):
-	nom: Nom
 	space: Nom
 	def __init__(self, nom:Nom, space:Nom):
-		self.nom = nom
+		super().__init__(nom)
 		self.space = space
 	def head(self) -> slice:
 		return slice(self.nom.head().start, self.space.head().stop)
 
-SIMPLE_TYPE = Union["TypeCall", "ArrowSpec", "ImplicitType", "GenericType"]
+ARGUMENT_TYPE = Union[SimpleType, "ImplicitTypeVariable", "ExplicitTypeVariable"]
 
-class ArrowSpec(TypeExpr):
-	lhs: Sequence[SIMPLE_TYPE]
+class ArrowSpec(SimpleType):
+	lhs: Sequence[ARGUMENT_TYPE]
 	_head: slice
-	rhs: SIMPLE_TYPE
+	rhs: ARGUMENT_TYPE
 	
 	def __init__(self, lhs, _head, rhs):
 		assert rhs is not None
@@ -40,100 +71,93 @@ class ArrowSpec(TypeExpr):
 		self.rhs = rhs
 	def head(self) -> slice:
 		return self._head
+	def is_nominal(self) -> bool: return False
 	
-class TypeCall(TypeExpr):
-	def __init__(self, ref: Reference, arguments: Sequence[SIMPLE_TYPE] = ()):
+class TypeCall(SimpleType):
+	def __init__(self, ref: Reference, arguments: Sequence[ARGUMENT_TYPE] = ()):
 		assert isinstance(ref, Reference)
 		self.ref, self.arguments = ref, arguments or ()
 	
 	def head(self) -> slice: return self.ref.head()
+	
+	def is_nominal(self) -> bool: return self.ref.dfn.is_nominal()
 
-class ImplicitType(TypeExpr):
+class ImplicitTypeVariable:
 	""" Stand-in as the relevant type-expression for when the syntax doesn't bother. """
-	_head: slice
-	def __init__(self, _head):
-		self._head = _head
+	_slice: slice
+	def __init__(self, a_slice):
+		self._slice = a_slice
 	def head(self) -> slice:
-		return self._head
+		return self._slice
 
-class GenericType(Reference):
-	nom: Nom
+class ExplicitTypeVariable(Reference):
 	def __init__(self, _hook, nom:Nom):
+		super().__init__(nom)
 		self._hook = _hook
-		self.nom = nom
 	def head(self) -> slice:
 		return slice(self._hook.head().start, self.nom.head().stop)
 
-def genericity(_hook, nom:Optional[Nom]):
-	if nom is None: return ImplicitType(_hook)
-	else: return GenericType(_hook, nom)
-
 class FormalParameter(Symbol):
 	def has_value_domain(self): return True
-	def __init__(self, nom:Nom, type_expr: Optional[SIMPLE_TYPE]):
+	def __init__(self, nom:Nom, type_expr: Optional[ARGUMENT_TYPE]):
 		super().__init__(nom)
 		self.type_expr = type_expr
 	def head(self) -> slice: return self.nom.head()
 	def key(self): return self.nom.key()
 	def __repr__(self): return "<:%s:%s>"%(self.nom.text, self.type_expr)
 
-class RecordSpec(TypeExpr):
-	namespace: NS  # WordDefiner pass fills this in.
-	product_type: Product  # TypeBuilder pass sets this.
+class RecordSpec:
+	field_space: NS  # WordDefiner pass fills this in.
 	def __init__(self, fields: list[FormalParameter]):
 		self.fields = fields
 	
 	def field_names(self):
 		return [f.nom.text for f in self.fields]
 
+class TypeAlias(TypeDeclaration):
+	body: SimpleType
+	def __init__(self, generic:Generic, body:SimpleType):
+		super().__init__(generic)
+		self.body = body
+	def is_nominal(self): return self.body.is_nominal()
+	def has_value_domain(self) -> bool: return self.body.is_nominal()
+
+class Opaque(TypeDeclaration):
+	parameters = ()  # This way calculus.Nominal does not have to worry about the possibility of a non-generic.
+	def has_value_domain(self): return False
+	def is_nominal(self): return True
+
+class Record(TypeDeclaration):
+	def __init__(self, generic:Generic, spec:RecordSpec):
+		super().__init__(generic)
+		self.spec = spec
+	def has_value_domain(self) -> bool: return True
+	def is_nominal(self) -> bool: return True
+
+class Variant(TypeDeclaration):
+	sub_space: NS  # WordDefiner pass fills this in.
+	def __init__(self, generic:Generic, subtypes: list["SubTypeSpec"]):
+		super().__init__(generic)
+		self.subtypes = subtypes
+		for s in subtypes: s.variant = self
+	def has_value_domain(self) -> bool: return False
+	def is_nominal(self) -> bool: return True
+	
 class SubTypeSpec(Symbol):
-	body: Union[RecordSpec, TypeCall, ArrowSpec]
-	variant:"TypeDecl"
+	body: Optional[Union[RecordSpec, TypeCall, ArrowSpec]]
+	variant: Variant
 	static_depth = 0
-	def has_value_domain(self): return True
+	# To clarify: The SubType here describes a *tagged* value, not the type of the value so tagged.
+	# One can tag any kind of value; even a function. Therefore yes, you can always
+	# treat a (tagged) subtype as a function. At least, once everything works right.
+	def is_nominal(self) -> bool: return True
+	def has_value_domain(self) -> bool: return True
 	def __init__(self, nom:Nom, body=None):
 		super().__init__(nom)
 		self.body = body
 	def head(self) -> slice: return self.nom.head()
 	def key(self): return self.nom.key()
 	def __repr__(self): return "<:%s:%s>"%(self.nom.text, self.body)
-
-class VariantSpec(TypeExpr):
-	_kw: slice
-	namespace: NS
-	def __init__(self, _kw: slice, subtypes: list[SubTypeSpec]):
-		self._kw = _kw
-		self.subtypes = subtypes
-
-class TypeParameter(Symbol):
-	quantifiers = ()
-	def __init__(self, nom:Nom):
-		super().__init__(nom)
-		self.typ = TypeVariable()
-	def head(self) -> slice:
-		return self.nom.head()
-	def has_value_domain(self) -> bool:
-		return False
-
-class TypeDecl(Symbol):
-	namespace: NS
-	nom: Nom
-	parameters: Sequence[TypeParameter]
-	body: Union[TypeCall, VariantSpec, RecordSpec]
-	quantifiers: list[TypeVariable]  # phase: WordDefiner
-	static_depth = 0
-	def __str__(self): return self.nom.text
-	def __repr__(self):
-		p = "[%s] "%",".join(map(str, self.parameters)) if self.parameters else ""
-		return "{td:%s%s = %s}"%(self.nom.text, p, self.body)
-	
-	def __init__(self, nom, parameters: Sequence[Nom], body) -> None:
-		super().__init__(nom)
-		self.parameters = [TypeParameter(p) for p in parameters or ()]
-		self.body = body
-	def head(self) -> slice:
-		return self.nom.head()
-	def has_value_domain(self): return isinstance(self.body, RecordSpec)
 
 class MismatchedBookendsError(SemanticError):
 	# The one semantic error we catch early enough to interrupt the parse.
@@ -145,10 +169,10 @@ def _bookend(head: Nom, coda: Nom):
 	if head.text != coda.text:
 		raise MismatchedBookendsError(head.head(), coda.head())
 
-class Function(Symbol):
+class UserDefinedFunction(Function):
 	namespace: NS
-	sub_fns: dict[str:"Function"]  # for simple evaluator
-	where: Sequence["Function"]
+	sub_fns: dict[str:"UserDefinedFunction"]  # for simple evaluator
+	where: Sequence["UserDefinedFunction"]
 	
 	def has_value_domain(self): return True
 	def __repr__(self):
@@ -158,7 +182,7 @@ class Function(Symbol):
 			self,
 			nom: Nom,
 			params: Sequence[FormalParameter],
-			expr_type: Optional[SIMPLE_TYPE],
+			expr_type: Optional[ARGUMENT_TYPE],
 			expr: ValExpr,
 			where: Optional["WhereClause"]
 	):
@@ -187,6 +211,9 @@ class Literal(ValExpr):
 	
 	def head(self) -> slice:
 		return self._slice
+
+def truth(a_slice:slice): return Literal(True, a_slice)
+def falsehood(a_slice:slice): return Literal(False, a_slice)
 
 class Lookup(ValExpr):
 	ref:Reference
@@ -318,7 +345,7 @@ class MatchExpr(ValExpr):
 	
 	namespace: NS  # WordDefiner fills
 	
-	variant:TypeDecl  # check_match_expressions infers this from the patterns
+	variant:TypeDeclaration  # check_match_expression infers this from the patterns
 	dispatch: dict[Optional[str]:ValExpr]
 	
 	def __init__(self, subject:Subject, hint:Optional[Reference], alternatives: list[Alternative], otherwise: Optional[ValExpr]):
@@ -336,7 +363,7 @@ class ImportModule(ImportDirective):
 		self.relative_path = relative_path
 		self.nom = nom
 
-class FFI_Alias(Native):
+class FFI_Alias(NativeFunction):
 	def __init__(self, nom:Nom, alias:Optional[Literal]):
 		super().__init__(nom)
 		self.nom = nom
@@ -346,8 +373,9 @@ def FFI_Symbol(nom:Nom):
 	return FFI_Alias(nom, None)
 
 class FFI_Group:
-	def __init__(self, symbols:list[FFI_Alias], type_expr:Union[TypeCall, ArrowSpec]):
+	def __init__(self, symbols:list[FFI_Alias], type_params:Sequence[TypeParameter], type_expr:SimpleType):
 		self.symbols = symbols
+		self.type_params = type_params
 		self.type_expr = type_expr
 
 class ImportForeign(ImportDirective):
@@ -363,10 +391,7 @@ class Module:
 	globals: NS  # WordDefiner pass creates this.
 	constructors: dict[str:]
 	all_match_expressions: list[MatchExpr]  # WordResolver pass creates this.
-	all_functions: list[Function]
-	all_record_specs: list[RecordSpec]  # Handy to save trouble around variants.
-	all_variant_specs: list[VariantSpec]
-	all_subtype_specs: list[SubTypeSpec]
+	all_functions: list[UserDefinedFunction]
 	def __init__(self, exports:list, imports:list[ImportDirective], types:list, functions:list, main:list):
 		self.exports = exports
 		self.imports = [i for i in imports if isinstance(i, ImportModule)]

@@ -1,0 +1,11 @@
+type:
+    alpha is case:
+        foo;
+        bar;
+    esac;
+
+define:
+    problem(x) = case x of
+        foo -> "insufficient";
+    esac;
+end.
