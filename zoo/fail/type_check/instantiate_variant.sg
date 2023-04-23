@@ -1,0 +1,1 @@
+type: L is list[number]; begin: L; end.

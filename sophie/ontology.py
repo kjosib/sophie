@@ -1,4 +1,5 @@
-from typing import Any
+from abc import ABC, abstractmethod
+from typing import Any, Sequence
 from boozetools.support.symtab import NameSpace
 
 class Nom:
@@ -20,19 +21,26 @@ class Symbol:
 	"""
 	nom: Nom  # fill in during parsing.
 	static_depth: int  # fill during StaticDepthPass.
-	def __init__(self, nom:Nom):
-		self.nom = nom
+	def __init__(self, nom:Nom): self.nom = nom
 	def __repr__(self):
 		return "{%s:%s}" % (self.nom.text, type(self).__name__)
 	def __str__(self): return self.nom.text
-	def head(self): return self.nom.head()
-	def has_value_domain(self) -> bool: raise NotImplementedError(type(self))
+	def head(self) -> slice: return self.nom.head()
+	@abstractmethod
+	def has_value_domain(self) -> bool: pass
+	@abstractmethod
+	def is_nominal(self) -> bool: pass
 
-class Native(Symbol):
-	""" Superclass of built-in and foreign (Python) symbols. """
+NS = NameSpace[Symbol]
+
+class Function(Symbol):
+	def has_value_domain(self): return True
+	def is_nominal(self) -> bool: return False
+
+class NativeFunction(Function):
+	""" Built-in and foreign (Python) function symbols. """
 	static_depth = 0
 	val:Any  # Fill in during WordDefiner pass
-	def has_value_domain(self): return True
 
 class Expr:
 	def head(self) -> slice:
@@ -42,12 +50,5 @@ class Expr:
 class Reference(Expr):
 	nom:Nom
 	dfn:Symbol   # Should happen during WordResolver pass.
-
-class TypeExpr(Expr):
-	pass
-
-class ValExpr(Expr):
-	pass
-
-NS = NameSpace[Symbol]
+	def __init__(self, nom:Nom): self.nom = nom
 

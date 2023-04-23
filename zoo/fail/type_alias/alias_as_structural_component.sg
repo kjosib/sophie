@@ -1,0 +1,1 @@
+type: a is (a,a)->a; end.   # I am pretty sure this is utter nonsense.

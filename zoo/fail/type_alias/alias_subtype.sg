@@ -1,0 +1,8 @@
+type:
+    alpha is case:
+        foo;
+        bar;
+    esac;
+
+    problem is foo;  # Let us not alias a sub-type in this manner.
+

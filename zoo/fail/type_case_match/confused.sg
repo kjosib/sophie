@@ -1,0 +1,22 @@
+type:
+    alpha is case:
+        foo;
+        bar;
+    esac;
+
+    beta is case:
+        baz;
+        quux;
+    esac;
+
+define:
+    a_value = foo;
+
+begin:
+    case a_value as x of
+        foo -> "meh.";
+        bar -> "ugh!";
+        baz -> "error!";
+        quux -> "also error!";
+    esac;
+

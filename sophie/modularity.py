@@ -1,13 +1,11 @@
-"""
-Here find the module system -- such as it is.
-"""
+""" Here find the module system -- such as it is. """
 import os.path
+import sys
 from boozetools.support.symtab import SymbolAlreadyExists
 from .diagnostics import Report
 from .front_end import parse_file
 from .syntax import Module, ImportModule
-from .resolution import resolve_words
-from .manifest import type_module
+from .resolution import resolve_words, AliasChecker, check_all_match_expressions
 
 class _CircularDependencyError(Exception):
 	""" This can only happen during a nested recursive call, so the exception is private. """
@@ -16,11 +14,12 @@ class Loader:
 	def __init__(self, report: Report, verbose:bool, experimental:bool= False):
 		from . import preamble
 		self._report = report
-		self._on_error = report.on_error("Loading Modules")
+		self._on_error = report.on_error("Loading Program")
 		self._loaded_modules = {}
 		self._construction_stack = []
 		self.module_sequence = []
 		self._verbose = verbose
+		self._manifest = {}
 		self._experimental = experimental
 		if experimental:
 			from .hot.ruminate import DeductionEngine
@@ -60,8 +59,8 @@ class Loader:
 		
 	def load_program(self, base_path, module_path:str):
 		module = self.need_module(base_path, module_path)
-		if module and not module.main:
-			self._on_error([], "That file has no `begin:` section and thus is not a main program.")
+		if module and not module.main and not self._report.issues:
+			self._on_error([], str(module_path)+" has no `begin:` section and thus is not a main program.")
 		return not self._report.issues
 	
 	def run(self):
@@ -70,7 +69,7 @@ class Loader:
 	
 	def _load_normal_file(self, abs_path):
 		if self._verbose:
-			print("Loading", abs_path)
+			print("Loading", abs_path, file=sys.stderr)
 		module = parse_file(abs_path, self._report)
 		if not self._report.issues:
 			self._interpret_the_import_directives(module, os.path.dirname(abs_path))
@@ -81,10 +80,11 @@ class Loader:
 		if not self._report.issues:
 			resolve_words(module, outside, self._report)
 		if not self._report.issues:
-			type_module(module, self._report)
+			AliasChecker(module, self._report)
+		if not self._report.issues:
+			check_all_match_expressions(module, self._report)
 		if self._experimental and not self._report.issues:
 			self._deductionEngine.visit(module)
-		self._report.set_path(None)
 	
 	def _interpret_the_import_directives(self, module:Module, base_path):
 		""" Interpret the import directives in a module... """

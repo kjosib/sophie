@@ -1,17 +1,18 @@
 from typing import Sequence, Optional
+from pathlib import Path
 from boozetools.support.failureprone import SourceText, Issue, Evidence, Severity
 from .ontology import Expr
 
 class Report:
 	""" Might this end up participating in a result-monad? """
 	issues : list[Issue]
-	_path : Optional[str]
+	_path : Optional[Path]
 	
 	def __init__(self):
 		self.issues = []
 		self._path = None
 	
-	def set_path(self, path):
+	def set_path(self, path:Path):
 		""" Let the report know which file is under consideration, for in case of error. """
 		# Yes, it's a temporal coupling. But it's a small worry, at least for now.
 		self._path = path
@@ -19,6 +20,7 @@ class Report:
 	def error(self, phase: str, guilty: Sequence[slice], msg: str):
 		""" Actually make an entry of an issue """
 		assert all(isinstance(g, slice) for g in guilty)
+		if guilty: assert self._path is not None
 		evidence = {self._path: [Evidence(s, "") for s in guilty]}
 		self.issues.append(Issue(phase, Severity.ERROR, msg, evidence))
 

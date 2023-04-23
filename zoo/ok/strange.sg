@@ -1,0 +1,3 @@
+type:
+    a[x] is x;  # Strange, but not strictly erroneous.
+end.

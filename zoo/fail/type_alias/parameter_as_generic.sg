@@ -1,0 +1,3 @@
+type:
+    a[x] is x[number];  # This would imply second-order types, which .. that's not how this works.
+end.

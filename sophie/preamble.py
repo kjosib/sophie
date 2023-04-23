@@ -1,144 +1,16 @@
-"""
-# Built-in / primitive definitions and types are in the docstring of this Python file.
-# Native types flag, number, and string are installed separately in "native" Python.
-# Also for the moment, I import (most of) Python's math library.
-
-import:
-
-foreign "math" where
-
-	e, inf, nan, pi, tau : number;
-	
-	acos, acosh, asin, asinh, atan, atanh,
-	ceil, cos, cosh, degrees, erf, erfc, exp, expm1,
-	fabs, factorial, floor, gamma, gcd,
-	isqrt, lcm, lgamma, log, log10, log1p, log2,
-	modf, radians, sin, sinh, sqrt,
-	tan, tanh, trunc, ulp : (number) -> number;
-	
-	isfinite, isinf, isnan : (number) -> flag;
-	
-	atan2, comb, copysign, dist, fmod, ldexp, log_base@"log",
-	nextafter, perm, pow, remainder : (number, number) -> number;
-	
-end;
-
-foreign "builtins" where
-	chr : (number) -> string;
-	len, ord : (string) -> number;
-end;
-
-foreign "sophie.yarn" where
-	mid : (string, number, number) -> string;
-end;
-
-foreign "operator" where
-	strcat@"add" : (string, string) -> string;
-end;
-
-# A few of Python's standard math functions are trouble (currently).
-	# ``log`` is bivalent: You can pass it one or two parameters. Sophie gets around this by aliasing ``log_base``.
-	# ``dist`` computes Euclidean distance between two points specified as vectors, but Sophie still lacks these.
-	# ``fsum``, ``prod``, and ``hypot`` also work on vectors; same problem. (Pure-Sophie versions are provided.)
-	# ``frexp`` returns a tuple, which would confuse the evaluator. It needs an adapter to a known record type.
-
-type:
-	list[x] is CASE:
-		 cons(head:x, tail:list[x]);
-		 nil;
-	ESAC;
-	
-	pair[a,b] is (fst:a, snd:b);
-	
-	drawing is (steps: list[turtle_step]);
-	
-	turtle_step is case:
-		forward(distance:number);
-		backward(distance:number);
-		right(angle:number);
-		left(angle:number);
-		goto(x:number, y:number);
-		setheading(angle:number);
-		home;
-		pendown;
-		penup;
-		color(color:string);
-		pensize(width:number);
-		showturtle;
-		hideturtle;
-	esac;
-	
-define:
-	id(x) = x;
-	any(xs) = case xs of nil -> no; cons -> xs.head or any(xs.tail); esac;
-	all(xs) = case xs of nil -> yes; cons -> xs.head and all(xs.tail); esac;
-	
-	map(fn, xs) = case xs of
-		nil -> nil;
-		cons -> cons(fn(xs.head), map(fn, xs.tail));
-	esac;
-	
-	filter(predicate, xs) = case xs of
-		nil -> nil;
-		cons -> cons(xs.head, rest) if predicate(xs.head) else rest where
-			rest = filter(predicate, xs.tail);
-		end cons;
-	esac;
-
-	reduce(fn, a, xs) = case xs of
-		nil -> a;
-		cons -> reduce(fn, fn(a, xs.head), xs.tail);
-	esac;
-	
-	cat(xs,ys) = case xs of
-		nil -> ys;
-		cons -> cons(xs.head, cat(xs.tail, ys));
-	esac;
-	
-	flat(xss) = case xss of
-		nil -> nil;
-		cons -> cat(xss.head, flat(xss.tail));
-	esac;
-	
-	take(n, xs) = nil if n < 1 else case xs of
-		nil -> nil;
-		cons -> cons(xs.head, take(n-1, xs.tail));
-	esac;
-	
-	skip(n, xs) = xs if n < 1 else case xs of
-		nil -> nil;
-		cons -> skip(n-1, xs.tail);
-	esac;
-	
-	sum(xs) = reduce(add, 0, xs) where add(a,b) = a+b; end sum;
-	product(xs) = reduce(mul, 1, xs) where mul(a,b) = a*b; end product;
-	hypot(xs) = sqrt(sum(map(square, xs))) where square(x) = x*x; end hypot;
-	
-	## Sophie's first namespace conflict:
-	# left(s, n) = mid(s, 0, n);
-	# right(s, n) = mid(s, len(s)-n, len(s));
-	
-	join(ss) = reduce(strcat, "", ss);  # Yes, this is O(n^2). Fixing that from within is nontrivial.
-	
-	interleave(x, ys) = skip(1, flat(map(prefix, ys))) where prefix(y)=cons(x, cons(y, nil)); end interleave;
-	
-	each_chr(s) = from(0) where
-		from(n) = nil if n >= len(s) else cons(mid(s,n,1), from(n+1));
-	end each_chr;
-	
-end.
-
-"""
-
 def _init():
-	from . import front_end, diagnostics, primitive, resolution, manifest
+	from pathlib import Path
+	from . import front_end, diagnostics, primitive, resolution
+	preamble_path = Path(__file__).parent/"preamble.sg"
 	report = diagnostics.Report()
-	report.set_path(__file__)
-	module = front_end.parse_text(__doc__, __file__, report)
+	report.set_path(preamble_path)
+	module = front_end.parse_file(preamble_path, report)
 	report.assert_no_issues()
 	resolution.resolve_words(module, primitive.root_namespace, report)
 	report.assert_no_issues()
-	manifest.type_module(module, report)
+	resolution.AliasChecker(module, report)
+	report.assert_no_issues()
+	resolution.check_all_match_expressions(module, report)
 	report.assert_no_issues()
 	primitive.LIST = module.globals['list']
 	return module.globals

@@ -115,8 +115,9 @@ def _eval_match_expr(expr:syntax.MatchExpr, dynamic_env:dict):
 			raise RuntimeError("Confused by tag %r; this will not be possible after type-checking works."%tag)
 	return delay(dynamic_env, branch)
 
-def _lookup_udf(udf: syntax.Function, env: dict):
+def _lookup_udf(udf: syntax.UserDefinedFunction, env: dict):
 	# I guess this is where memoization comes from.
+	assert type(udf) is syntax.UserDefinedFunction, type(udf)
 	try: return env[udf]
 	except KeyError:
 		env[udf] = it = Closure(env, udf) if udf.params else delay(env, udf.expr)
@@ -136,13 +137,12 @@ def evaluate(expr:EVALUABLE, dynamic_env:dict) -> LAZY_VALUE:
 	else: return fn(expr, dynamic_env)
 
 LOOKUP : dict[type, callable] = {
-	syntax.Function: _lookup_udf,
+	syntax.UserDefinedFunction: _lookup_udf,
 	syntax.FormalParameter: _lookup_by_name,
 	syntax.Subject: _lookup_all_else,
-	syntax.TypeDecl: _lookup_all_else,
+	syntax.Record: _lookup_all_else,
 	syntax.SubTypeSpec: _lookup_all_else,
 	syntax.FFI_Alias: _lookup_all_else,
-	ontology.Native: _lookup_all_else,
 }
 
 def lookup(dfn:ontology.Symbol, env:dict) -> LAZY_VALUE:
@@ -195,6 +195,9 @@ class Constructor(Procedure):
 		self.fields = fields
 	
 	def apply(self, caller_env: dict, args: list[syntax.ValExpr]) -> Any:
+		# TODO: It would be well to handle tagged values as Python pairs.
+		#  This way any value could be tagged, and various case-matching
+		#  things could work more nicely (and completely).
 		assert len(args) == len(self.fields)
 		structure = {"":self.key}
 		for field, expr in zip(self.fields, args):
@@ -237,8 +240,10 @@ def _prepare_root_environment(static_root):
 
 def _prepare_global_scope(env:dict, items):
 	for key, dfn in items:
-		if isinstance(dfn, (syntax.TypeDecl, syntax.SubTypeSpec)):
-			if isinstance(dfn.body, (syntax.VariantSpec, syntax.ArrowSpec, syntax.TypeCall)):
+		if isinstance(dfn, syntax.Record):
+			env[dfn] = Constructor(key, dfn.spec.field_names())
+		elif isinstance(dfn, (syntax.SubTypeSpec, syntax.TypeAlias)):
+			if isinstance(dfn.body, (syntax.ArrowSpec, syntax.TypeCall)):
 				pass
 			elif isinstance(dfn.body, syntax.RecordSpec):
 				env[dfn] = Constructor(key, dfn.body.field_names())
@@ -246,16 +251,16 @@ def _prepare_global_scope(env:dict, items):
 				env[dfn] = {"": key}
 			else:
 				raise ValueError("Tagged scalars (%r) are not implemented."%key)
-		elif isinstance(dfn, syntax.Function):
+		elif isinstance(dfn, syntax.UserDefinedFunction):
 			env[dfn] = _lookup_udf(dfn, env)
-		elif isinstance(dfn, ontology.Native):
+		elif isinstance(dfn, ontology.NativeFunction):
 			env[dfn] = _native_object(dfn)
 		elif type(dfn) in _ignore_these:
 			pass
 		else:
 			raise ValueError("Don't know how to deal with %r %r"%(type(dfn), key))
 
-def _native_object(dfn:ontology.Native):
+def _native_object(dfn:ontology.NativeFunction):
 	if callable(dfn.val):
 		return Primitive(dfn.val)
 	else:
@@ -265,8 +270,8 @@ _ignore_these = {
 	# type(None),
 	syntax.ArrowSpec,
 	syntax.TypeCall,
-	syntax.VariantSpec,
-	primitive.PrimitiveType,
+	syntax.Variant,
+	syntax.Opaque,
 }
 
 def dethunk(result:dict):
