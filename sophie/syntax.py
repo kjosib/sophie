@@ -123,7 +123,6 @@ class TypeAlias(TypeDeclaration):
 	def has_value_domain(self) -> bool: return self.body.is_nominal()
 
 class Opaque(TypeDeclaration):
-	parameters = ()  # This way calculus.Nominal does not have to worry about the possibility of a non-generic.
 	def has_value_domain(self): return False
 	def is_nominal(self): return True
 
@@ -392,7 +391,7 @@ class Module:
 	constructors: dict[str:]
 	all_match_expressions: list[MatchExpr]  # WordResolver pass creates this.
 	all_functions: list[UserDefinedFunction]
-	def __init__(self, exports:list, imports:list[ImportDirective], types:list, functions:list, main:list):
+	def __init__(self, exports:list, imports:list[ImportDirective], types:list[TypeDeclaration], functions:list[UserDefinedFunction], main:list):
 		self.exports = exports
 		self.imports = [i for i in imports if isinstance(i, ImportModule)]
 		self.foreign = [i for i in imports if isinstance(i, ImportForeign)]

@@ -1,17 +1,17 @@
 from functools import lru_cache
 from .ontology import NS, Nom
 from .syntax import Generic, Opaque, Variant
-from .hot.calculus import SophieType, Product, Arrow, TypeVariable, Nominal
+from .hot import calculus
 
 root_namespace = NS(place=None)
 ops = {}
 
 LIST : Variant  # Generated in the preamble.
 
-def _built_in_type(name:str) -> Nominal:
+def _built_in_type(name:str) -> calculus.OpaqueType:
 	nom = Nom(name, None)
 	symbol = Opaque(Generic(nom, ()))
-	term = Nominal(symbol, ())
+	term = calculus.OpaqueType(symbol)
 	root_namespace[name] = symbol
 	return term
 literal_number = _built_in_type("number")
@@ -19,12 +19,12 @@ literal_string = _built_in_type("string")
 literal_flag = _built_in_type("flag")
 
 @lru_cache()
-def _arrow_of_math(arity:int) -> Arrow:
+def _arrow_of_math(arity:int) -> calculus.ArrowType:
 	return _arrow_of(literal_number, arity)
 
-def _arrow_of(typ:SophieType, arity:int) -> Arrow:
+def _arrow_of(typ:calculus.SophieType, arity:int) -> calculus.ArrowType:
 	assert arity > 0
-	return Arrow(Product((typ,) * arity), typ)
+	return calculus.ArrowType(calculus.ProductType((typ,) * arity), typ)
 
 def _init():
 	"""
@@ -44,9 +44,9 @@ def _init():
 	ops["Add"] = operator.add, binary
 	ops["Sub"] = operator.sub, binary
 	
-	variable = TypeVariable()
-	pair_of_same = Product((variable, variable))
-	comparison = Arrow(pair_of_same, literal_flag)
+	variable = calculus.TypeVariable()
+	pair_of_same = calculus.ProductType((variable, variable))
+	comparison = calculus.ArrowType(pair_of_same, literal_flag)
 	ops["EQ"] = operator.eq, comparison
 	ops["NE"] = operator.ne, comparison
 	ops["LE"] = operator.le, comparison

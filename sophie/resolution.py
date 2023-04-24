@@ -79,6 +79,7 @@ class WordDefiner(WordPass):
 	globals : NS
 	
 	def __init__(self, module:syntax.Module, outer:NS, on_error):
+		self._on_error = on_error
 		self.redef, self.missing_foreign, self.broken_foreign = [], [], []
 		self.globals = module.globals = outer.new_child(module)
 		self.all_match_expressions = module.all_match_expressions = []
@@ -107,7 +108,11 @@ class WordDefiner(WordPass):
 		ps = td.param_space = self.globals.new_child(place=td)
 		for p in td.parameters:
 			self._install(ps, p)
-
+	
+	def visit_Opaque(self, o:syntax.Opaque):
+		self._install(self.globals, o)
+		if o.parameters:
+			self._on_error(o.parameters, "Opaque types are not to be made generic.")
 	
 	def visit_Variant(self, v:syntax.Variant):
 		self._declare_type(v)
@@ -245,15 +250,6 @@ class WordResolver(WordPass):
 		if self.non_value:
 			on_error(self.non_value, "This word is defined only in type context, not value context:")
 	
-	# def visit_TypeDecl(self, td:syntax.TypeDeclaration):
-	# 	self.visit(td.body, td.namespace)
-	#
-	# def visit_VariantSpec(self, vs:syntax.VariantSpec, env:NS):
-	# 	for st in vs.subtypes:
-	# 		if st.body is not None:
-	# 			self.visit(st.body, env)
-	# 		pass
-
 	def visit_Variant(self, v:syntax.Variant):
 		for st in v.subtypes:
 			if st.body is not None:
