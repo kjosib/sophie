@@ -13,7 +13,7 @@ def _init():
 	resolution.check_all_match_expressions(module, report)
 	report.assert_no_issues()
 	primitive.LIST = module.globals['list']
-	return module.globals
+	return module
 
 def do_turtle_graphics(force, NIL, drawing):
 	import turtle, tkinter
@@ -47,4 +47,4 @@ def do_turtle_graphics(force, NIL, drawing):
 	root.bind("<KeyPress>", lambda event: root.destroy())
 	tkinter.mainloop()
 
-static_root = _init()
+module = _init()

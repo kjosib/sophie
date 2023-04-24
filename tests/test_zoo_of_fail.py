@@ -29,14 +29,6 @@ def _should_not_parse(basename, reason=""):
 	_expect_issue(report, reason)
 	assert 0 == report.complain_to_console.call_count
 
-def _should_not_resolve(basename, reason=""):
-	report = diagnostics.Report()
-	sut = _parse("resolve/"+basename, report)
-	assert isinstance(sut, syntax.Module), (basename, sut)
-	report.assert_no_issues()
-	resolve_words(sut, primitive.root_namespace, report)
-	_expect_issue(report, reason)
-
 class ZooOfFail(unittest.TestCase):
 	""" Tests that assert about failure modes. """
 	
@@ -46,15 +38,23 @@ class ZooOfFail(unittest.TestCase):
 	def test_01_mismatched_where(self):
 		_should_not_parse("mismatched_where", "Mismatched")
 		
-	def test_02_unresolved_names(self):
-		for basename in ("undefined_symbol", "bad_typecase_name", "construct_variant", ):
+	def test_02_should_not_resolve(self):
+		for basename in (
+				"undefined_symbol",
+				"bad_typecase_name",
+				"construct_variant",
+				"defined_twice",
+				"generic_opaque",
+		):
 			with self.subTest(basename):
-				_should_not_resolve(basename)
+				report = diagnostics.Report()
+				sut = _parse("resolve/" + basename, report)
+				assert isinstance(sut, syntax.Module), (basename, sut)
+				report.assert_no_issues()
+				resolve_words(sut, primitive.root_namespace, report)
+				_expect_issue(report)
 	
-	def test_03_defined_twice(self):
-		_should_not_resolve("defined_twice")
-	
-	def test_04_bad_type_aliasing(self):
+	def test_03_bad_type_aliasing(self):
 		for basename in (
 			"alias_as_nominal_parameter",
 			"alias_as_structural_component",
@@ -64,6 +64,7 @@ class ZooOfFail(unittest.TestCase):
 			"alias_switcheroo",
 			"function_as_manifest_type",
 			"parameter_as_generic",
+			"parameter_to_opaque",
 		):
 			with self.subTest(basename):
 				report = diagnostics.Report()
@@ -75,19 +76,7 @@ class ZooOfFail(unittest.TestCase):
 				AliasChecker(sut, report)
 				_expect_issue(report)
 		
-	def test_05_module_breakage(self):
-		for bogon in ["missing_import", "broken_import", "circular_import"]:
-			with self.subTest(bogon):
-				# Given
-				report = diagnostics.Report()
-				loader = modularity.Loader(report, verbose=False)
-				# When
-				module = loader.need_module(zoo_fail/"import", bogon + ".sg")
-				# Then
-				assert type(module) is syntax.Module
-				_expect_issue(report)
-	
-	def test_06_bad_type_cases(self):
+	def test_04_bad_type_cases(self):
 		for basename in (
 			"not_exhaustive",
 			"confused",
@@ -105,6 +94,18 @@ class ZooOfFail(unittest.TestCase):
 				check_all_match_expressions(sut, report)
 				_expect_issue(report)
 
+	def test_05_module_breakage(self):
+		for bogon in ["missing_import", "broken_import", "circular_import"]:
+			with self.subTest(bogon):
+				# Given
+				report = diagnostics.Report()
+				loader = modularity.Loader(report, verbose=False)
+				# When
+				module = loader.need_module(zoo_fail/"import", bogon + ".sg")
+				# Then
+				assert type(module) is syntax.Module
+				_expect_issue(report)
+	
 # def test_02_does_not_type(self):
 # 	for fn in ("num_plus_string", "wrong_arity", "mismatched-case-when", "omega"):
 # 		with self.subTest(fn):

@@ -6,13 +6,13 @@ from .diagnostics import Report
 from .front_end import parse_file
 from .syntax import Module, ImportModule
 from .resolution import resolve_words, AliasChecker, check_all_match_expressions
+from . import preamble
 
 class _CircularDependencyError(Exception):
 	""" This can only happen during a nested recursive call, so the exception is private. """
 
 class Loader:
 	def __init__(self, report: Report, verbose:bool, experimental:bool= False):
-		from . import preamble
 		self._report = report
 		self._on_error = report.on_error("Loading Program")
 		self._loaded_modules = {}
@@ -23,9 +23,9 @@ class Loader:
 		self._experimental = experimental
 		if experimental:
 			from .hot.ruminate import DeductionEngine
-			self._deductionEngine = DeductionEngine(report, verbose)
+			self._deductionEngine = DeductionEngine(report)
+			self._deductionEngine.visit(preamble.module)
 		self._report.assert_no_issues()
-		self._static_root = preamble.static_root
 	
 	def need_module(self, base_path, module_path:str) -> Module:
 		"""
@@ -65,7 +65,7 @@ class Loader:
 	
 	def run(self):
 		from .simple_evaluator import run_program
-		return run_program(self._static_root, self.module_sequence)
+		return run_program(preamble.module.globals, self.module_sequence)
 	
 	def _load_normal_file(self, abs_path):
 		if self._verbose:
@@ -73,12 +73,12 @@ class Loader:
 		module = parse_file(abs_path, self._report)
 		if not self._report.issues:
 			self._interpret_the_import_directives(module, os.path.dirname(abs_path))
-		self._prepare_module(module, self._static_root)
+		self._prepare_module(module)
 		return module
 	
-	def _prepare_module(self, module, outside):
+	def _prepare_module(self, module):
 		if not self._report.issues:
-			resolve_words(module, outside, self._report)
+			resolve_words(module, preamble.module.globals, self._report)
 		if not self._report.issues:
 			AliasChecker(module, self._report)
 		if not self._report.issues:
