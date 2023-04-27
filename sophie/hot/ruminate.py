@@ -10,14 +10,18 @@ experiencing a type-error in practice.
 This module represents one oversimplified type-level execution mechanism.
 The type side of things can be call-by-value, which is a bit easier I think.
 """
-from typing import Sequence
+from typing import Optional, Sequence
 from boozetools.support.foundation import Visitor
+
+from .calculus import RecordType
 from .. import syntax, primitive, diagnostics
 from . import calculus
 
+TYPE_MISMATCH = "These don't have compatible types."
+
 STATIC_LINK = object()
 
-_literal_type_map : dict[type, calculus.SophieType] = {
+_literal_type_map : dict[type, calculus.OpaqueType] = {
 	bool: primitive.literal_flag,
 	str: primitive.literal_string,
 	int: primitive.literal_number,
@@ -27,6 +31,7 @@ _literal_type_map : dict[type, calculus.SophieType] = {
 OPS = {glyph:typ for glyph, (op, typ) in primitive.ops.items()}
 
 class ManifestBuilder(Visitor):
+	"""Converts the syntax of manifest types into corresponding type-calculus objects."""
 	_bind : dict[syntax.TypeParameter:calculus.SophieType]
 	
 	def __init__(self, tps:Sequence[syntax.TypeParameter], type_args: list[calculus.SophieType]):
@@ -53,29 +58,99 @@ class ManifestBuilder(Visitor):
 	def visit_ArrowSpec(self, spec:syntax.ArrowSpec):
 		return calculus.ArrowType(calculus.ProductType(map(self.visit, spec.lhs)), self.visit(spec.rhs))
 
-# class Closure:
-# 	def __init__(self, static_link: dict, udf: syntax.Function):
-# 		self.udf = udf
-# 		self._static_link = static_link
-#
-# 	def _name(self): return self.udf.nom.text
-#
-# 	def bind(self, arg_typ:Product) -> dict:
-# 		assert isinstance(arg_typ, Product)
-# 		args = arg_typ.fields
-# 		arity = len(self.udf.params)
-# 		if arity != len(args):
-# 			raise TypeError("Procedure %s expected %d args, got %d."%(self._name(), arity, len(args)))
-# 		inner_env = {STATIC_LINK:self._static_link}
-# 		for formal, actual in zip(self.udf.params, args):
-# 			inner_env[formal] = actual
-# 		return inner_env
+class Rewriter(calculus.TypeVisitor):
+	def __init__(self, gamma:dict):
+		self._gamma = gamma
+	def on_opaque(self, o: calculus.OpaqueType):
+		return o
+	def on_tag_record(self, t: calculus.TaggedRecord):
+		return calculus.TaggedRecord(t.st, [a.visit(self) for a in t.type_args])
+	def on_record(self, r: RecordType):
+		return calculus.RecordType(r.symbol, [a.visit(self) for a in r.type_args])
+
+class Binder(Visitor):
+	"""Discovers (or fails) a substitution-of-variables (in the formal) which make the forma accept the actual as an instance."""
+	def __init__(self):
+		self.gamma = {}
+		self.ok = True
+		
+	def fail(self):
+		self.ok = False
 	
+	def visit_TypeVariable(self, formal:calculus.TypeVariable, actual):
+		if formal in self.gamma:
+			union_finder = UnionFinder(self.gamma[formal])
+			union_finder.unify_with(actual)
+			if union_finder.died:
+				self.fail()
+			else:
+				self.gamma[formal] = union_finder.result()
+		else:
+			self.gamma[formal] = actual
+	
+	def visit_ProductType(self, formal:calculus.ProductType, actual):
+		if not isinstance(actual, calculus.ProductType):
+			return self.fail()
+		if formal.number == actual.number:
+			return
+		if len(formal.fields) != len(actual.fields):
+			return self.fail()
+		for f,a in zip(formal.fields, actual.fields):
+			self.visit(f, a)
+
+class UnionFinder(Visitor):
+	def __init__(self, prototype:calculus.SophieType):
+		self._prototype = prototype
+		self.died = False
+	def result(self):
+		return self._prototype
+	def unify_with(self, that):
+		self._prototype = self.visit(self._prototype, that)
+	def croak(self):
+		self.died = True
+		return calculus.ERROR
+	
+	def parallel(self, these:Sequence[calculus.SophieType], those:Sequence[calculus.SophieType]):
+		assert len(these) == len(those)
+		return [self.visit(a, b) for a,b in zip(these, those)]
+	
+	def visit_OpaqueType(self, this:calculus.OpaqueType, that:calculus.SophieType):
+		if this.number == that.number: return this
+		else: return self.croak()
+		
+	def visit_RecordType(self, this:calculus.RecordType, that:calculus.SophieType):
+		if this.number == that.number: return this
+		elif isinstance(that, calculus.RecordType) and this.symbol is that.symbol:
+			return calculus.RecordType(this.symbol, self.parallel(this.type_args, that.type_args))
+		else: return self.croak()
+
+	def visit_TaggedRecord(self, this:calculus.TaggedRecord, that:calculus.SophieType):
+		if this.number == that.number: return this
+		if isinstance(that, calculus.TaggedRecord):
+			# There are three interesting cases:
+			if this.st is that.st:
+				type_args = self.parallel(this.type_args, that.type_args)
+				return calculus.TaggedRecord(this.st, type_args)
+			if this.st.variant is that.st.variant:
+				type_args = self.parallel(this.type_args, that.type_args)
+				return calculus.SumType(this.st.variant, type_args)
+		if isinstance(that, calculus.SumType):
+			if this.st.variant is that.variant:
+				type_args = self.parallel(this.type_args, that.type_args)
+				return calculus.SumType(that.variant, type_args)
+		return self.croak()
+
+ENV = dict[syntax.Symbol, Optional[calculus.SophieType]]
+
+
 class DeductionEngine(Visitor):
+	_global_env : ENV
 	def __init__(self, report:diagnostics.Report):
 		self._on_error = report.on_error("Checking Types")
-		self._global_env = {t:None for t in _literal_type_map.values()}
-		pass
+		self._global_env = {
+			ot.symbol: ot
+			for ot in _literal_type_map.values()
+		}
 	
 	def visit_Module(self, module:syntax.Module):
 		for td in module.types: self.visit(td)
@@ -103,6 +178,23 @@ class DeductionEngine(Visitor):
 				arg = builder.visit(st.body)
 				res = calculus.TaggedRecord(st, type_args)
 				self._global_env[st] = calculus.ArrowType(arg, res)
+				
+	def visit_TypeAlias(self, a: syntax.TypeAlias):
+		if isinstance(a.body, syntax.TypeCall):
+			dfn = a.body.ref.dfn
+			body_type = self._global_env[dfn]
+			if body_type is None:
+				self._global_env[a] = None
+				return
+			elif isinstance(body_type, calculus.OpaqueType):
+				self._global_env[a] = body_type
+			elif isinstance(body_type, calculus.SumType):
+				raise NotImplementedError
+			else:
+				raise NotImplementedError(type(body_type))
+		else:
+			assert isinstance(a.body, syntax.ArrowSpec)
+			self._global_env[a] = None
 	
 	def visit_ImportForeign(self, d:syntax.ImportForeign):
 		for group in d.groups:
@@ -112,18 +204,26 @@ class DeductionEngine(Visitor):
 				self._global_env[sym] = typ
 	
 	@staticmethod
-	def visit_Literal(expr: syntax.Literal, env:dict) -> calculus.SophieType:
+	def visit_Literal(expr: syntax.Literal, env:ENV) -> calculus.SophieType:
 		return _literal_type_map[type(expr.value)]
 
-	def _call_site(self, fn_type, args, env:dict) -> calculus.SophieType:
+	def _call_site(self, fn_type, args, env:ENV) -> calculus.SophieType:
 		arg_types = [self.visit(a, env) for a in args]
 		
 		if any(t is calculus.ERROR for t in arg_types):
 			return calculus.ERROR
 		
 		if isinstance(fn_type, calculus.ArrowType):
-			product = calculus.ProductType(arg_types)
-			raise NotImplementedError(type(fn_type))
+			# 1. Try to bind the actual argument to the formal argument,
+			#    collecting variables along the way.
+			binder = Binder()
+			binder.visit(fn_type.arg, calculus.ProductType(arg_types))
+			# 2. Return the arrow's result-type rewritten using the bindings thus found.
+			if binder.ok:
+				return fn_type.res.visit(Rewriter(binder.gamma))
+			else:
+				self._on_error(args, "These don't fit here. Also, you deserve a better error message.")
+				return calculus.ERROR
 		
 		if isinstance(fn_type, calculus.TopLevelFunctionType):
 			formals = fn_type.fn.params
@@ -140,15 +240,15 @@ class DeductionEngine(Visitor):
 		
 		raise NotImplementedError(type(fn_type))
 	
-	def visit_Call(self, site: syntax.Call, env: dict) -> calculus.SophieType:
+	def visit_Call(self, site: syntax.Call, env: ENV) -> calculus.SophieType:
 		fn_type = self.visit(site.fn_exp, env)
 		if fn_type is calculus.ERROR: return calculus.ERROR
 		return self._call_site(fn_type, site.args, env)
 	
-	def visit_BinExp(self, expr:syntax.BinExp, env:dict) -> calculus.SophieType:
+	def visit_BinExp(self, expr:syntax.BinExp, env:ENV) -> calculus.SophieType:
 		return self._call_site(OPS[expr.glyph], (expr.lhs, expr.rhs), env)
 		
-	def visit_Lookup(self, lu:syntax.Lookup, env:dict):
+	def visit_Lookup(self, lu:syntax.Lookup, env:ENV) -> calculus.SophieType:
 		target = lu.ref.dfn
 		if target.static_depth == 0:
 			return self._global_env[target]
@@ -156,16 +256,38 @@ class DeductionEngine(Visitor):
 			for _ in range(lu.source_depth - target.static_depth):
 				env = env[STATIC_LINK]
 			return env[target]
-
 		
-# class Render(TypeVisitor):
-# 	""" Return a string representation of the term. """
-# 	def __init__(self):
-# 		self._var_names = {}
-# 	def on_variable(self, v: TypeVariable):
-# 		if v not in self._var_names:
-# 			self._var_names[v] = "?%s" % _name_variable(len(self._var_names) + 1)
-# 		return self._var_names[v]
+	def visit_ExplicitList(self, el:syntax.ExplicitList, env:ENV) -> calculus.SumType:
+		# Since there's guaranteed to be at least one value,
+		# we should be able to glean a concrete type from it.
+		# Having that, we should be able to get a union over them all.
+		union_find = UnionFinder(self.visit(el.elts[0], env))
+		for e in el.elts[1:]:
+			union_find.unify_with(self.visit(e, env))
+			if union_find.died:
+				self._on_error([el.elts[0], e],TYPE_MISMATCH)
+		element_type = union_find.result()
+		return calculus.SumType(primitive.LIST, (element_type,))
+
+	def visit_Cond(self, cond:syntax.Cond, env:ENV) -> calculus.SophieType:
+		if_part_type = self.visit(cond.if_part, env)
+		if if_part_type != primitive.literal_flag:
+			self._on_error([cond.if_part], "The if-part doesn't make a flag, but "+if_part_type.visit(Render()))
+			return calculus.ERROR
+		union_find = UnionFinder(self.visit(cond.then_part, env))
+		union_find.unify_with(self.visit(cond.else_part, env))
+		if union_find.died:
+			self._on_error([cond.then_part, cond.else_part], TYPE_MISMATCH)
+		return union_find.result()
+
+class Render(calculus.TypeVisitor):
+	""" Return a string representation of the term. """
+	def __init__(self):
+		self._var_names = {}
+	def on_variable(self, v: calculus.TypeVariable):
+		if v not in self._var_names:
+			self._var_names[v] = "?%s" % _name_variable(len(self._var_names) + 1)
+		return self._var_names[v]
 # 	def on_nominal(self, n: Nominal):
 # 		if n.params:
 # 			brick = "[%s]"%(", ".join(p.visit(self) for p in n.params))
