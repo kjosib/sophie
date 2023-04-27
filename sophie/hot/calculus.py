@@ -35,25 +35,9 @@ from .. import syntax
 
 _type_numbering_subsystem = EquivalenceClassifier()
 
-class TypeVisitor:
-	def on_variable(self, v:"TypeVariable"): raise NotImplementedError(type(self))
-	def on_opaque(self, n:"OpaqueType"): raise NotImplementedError(type(self))
-	def on_record(self, n:"RecordType"): raise NotImplementedError(type(self))
-	def on_sum(self, n:"SumType"): raise NotImplementedError(type(self))
-	def on_tag_enum(self, n:"EnumType"): raise NotImplementedError(type(self))
-	def on_tag_record(self, n:"TaggedRecord"): raise NotImplementedError(type(self))
-	def on_arrow(self, a:"ArrowType"): raise NotImplementedError(type(self))
-	def on_product(self, p:"ProductType"): raise NotImplementedError(type(self))
-	def on_udf(self, f:"UDFType"): raise NotImplementedError(type(self))
-	# def on_union(self, u:"UnionType"): raise NotImplementedError(type(self))
-	# def on_field(self, n:"FieldType"): raise NotImplementedError(type(self))
-	# def on_call(self, c: "CallSiteType"): raise NotImplementedError(type(self))
-	def on_bottom(self): raise NotImplementedError(type(self))
-	def on_error_type(self): raise NotImplementedError(type(self))
-
 class SophieType:
 	"""Value objects so they can play well with the classifier"""
-	def visit(self, visitor:TypeVisitor): raise NotImplementedError(type(self))
+	def visit(self, visitor:"TypeVisitor"): raise NotImplementedError(type(self))
 
 	def __init__(self, *key):
 		self._key = key
@@ -67,70 +51,70 @@ class TypeVariable(SophieType):
 	"""Did I say value-object? Not for type variables! These have identity."""
 	def __init__(self):
 		super().__init__(len(_type_numbering_subsystem.catalog))
-	def visit(self, visitor:TypeVisitor): return visitor.on_variable(self)
+	def visit(self, visitor:"TypeVisitor"): return visitor.on_variable(self)
 
 class OpaqueType(SophieType):
 	def __init__(self, symbol:syntax.Opaque):
 		assert type(symbol) is syntax.Opaque
+		self.symbol = symbol
 		super().__init__(symbol)
-	def visit(self, visitor:TypeVisitor): return visitor.on_opaque(self)
+	def visit(self, visitor:"TypeVisitor"): return visitor.on_opaque(self)
 
 
 class RecordType(SophieType):
 	def __init__(self, r:syntax.Record, type_args: Iterable[SophieType]):
 		assert type(r) is syntax.Record
-		self.dfn = r
+		self.symbol = r
 		self.type_args = tuple(a.exemplar() for a in type_args)
 		assert len(self.type_args) == len(r.parameters)
-		super().__init__(self.dfn, *(a.number for a in self.type_args))
-	def visit(self, visitor:TypeVisitor): return visitor.on_record(self)
+		super().__init__(self.symbol, *(a.number for a in self.type_args))
+	def visit(self, visitor:"TypeVisitor"): return visitor.on_record(self)
 
 class SumType(SophieType):
 	""" Either a record directly, or a variant-type. Details are in the symbol table. """
 	# NB: The arguments here are actual arguments, not formal parameters.
 	#     The corresponding formal parameters are listed in the symbol,
 	#     itself being either a SubTypeSpec or a TypeDecl
-	def __init__(self, td: syntax.Variant, type_args: Iterable[SophieType]):
-		assert td.is_nominal()
-		self.dfn = td
+	def __init__(self, variant: syntax.Variant, type_args: Iterable[SophieType]):
+		assert isinstance(variant, syntax.Variant)
+		self.variant = variant
 		self.type_args = tuple(a.exemplar() for a in type_args)
-		assert len(self.type_args) == len(td.parameters)
-		super().__init__(self.dfn, *(a.number for a in self.type_args))
-	def visit(self, visitor:TypeVisitor): return visitor.on_sum(self)
+		assert len(self.type_args) == len(variant.parameters)
+		super().__init__(self.variant, *(a.number for a in self.type_args))
+	def visit(self, visitor:"TypeVisitor"): return visitor.on_sum(self)
 
 class EnumType(SophieType):
 	def __init__(self, sts: syntax.SubTypeSpec):
 		assert sts.body is None
 		super().__init__(sts)
-	def visit(self, visitor: TypeVisitor): return visitor.on_tag_enum(self)
+	def visit(self, visitor:"TypeVisitor"): return visitor.on_tag_enum(self)
 
 class TaggedRecord(SophieType):
-	body: syntax.RecordSpec
-	variant: syntax.Variant
+	st: syntax.SubTypeSpec
 	def __init__(self, st: syntax.SubTypeSpec, type_args: Iterable[SophieType]):
+		assert isinstance(st, syntax.SubTypeSpec)
 		assert isinstance(st.body, syntax.RecordSpec)
-		self.body = st.body
-		self.variant = st.variant
+		self.st = st
 		self.type_args = tuple(a.exemplar() for a in type_args)
 		assert len(self.type_args) == len(st.variant.parameters)
 		super().__init__(st, *(a.number for a in self.type_args))
-	def visit(self, visitor:TypeVisitor): return visitor.on_tag_record(self)
+	def visit(self, visitor:"TypeVisitor"): return visitor.on_tag_record(self)
 
 
 class ProductType(SophieType):
 	def __init__(self, fields: Iterable[SophieType]):
 		self.fields = tuple(p.exemplar() for p in fields)
 		super().__init__(*(p.number for p in self.fields))
-	def visit(self, visitor:TypeVisitor): return visitor.on_product(self)
+	def visit(self, visitor:"TypeVisitor"): return visitor.on_product(self)
 	
 class ArrowType(SophieType):
 	def __init__(self, arg: SophieType, res: SophieType):
 		self.arg, self.res = arg.exemplar(), res.exemplar()
 		super().__init__(self.arg, self.res)
-	def visit(self, visitor:TypeVisitor): return visitor.on_arrow(self)
+	def visit(self, visitor:"TypeVisitor"): return visitor.on_arrow(self)
 
 class UDFType(SophieType):
-	def visit(self, visitor:TypeVisitor): return visitor.on_udf(self)
+	def visit(self, visitor:"TypeVisitor"): return visitor.on_udf(self)
 
 class TopLevelFunctionType(UDFType):
 	# Comes from looking up a function defined in the outermost scope.
@@ -157,35 +141,50 @@ class NestedFunctionType(UDFType):
 # 	def __init__(self, elements: Iterable[SophieType]):
 # 		self.elements = set(p.exemplar() for p in elements)
 # 		super().__init__(*sorted(e.number for e in self.elements))
-# 	def visit(self, visitor:TypeVisitor): return visitor.on_union(self)
+# 	def visit(self, visitor:"TypeVisitor"): return visitor.on_union(self)
 #
 # class FieldType(SophieType):
 # 	def __init__(self, subject: SophieType, field_name: syntax.Nom):
 # 		self._subject = subject
 # 		self._field_name = field_name
 # 		super().__init__(subject, field_name.text)
-# 	def visit(self, visitor:TypeVisitor): return visitor.on_field(self)
+# 	def visit(self, visitor:"TypeVisitor"): return visitor.on_field(self)
 #
 # class CallSiteType(SophieType):
 # 	def __init__(self, arrow:SophieType, arg:SophieType):
 # 		self._arrow = arrow.exemplar()
 # 		self._arg = arg.exemplar()
 # 		super().__init__(self._arrow, self._arg)
-# 	def visit(self, visitor:TypeVisitor): return visitor.on_call(self)
+# 	def visit(self, visitor:"TypeVisitor"): return visitor.on_call(self)
 #
 
 class _Bottom(SophieType):
-	def visit(self, visitor:TypeVisitor): return visitor.on_bottom()
+	def visit(self, visitor:"TypeVisitor"): return visitor.on_bottom()
 
 BOTTOM = _Bottom(None)
 
 class _Error(SophieType):
-	def visit(self, visitor:TypeVisitor): return visitor.on_error_type()
+	def visit(self, visitor:"TypeVisitor"): return visitor.on_error_type()
 
 ERROR = _Error(None)
 
 ###################
 #
-#  Some few built-in concrete types:
+
+class TypeVisitor:
+	def on_variable(self, v:TypeVariable): raise NotImplementedError(type(self))
+	def on_opaque(self, o: OpaqueType): raise NotImplementedError(type(self))
+	def on_record(self, r:RecordType): raise NotImplementedError(type(self))
+	def on_sum(self, n:SumType): raise NotImplementedError(type(self))
+	def on_tag_enum(self, e: EnumType): raise NotImplementedError(type(self))
+	def on_tag_record(self, t: TaggedRecord): raise NotImplementedError(type(self))
+	def on_arrow(self, a:ArrowType): raise NotImplementedError(type(self))
+	def on_product(self, p:ProductType): raise NotImplementedError(type(self))
+	def on_udf(self, f:UDFType): raise NotImplementedError(type(self))
+	# def on_union(self, u:"UnionType"): raise NotImplementedError(type(self))
+	# def on_field(self, n:"FieldType"): raise NotImplementedError(type(self))
+	# def on_call(self, c: "CallSiteType"): raise NotImplementedError(type(self))
+	def on_bottom(self): raise NotImplementedError(type(self))
+	def on_error_type(self): raise NotImplementedError(type(self))
 
 
