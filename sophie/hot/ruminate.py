@@ -115,17 +115,17 @@ class UnionFinder(Visitor):
 		return [self.visit(a, b) for a,b in zip(these, those)]
 	
 	def visit_OpaqueType(self, this:calculus.OpaqueType, that:calculus.SophieType):
-		if this.number == that.number: return this
+		if this.number == that.number or that is calculus.BOTTOM: return this
 		else: return self.croak()
 		
 	def visit_RecordType(self, this:calculus.RecordType, that:calculus.SophieType):
-		if this.number == that.number: return this
+		if this.number == that.number or that is calculus.BOTTOM: return this
 		elif isinstance(that, calculus.RecordType) and this.symbol is that.symbol:
 			return calculus.RecordType(this.symbol, self.parallel(this.type_args, that.type_args))
 		else: return self.croak()
 
 	def visit_TaggedRecord(self, this:calculus.TaggedRecord, that:calculus.SophieType):
-		if this.number == that.number: return this
+		if this.number == that.number or that is calculus.BOTTOM: return this
 		if isinstance(that, calculus.TaggedRecord):
 			# There are three interesting cases:
 			if this.st is that.st:
@@ -247,6 +247,9 @@ class DeductionEngine(Visitor):
 	
 	def visit_BinExp(self, expr:syntax.BinExp, env:ENV) -> calculus.SophieType:
 		return self._call_site(OPS[expr.glyph], (expr.lhs, expr.rhs), env)
+	
+	def visit_UnaryExp(self, expr: syntax.UnaryExp, env:ENV) -> calculus.SophieType:
+		return self._call_site(OPS[expr.glyph], (expr.arg,), env)
 		
 	def visit_Lookup(self, lu:syntax.Lookup, env:ENV) -> calculus.SophieType:
 		target = lu.ref.dfn
