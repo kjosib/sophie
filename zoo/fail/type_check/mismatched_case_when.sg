@@ -6,4 +6,5 @@ define:
 		when x < 4 then "quux";
 		else 7;  # Has wrong type; should be caught.
 	esac;
-end.
+begin:
+    bad(1);

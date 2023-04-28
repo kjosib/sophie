@@ -1,19 +1,3 @@
-def _init():
-	from pathlib import Path
-	from . import front_end, diagnostics, primitive, resolution
-	preamble_path = Path(__file__).parent/"preamble.sg"
-	report = diagnostics.Report()
-	report.set_path(preamble_path)
-	module = front_end.parse_file(preamble_path, report)
-	report.assert_no_issues()
-	resolution.resolve_words(module, primitive.root_namespace, report)
-	report.assert_no_issues()
-	resolution.AliasChecker(module, report)
-	report.assert_no_issues()
-	resolution.check_all_match_expressions(module, report)
-	report.assert_no_issues()
-	primitive.LIST = module.globals['list']
-	return module
 
 def do_turtle_graphics(force, NIL, drawing):
 	import turtle, tkinter
@@ -46,5 +30,3 @@ def do_turtle_graphics(force, NIL, drawing):
 	root.bind("<ButtonRelease>", lambda event: root.destroy())
 	root.bind("<KeyPress>", lambda event: root.destroy())
 	tkinter.mainloop()
-
-module = _init()

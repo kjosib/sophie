@@ -84,9 +84,10 @@ class SumType(SophieType):
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_sum(self)
 
 class EnumType(SophieType):
-	def __init__(self, sts: syntax.SubTypeSpec):
-		assert sts.body is None
-		super().__init__(sts)
+	def __init__(self, st: syntax.SubTypeSpec):
+		assert st.body is None
+		self.st = st
+		super().__init__(st)
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_tag_enum(self)
 
 class TaggedRecord(SophieType):

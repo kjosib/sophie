@@ -5,8 +5,7 @@ from boozetools.support.symtab import SymbolAlreadyExists
 from .diagnostics import Report
 from .front_end import parse_file
 from .syntax import Module, ImportModule
-from .resolution import resolve_words, AliasChecker, check_all_match_expressions
-from . import preamble
+from . import resolution
 
 class _CircularDependencyError(Exception):
 	""" This can only happen during a nested recursive call, so the exception is private. """
@@ -19,13 +18,13 @@ class Loader:
 		self._construction_stack = []
 		self.module_sequence = []
 		self._verbose = verbose
-		self._manifest = {}
 		self._experimental = experimental
-		if experimental:
+		if self._experimental:
 			from .hot.ruminate import DeductionEngine
 			self._deductionEngine = DeductionEngine(report)
-			self._deductionEngine.visit(preamble.module)
-		self._report.assert_no_issues()
+		else:
+			self._deductionEngine = None
+		self._preamble = self._load_preamble()
 	
 	def need_module(self, base_path, module_path:str) -> Module:
 		"""
@@ -65,7 +64,19 @@ class Loader:
 	
 	def run(self):
 		from .simple_evaluator import run_program
-		return run_program(preamble.module.globals, self.module_sequence)
+		return run_program(self._preamble.globals, self.module_sequence)
+	
+	def _load_preamble(self):
+		from pathlib import Path
+		from . import primitive
+		preamble_path = Path(__file__).parent / "preamble.sg"
+		self._enter(preamble_path)
+		module = parse_file(preamble_path, self._report)
+		self._prepare_module(module, primitive.root_namespace)
+		self._report.assert_no_issues()
+		primitive.LIST = module.globals['list']
+		self._exit()
+		return module
 	
 	def _load_normal_file(self, abs_path):
 		if self._verbose:
@@ -73,18 +84,39 @@ class Loader:
 		module = parse_file(abs_path, self._report)
 		if not self._report.issues:
 			self._interpret_the_import_directives(module, os.path.dirname(abs_path))
-		self._prepare_module(module)
+		self._prepare_module(module, self._preamble.globals)
 		return module
 	
-	def _prepare_module(self, module):
-		if not self._report.issues:
-			resolve_words(module, preamble.module.globals, self._report)
-		if not self._report.issues:
-			AliasChecker(module, self._report)
-		if not self._report.issues:
-			check_all_match_expressions(module, self._report)
-		if self._experimental and not self._report.issues:
+	def _prepare_module(self, module, outer):
+		"""
+		If this returns a string, it's the name of the pass in which a problem was first noted.
+		The end-user might not care about this, but it's handy for testing.
+		"""
+		if self._report.issues: return "parse"
+		assert isinstance(module, Module)
+		
+		resolution.WordDefiner(outer, self._report).visit(module)
+		if self._report.issues: return "define"
+		
+		resolution.StaticDepthPass(module)  # Cannot fail
+		
+		alias_constructors = resolution.WordResolver(module, self._report).dubious_constructors
+		if self._report.issues: return "resolve"
+		
+		resolution.AliasChecker(module, self._report)
+		if self._report.issues: return "alias"
+		
+		resolution.check_constructors(alias_constructors, self._report)
+		if self._report.issues: return "constructors"
+
+		resolution.check_all_match_expressions(module, self._report)
+		if self._report.issues: return "match_check"
+		
+		resolution.build_match_dispatch_tables(module)  # Cannot fail, for checks have been done earlier.
+		
+		if self._experimental:
 			self._deductionEngine.visit(module)
+			if self._report.issues: return "type_check"
 	
 	def _interpret_the_import_directives(self, module:Module, base_path):
 		""" Interpret the import directives in a module... """
@@ -103,4 +135,5 @@ class Loader:
 				self._on_error([directive.relative_path], cycle_text)
 			except SymbolAlreadyExists:
 				self._on_error([directive.nom], "This module-alias is already used earlier.")
+
 

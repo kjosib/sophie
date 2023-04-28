@@ -9,26 +9,7 @@ from boozetools.support.symtab import NoSuchSymbol, SymbolAlreadyExists
 from . import syntax, diagnostics
 from .ontology import NS, Symbol
 
-def resolve_words(module: syntax.Module, outside: NS, report: diagnostics.Report):
-	"""
-	At the end of this action, every name-reference in the source text is visible where it's used.
-	That is, a corresponding definition-object is in scope. It may not make sense,
-	or be the right kind of name, but at least it's not an obvious misspelling.
-	
-	This will not be able to handle field-access (or keyword-args, etc) in the first instance,
-	because those depend on some measure of type resolution. And to keep things simple,
-	I'm going to worry about that part in a separate pass.
-	"""
-	assert isinstance(module, syntax.Module)
-	if not report.issues:
-		WordDefiner(module, outside, report.on_error("Defining words"))
-	if not report.issues:
-		StaticDepthPass(module)
-		WordResolver(module, report.on_error("Finding Definitions"))
-	if not report.issues:
-		build_match_dispatch_tables(module, report.on_error("Validating Match Cases"))
-
-class WordPass(Visitor):
+class _WordPass(Visitor):
 	""" Simple pass-through for word-agnostic expression syntax. """
 	def visit_ArrowSpec(self, it: syntax.ArrowSpec, env: NS):
 		for a in it.lhs:
@@ -67,7 +48,7 @@ class WordPass(Visitor):
 		for e in expr.elts:
 			self.visit(e, env)
 
-class WordDefiner(WordPass):
+class WordDefiner(_WordPass):
 	"""
 	At the end of this phase:
 		Names used in declarations have an attached symbol table entry.
@@ -78,26 +59,10 @@ class WordDefiner(WordPass):
 	"""
 	globals : NS
 	
-	def __init__(self, module:syntax.Module, outer:NS, on_error):
-		self._on_error = on_error
+	def __init__(self, outer:NS, report):
+		self._outer = outer
+		self._on_error = report.on_error("Defining words")
 		self.redef, self.missing_foreign, self.broken_foreign = [], [], []
-		self.globals = module.globals = outer.new_child(module)
-		self.all_match_expressions = module.all_match_expressions = []
-		self.all_functions = module.all_functions = []
-		for td in module.types:
-			self.visit(td)
-		for d in module.foreign:
-			self.visit(d, module.globals)
-		if self.missing_foreign:
-			on_error(self.missing_foreign, "Some foreign code could not be found.")
-		if self.broken_foreign:
-			on_error(self.broken_foreign, "Attempting to import this module threw an exception.")
-		for fn in module.outer_functions:  # Can't iterate all-functions yet; must build it first.
-			self.visit(fn, module.globals)
-		for expr in module.main:  # Might need to define some case-match symbols here.
-			self.visit(expr, module.globals)
-		if self.redef:
-			on_error(self.redef, "I see the same name defined earlier in the same scope:")
 
 	def _install(self, namespace: NS, dfn:Symbol):
 		try: namespace[dfn.nom.text] = dfn
@@ -108,6 +73,26 @@ class WordDefiner(WordPass):
 		ps = td.param_space = self.globals.new_child(place=td)
 		for p in td.parameters:
 			self._install(ps, p)
+	
+	def visit_Module(self, module:syntax.Module):
+		self.globals = module.globals = self._outer.new_child(module)
+		self.all_match_expressions = module.all_match_expressions = []
+		self.all_functions = module.all_functions = []
+		for td in module.types:
+			self.visit(td)
+		for d in module.foreign:
+			self.visit(d, module.globals)
+		if self.missing_foreign:
+			self._on_error(self.missing_foreign, "Some foreign code could not be found.")
+		if self.broken_foreign:
+			self._on_error(self.broken_foreign, "Attempting to import this module threw an exception.")
+		for fn in module.outer_functions:  # Can't iterate all-functions yet; must build it first.
+			self.visit(fn, module.globals)
+		for expr in module.main:  # Might need to define some case-match symbols here.
+			self.visit(expr, module.globals)
+		if self.redef:
+			self._on_error(self.redef, "I see the same name defined earlier in the same scope:")
+
 	
 	def visit_Opaque(self, o:syntax.Opaque):
 		self._install(self.globals, o)
@@ -195,7 +180,7 @@ class WordDefiner(WordPass):
 		else: self._install(env, sym)
 	
 
-class StaticDepthPass(WordPass):
+class StaticDepthPass(_WordPass):
 	# Assign static depth to the definitions of all parameters and functions.
 	# This pass cannot fail.
 	def __init__(self, module):
@@ -226,16 +211,28 @@ class StaticDepthPass(WordPass):
 		l.source_depth = depth
 
 
-class WordResolver(WordPass):
+class WordResolver(_WordPass):
 	"""
+	At the end of this action, every name-reference in the source text is visible where it's used.
+	That is, a corresponding definition-object is in scope. It may not make sense,
+	or be the right kind of name, but at least it's not an obvious misspelling.
+	
+	This will not be able to handle field-access (or keyword-args, etc) in the first instance,
+	because those depend on some measure of type resolution. And to keep things simple,
+	I'm going to worry about that part in a separate pass.
+	
 	Walk the tree looking for undefined words in each static scope.
 	Report on every such occurrence.
 	If this pass succeeds, every syntax.Name object is connected to its corresponding symbol table entry.
 	This is also a good place to pick up interesting lists of syntax objects, such as all match-cases.
 	"""
-	def __init__(self, module:syntax.Module, on_error):
+	
+	dubious_constructors: list[syntax.Reference]
+	
+	def __init__(self, module:syntax.Module, report):
+		on_error = report.on_error("Finding Definitions")
+		self.dubious_constructors = []
 		self.undef:list[syntax.Nom] = []
-		self.non_value:list[syntax.Reference] = []
 		self.module = module
 		for td in module.types:
 			self.visit(td)
@@ -247,8 +244,6 @@ class WordResolver(WordPass):
 			self.visit(expr, module.globals)
 		if self.undef:
 			on_error(self.undef, "I do not see an available definition for:")
-		if self.non_value:
-			on_error(self.non_value, "This word is defined only in type context, not value context:")
 	
 	def visit_Variant(self, v:syntax.Variant):
 		for st in v.subtypes:
@@ -270,6 +265,7 @@ class WordResolver(WordPass):
 			return env[nom.text]
 		except NoSuchSymbol:
 			self.undef.append(nom)
+			return Bogon(nom)
 
 	def visit_PlainReference(self, ref:syntax.PlainReference, env:NS):
 		# This kind of reference searches the local-scoped name-space
@@ -278,7 +274,8 @@ class WordResolver(WordPass):
 	def visit_QualifiedReference(self, ref:syntax.QualifiedReference, env:NS):
 		# Search among imports.
 		space = self._lookup(ref.space, self.module.module_imports)
-		ref.dfn = self._lookup(ref.nom, space) if space else None
+		if isinstance(space, Bogon): return space
+		ref.dfn = self._lookup(ref.nom, space)
 	
 	def visit_GenericType(self, ref:syntax.ExplicitTypeVariable, env:NS):
 		ref.dfn = self._lookup(ref.nom, env)
@@ -306,28 +303,22 @@ class WordResolver(WordPass):
 		if mx.otherwise is not None:
 			self.visit(mx.otherwise, mx.namespace)
 			
-	def visit_Lookup(self, expr: syntax.Lookup, env: NS):
-		self.visit(expr.ref, env)
-		dfn = expr.ref.dfn
-		if dfn is not None and not dfn.has_value_domain():
-			self.non_value.append(expr.ref)
+	def visit_Lookup(self, lu: syntax.Lookup, env: NS):
+		self.visit(lu.ref, env)
+		dfn = lu.ref.dfn
+		if isinstance(dfn, syntax.TypeAlias) or not dfn.has_value_domain():
+			self.dubious_constructors.append(lu.ref)
+			
 
 	def visit_ImportForeign(self, d:syntax.ImportForeign):
 		for group in d.groups:
 			self.visit(group.type_expr, self.module.globals)
 
-def build_match_dispatch_tables(module: syntax.Module, on_error):
-	""" The simple evaluator uses these. """
-	for mx in module.all_match_expressions:
-		mx.dispatch = {}
-		seen = {}
-		for alt in mx.alternatives:
-			key = alt.pattern.nom.key()
-			if key in seen:
-				on_error([seen[key], alt.pattern], "Duplication here...")
-			else:
-				mx.dispatch[key] = alt.sub_expr
-		
+class Bogon(syntax.Symbol):
+	
+	def has_value_domain(self) -> bool:
+		return False
+	
 
 class AliasChecker(Visitor):
 	"""
@@ -431,6 +422,10 @@ class AliasChecker(Visitor):
 		for group in d.groups:
 			self.visit(group.type_expr)
 
+def check_constructors(dubious_constructors:list[syntax.Reference], report:diagnostics.Report):
+	bogons = [ref.head() for ref in dubious_constructors if not ref.dfn.has_value_domain()]
+	if bogons: report.error("Checking Constructors", bogons, "These type-names are not data-constructors.")
+
 def check_all_match_expressions(module: syntax.Module, report):
 	on_match_error = report.on_error("Checking Type-Case Matches")
 	for mx in module.all_match_expressions:
@@ -438,8 +433,8 @@ def check_all_match_expressions(module: syntax.Module, report):
 
 def _check_one_match_expression(mx:syntax.MatchExpr, on_error):
 	non_subtypes = []
-	duplicates = []
-	seen = set()
+	duplicates = set()
+	first = {}
 	
 	subtypes : list[syntax.SubTypeSpec] = []
 	
@@ -447,17 +442,18 @@ def _check_one_match_expression(mx:syntax.MatchExpr, on_error):
 		dfn = alt.pattern.dfn
 		if isinstance(dfn, syntax.SubTypeSpec):
 			subtypes.append(dfn)
-			if dfn in seen:
-				duplicates.append(alt.pattern)
+			if dfn in first:
+				duplicates.add(first[dfn])
+				duplicates.add(alt.pattern)
 			else:
-				seen.add(dfn)
+				first[dfn] = alt.pattern
 		else:
 			non_subtypes.append(alt.pattern)
 	
 	if non_subtypes:
 		on_error(non_subtypes, "This case is not a member of any variant.")
 	if duplicates:
-		on_error(duplicates, "This duplicates an earlier case.")
+		on_error(list(duplicates), "Duplicate cases here...")
 	if non_subtypes or duplicates:
 		return
 	
@@ -469,9 +465,19 @@ def _check_one_match_expression(mx:syntax.MatchExpr, on_error):
 		return
 
 	mx.variant = primary_variant
-	exhaustive = len(seen) == len(primary_variant.subtypes)
+	exhaustive = len(first) == len(primary_variant.subtypes)
 	if exhaustive and mx.otherwise:
 		on_error([mx, mx.otherwise], "This case-construction is exhaustive; the else-clause cannot happen.")
 	if not (exhaustive or mx.otherwise):
 		on_error([mx], "This case-construction does not cover all the cases of <%s> and lacks an otherwise-clause." % mx.variant.nom.text)
 	pass
+
+def build_match_dispatch_tables(module: syntax.Module):
+	""" The simple evaluator uses these. """
+	for mx in module.all_match_expressions:
+		mx.dispatch = {}
+		for alt in mx.alternatives:
+			key = alt.pattern.nom.key()
+			mx.dispatch[key] = alt.sub_expr
+
+

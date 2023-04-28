@@ -22,7 +22,6 @@ class TypeParameter(Symbol):
 		return self.nom.head()
 	def has_value_domain(self) -> bool:
 		return False
-	def is_nominal(self) -> bool: return False
 
 class Generic(NamedTuple):
 	nom: Nom
@@ -38,9 +37,8 @@ class TypeDeclaration(Symbol, ABC):
 		super().__init__(generic.nom)
 		self.parameters = tuple(TypeParameter(n) for n in generic.param_names)
 
-class SimpleType(Expr, ABC):
-	@abstractmethod
-	def is_nominal(self) -> bool: pass
+class SimpleType(Expr):
+	def can_construct(self) -> bool: raise NotImplementedError(type(self))
 
 class ValExpr(Expr):
 	pass
@@ -69,18 +67,15 @@ class ArrowSpec(SimpleType):
 		self.lhs = lhs
 		self._head = _head
 		self.rhs = rhs
-	def head(self) -> slice:
-		return self._head
-	def is_nominal(self) -> bool: return False
-	
+	def head(self) -> slice: return self._head
+	def can_construct(self) -> bool: return False
+
 class TypeCall(SimpleType):
 	def __init__(self, ref: Reference, arguments: Sequence[ARGUMENT_TYPE] = ()):
 		assert isinstance(ref, Reference)
 		self.ref, self.arguments = ref, arguments or ()
-	
 	def head(self) -> slice: return self.ref.head()
-	
-	def is_nominal(self) -> bool: return self.ref.dfn.is_nominal()
+	def can_construct(self) -> bool: return self.ref.dfn.has_value_domain()
 
 class ImplicitTypeVariable:
 	""" Stand-in as the relevant type-expression for when the syntax doesn't bother. """
@@ -119,19 +114,17 @@ class TypeAlias(TypeDeclaration):
 	def __init__(self, generic:Generic, body:SimpleType):
 		super().__init__(generic)
 		self.body = body
-	def is_nominal(self): return self.body.is_nominal()
-	def has_value_domain(self) -> bool: return self.body.is_nominal()
+	def has_value_domain(self) -> bool: return self.body.can_construct()
+
 
 class Opaque(TypeDeclaration):
 	def has_value_domain(self): return False
-	def is_nominal(self): return True
 
 class Record(TypeDeclaration):
 	def __init__(self, generic:Generic, spec:RecordSpec):
 		super().__init__(generic)
 		self.spec = spec
 	def has_value_domain(self) -> bool: return True
-	def is_nominal(self) -> bool: return True
 
 class Variant(TypeDeclaration):
 	sub_space: NS  # WordDefiner pass fills this in.
@@ -140,7 +133,6 @@ class Variant(TypeDeclaration):
 		self.subtypes = subtypes
 		for s in subtypes: s.variant = self
 	def has_value_domain(self) -> bool: return False
-	def is_nominal(self) -> bool: return True
 	
 class SubTypeSpec(Symbol):
 	body: Optional[Union[RecordSpec, TypeCall, ArrowSpec]]
@@ -149,7 +141,6 @@ class SubTypeSpec(Symbol):
 	# To clarify: The SubType here describes a *tagged* value, not the type of the value so tagged.
 	# One can tag any kind of value; even a function. Therefore yes, you can always
 	# treat a (tagged) subtype as a function. At least, once everything works right.
-	def is_nominal(self) -> bool: return True
 	def has_value_domain(self) -> bool: return True
 	def __init__(self, nom:Nom, body=None):
 		super().__init__(nom)
@@ -388,9 +379,9 @@ class Module:
 	module_imports: NameSpace[NS]  # Modules imported with an "as" clause.
 	wildcard_imports: NS  # Names imported with a wildcard. Sits underneath globals.
 	globals: NS  # WordDefiner pass creates this.
-	constructors: dict[str:]
+	all_functions: list[UserDefinedFunction]  # WordDefiner pass creates this.
 	all_match_expressions: list[MatchExpr]  # WordResolver pass creates this.
-	all_functions: list[UserDefinedFunction]
+	
 	def __init__(self, exports:list, imports:list[ImportDirective], types:list[TypeDeclaration], functions:list[UserDefinedFunction], main:list):
 		self.exports = exports
 		self.imports = [i for i in imports if isinstance(i, ImportModule)]

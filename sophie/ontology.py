@@ -28,14 +28,11 @@ class Symbol:
 	def head(self) -> slice: return self.nom.head()
 	@abstractmethod
 	def has_value_domain(self) -> bool: pass
-	@abstractmethod
-	def is_nominal(self) -> bool: pass
 
 NS = NameSpace[Symbol]
 
 class Function(Symbol):
 	def has_value_domain(self): return True
-	def is_nominal(self) -> bool: return False
 
 class NativeFunction(Function):
 	""" Built-in and foreign (Python) function symbols. """

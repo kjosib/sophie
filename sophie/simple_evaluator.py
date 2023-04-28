@@ -6,7 +6,7 @@ No longer quite the simplest, most straight-forward possible implementation.
 from typing import Any, Union, Sequence
 from collections import namedtuple, deque
 import abc
-from .preamble import do_turtle_graphics
+from .turtle_adapter import do_turtle_graphics
 from . import syntax, primitive, ontology
 
 STATIC_LINK = object()
@@ -123,8 +123,13 @@ def _lookup_udf(udf: syntax.UserDefinedFunction, env: dict):
 		env[udf] = it = Closure(env, udf) if udf.params else delay(env, udf.expr)
 		return it
 
-def _lookup_by_name(dfn, env:dict):
-	return env[dfn.nom.text]
+def _lookup_by_name(sym, env:dict):
+	return env[sym.nom.text]
+
+def _lookup_type_alias(sym:syntax.TypeAlias, env:dict):
+	tc : syntax.TypeCall = sym.body  # Guaranteed by resolution.check_constructors
+	it = env[sym] = lookup(tc.ref.dfn, env)  # Snap the pointers along the way
+	return it
 
 def _lookup_all_else(dfn, env:dict):
 	return env[dfn]
@@ -143,6 +148,7 @@ LOOKUP : dict[type, callable] = {
 	syntax.Record: _lookup_all_else,
 	syntax.SubTypeSpec: _lookup_all_else,
 	syntax.FFI_Alias: _lookup_all_else,
+	syntax.TypeAlias: _lookup_type_alias,
 }
 
 def lookup(dfn:ontology.Symbol, env:dict) -> LAZY_VALUE:

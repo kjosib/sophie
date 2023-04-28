@@ -1,0 +1,7 @@
+define:
+    bad(x) = case x of
+        cons -> 1;
+        nil -> 2;
+        cons -> 3;
+    esac;
+

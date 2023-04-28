@@ -12,6 +12,9 @@ class Report:
 		self.issues = []
 		self._path = None
 	
+	def reset(self):
+		self.issues.clear()
+	
 	def set_path(self, path:Optional[Path]):
 		""" Let the report know which file is under consideration, for in case of error. """
 		# Yes, it's a temporal coupling. But it's a small worry, at least for now.

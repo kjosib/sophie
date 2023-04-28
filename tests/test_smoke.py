@@ -32,7 +32,12 @@ class ExampleSmokeTests(unittest.TestCase):
 				_good_example(name, False)
 
 	def test_examples_that_should_type(self):
-		for name in ["hello_world", "patron", "simple_calculations", ]:
+		for name in [
+			"hello_world",
+			"patron",
+			"simple_calculations",
+			"explicit_list_construction"
+		]:
 			with self.subTest(name):
 				_good_example(name, True).run()
 
