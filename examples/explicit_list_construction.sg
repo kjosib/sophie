@@ -1,0 +1,4 @@
+begin:
+    #cons("this", cons("that", nil));
+    cons("that", nil);
+

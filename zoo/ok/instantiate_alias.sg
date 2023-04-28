@@ -1,0 +1,5 @@
+type:
+    foo[x] is (a:number, b:x);
+    bar is foo[string];
+begin:
+    bar(12, "Hello");

@@ -13,7 +13,6 @@ The type side of things can be call-by-value, which is a bit easier I think.
 from typing import Optional, Sequence
 from boozetools.support.foundation import Visitor
 
-from .calculus import RecordType
 from .. import syntax, primitive, diagnostics
 from . import calculus
 
@@ -65,11 +64,16 @@ class Rewriter(calculus.TypeVisitor):
 		return o
 	def on_tag_record(self, t: calculus.TaggedRecord):
 		return calculus.TaggedRecord(t.st, [a.visit(self) for a in t.type_args])
-	def on_record(self, r: RecordType):
+	def on_record(self, r: calculus.RecordType):
 		return calculus.RecordType(r.symbol, [a.visit(self) for a in r.type_args])
+	def on_variable(self, v:calculus.TypeVariable):
+		return self._gamma[v]
 
 class Binder(Visitor):
-	"""Discovers (or fails) a substitution-of-variables (in the formal) which make the forma accept the actual as an instance."""
+	"""
+	Discovers (or fails) a substitution-of-variables (in the formal)
+	which make the formal accept the actual as an instance.
+	"""
 	def __init__(self):
 		self.gamma = {}
 		self.ok = True
@@ -88,6 +92,10 @@ class Binder(Visitor):
 		else:
 			self.gamma[formal] = actual
 	
+	def parallel(self, formal: Sequence[calculus.SophieType], actual: Sequence[calculus.SophieType]):
+		assert len(formal) == len(actual)
+		return [self.visit(f, a) for f, a in zip(formal, actual)]
+	
 	def visit_ProductType(self, formal:calculus.ProductType, actual):
 		if not isinstance(actual, calculus.ProductType):
 			return self.fail()
@@ -95,8 +103,34 @@ class Binder(Visitor):
 			return
 		if len(formal.fields) != len(actual.fields):
 			return self.fail()
-		for f,a in zip(formal.fields, actual.fields):
-			self.visit(f, a)
+		self.parallel(formal.fields, actual.fields)
+		
+	def visit_OpaqueType(self, formal:calculus.OpaqueType, actual):
+		if formal.number == actual.number:
+			return
+		else:
+			self.fail()
+	
+	def visit_SumType(self, formal:calculus.SumType, actual):
+		if formal.number == actual.number:
+			return
+		elif isinstance(actual, calculus.SumType):
+			if formal.variant is actual.variant:
+				self.parallel(formal.type_args, actual.type_args)
+			else:
+				self.fail()
+		elif isinstance(actual, calculus.TaggedRecord):
+			if formal.variant is actual.st.variant:
+				self.parallel(formal.type_args, actual.type_args)
+			else:
+				self.fail()
+		elif isinstance(actual, calculus.EnumType):
+			if formal.variant is actual.st.variant:
+				pass
+			else:
+				self.fail()
+		else:
+			raise NotImplementedError(actual)
 
 class UnionFinder(Visitor):
 	def __init__(self, prototype:calculus.SophieType):

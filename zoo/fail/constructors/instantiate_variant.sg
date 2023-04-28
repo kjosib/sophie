@@ -1,0 +1,8 @@
+type:
+    foo[x] is case:
+        fred(a:x);
+        wilma(b:string);
+    esac;
+begin:
+    foo;
+
