@@ -13,8 +13,7 @@ The type side of things can be call-by-value, which is a bit easier I think.
 from typing import Optional, Sequence
 from boozetools.support.foundation import Visitor
 
-from .calculus import UDFType, ProductType, ArrowType, TaggedRecord, EnumType, SumType, RecordType, OpaqueType
-from .. import syntax, primitive, diagnostics
+from .. import ontology, syntax, primitive, diagnostics
 from . import calculus
 
 TYPE_MISMATCH = "These don't have compatible types."
@@ -345,21 +344,41 @@ class DeductionEngine(Visitor):
 		subject_type = self.visit(mx.subject.expr, env)
 		if subject_type is calculus.ERROR: return calculus.ERROR
 		assert isinstance(mx.variant, syntax.Variant)
-		if (
-				(isinstance(subject_type, calculus.SumType) and subject_type.variant is mx.variant) or
-				(isinstance(subject_type, calculus.SubType) and subject_type.st.variant is mx.variant)
-		):
-			env[mx.subject] = subject_type
+		if isinstance(subject_type, calculus.SumType) and subject_type.variant is mx.variant:
 			union_find = UnionFinder(calculus.BOTTOM)
 			for alt in mx.alternatives:
+				env[mx.subject] = _hypothesis(alt.pattern.dfn, subject_type.type_args)
 				union_find.unify_with(self.visit(alt.sub_expr, env))
 				if union_find.died:
 					self._on_error([alt.sub_expr],TYPE_MISMATCH)
 					return calculus.ERROR
 			return union_find.result()
+		elif isinstance(subject_type, calculus.SubType) and subject_type.st.variant is mx.variant:
+			branch = mx.dispatch.get(subject_type.st.nom.text, mx.otherwise)
+			env[mx.subject] = subject_type
+			return self.visit(branch, env)
 		else:
 			self._on_error([mx.subject], subject_type.visit(Render())+" does not work here.")
 			return calculus.ERROR
+
+	def visit_FieldReference(self, fr:syntax.FieldReference, env:ENV) -> calculus.SophieType:
+		lhs_type = self.visit(fr.lhs, env)
+		if isinstance(lhs_type, calculus.RecordType):
+			spec = lhs_type.symbol.spec
+			parameters = lhs_type.symbol.parameters
+		elif isinstance(lhs_type, calculus.TaggedRecord):
+			spec = lhs_type.st.body
+			parameters = lhs_type.st.variant.parameters
+		else:
+			self._on_error([fr], "The type %s has no fields."%lhs_type.visit(Render()))
+			return calculus.ERROR
+		try:
+			field_spec = spec.field_space[fr.field_name.text]
+		except KeyError:
+			self._on_error([fr], "The type %s does not have this field."%(lhs_type.visit(Render())))
+			return calculus.ERROR
+		assert isinstance(field_spec, syntax.FormalParameter), field_spec
+		return ManifestBuilder(parameters, lhs_type.type_args).visit(field_spec.type_expr)
 
 class Render(calculus.TypeVisitor):
 	""" Return a string representation of the term. """
@@ -386,22 +405,11 @@ class Render(calculus.TypeVisitor):
 	def on_product(self, p: calculus.ProductType):
 		return "(%s)"%(",".join(t.visit(self) for t in p.fields))
 	def on_udf(self, f: calculus.UDFType):
-		return "<%s>"%f.fn.nom.text
+		return "<%s/%d>"%(f.fn.nom.text, len(f.fn.params))
 	def on_bottom(self):
 		return "?"
 	def on_error_type(self):
 		return "-/-"
-
-# 	def on_nominal(self, n: Nominal):
-# 		if n.params:
-# 			brick = "[%s]"%(", ".join(p.visit(self) for p in n.params))
-# 		else:
-# 			brick = ""
-# 		return n.dfn.nom.text+brick
-# 	def on_arrow(self, a: Arrow):
-# 		return "%s -> %s" % (a.arg.visit(self), a.res.visit(self))
-# 	def on_product(self, p: Product):
-# 		return "(%s)" % (", ".join(a.visit(self) for a in p.fields))
 	
 def _name_variable(n):
 	name = ""
@@ -409,3 +417,11 @@ def _name_variable(n):
 		n, remainder = divmod(n-1, 26)
 		name = chr(97+remainder) + name
 	return name
+
+def _hypothesis(st:ontology.Symbol, type_args:tuple[calculus.SophieType]) -> calculus.SubType:
+	assert isinstance(st, syntax.SubTypeSpec)
+	body = st.body
+	if body is None:
+		return calculus.EnumType(st)
+	if isinstance(body, syntax.RecordSpec):
+		return calculus.TaggedRecord(st, type_args)
