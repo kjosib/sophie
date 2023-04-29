@@ -335,7 +335,7 @@ class MatchExpr(ValExpr):
 	
 	namespace: NS  # WordDefiner fills
 	
-	variant:TypeDeclaration  # check_match_expression infers this from the patterns
+	variant:Variant  # check_match_expression infers this from the patterns
 	dispatch: dict[Optional[str]:ValExpr]
 	
 	def __init__(self, subject:Subject, hint:Optional[Reference], alternatives: list[Alternative], otherwise: Optional[ValExpr]):

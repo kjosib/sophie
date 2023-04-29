@@ -21,7 +21,7 @@ class Loader:
 		self._experimental = experimental
 		if self._experimental:
 			from .hot.ruminate import DeductionEngine
-			self._deductionEngine = DeductionEngine(report)
+			self._deductionEngine = DeductionEngine(report, verbose)
 		else:
 			self._deductionEngine = None
 		self._preamble = self._load_preamble()

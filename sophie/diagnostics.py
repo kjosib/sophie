@@ -50,11 +50,9 @@ class Report:
 
 			
 def _fetch(path):
-	if path:
-		with open(path) as fh:
-			return SourceText(fh.read(), filename=path)
-	else:
-		import sys
-		return SourceText(sys.modules["sophie.preamble"].__doc__)
+	if path is None:
+		return SourceText("")
+	with open(path) as fh:
+		return SourceText(fh.read(), filename=path)
 
 
