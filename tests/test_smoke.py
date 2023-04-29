@@ -36,7 +36,9 @@ class ExampleSmokeTests(unittest.TestCase):
 			"hello_world",
 			"patron",
 			"simple_calculations",
-			"explicit_list_construction"
+			"explicit_list_construction",
+			"Newton",
+			"Newton_2",
 		]:
 			with self.subTest(name):
 				_good_example(name, True).run()

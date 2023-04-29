@@ -31,7 +31,7 @@ I can reuse the one from booze-tools.
 """
 from typing import Iterable
 from boozetools.support.foundation import EquivalenceClassifier
-from .. import syntax
+from .. import syntax, ontology
 
 _type_numbering_subsystem = EquivalenceClassifier()
 
@@ -60,7 +60,6 @@ class OpaqueType(SophieType):
 		super().__init__(symbol)
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_opaque(self)
 
-
 class RecordType(SophieType):
 	def __init__(self, r:syntax.Record, type_args: Iterable[SophieType]):
 		assert type(r) is syntax.Record
@@ -83,15 +82,18 @@ class SumType(SophieType):
 		super().__init__(self.variant, *(a.number for a in self.type_args))
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_sum(self)
 
-class EnumType(SophieType):
+class SubType(SophieType):
+	st : syntax.SubTypeSpec
+
+class EnumType(SubType):
 	def __init__(self, st: syntax.SubTypeSpec):
 		assert st.body is None
 		self.st = st
 		super().__init__(st)
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_tag_enum(self)
+	def family(self) -> ontology.Symbol: return self.st.variant
 
-class TaggedRecord(SophieType):
-	st: syntax.SubTypeSpec
+class TaggedRecord(SubType):
 	def __init__(self, st: syntax.SubTypeSpec, type_args: Iterable[SophieType]):
 		assert isinstance(st, syntax.SubTypeSpec)
 		assert isinstance(st.body, syntax.RecordSpec)
@@ -100,6 +102,7 @@ class TaggedRecord(SophieType):
 		assert len(self.type_args) == len(st.variant.parameters)
 		super().__init__(st, *(a.number for a in self.type_args))
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_tag_record(self)
+	def family(self) -> ontology.Symbol: return self.st.variant
 
 
 class ProductType(SophieType):
@@ -115,6 +118,7 @@ class ArrowType(SophieType):
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_arrow(self)
 
 class UDFType(SophieType):
+	fn: syntax.UserDefinedFunction
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_udf(self)
 
 class TopLevelFunctionType(UDFType):
@@ -129,10 +133,11 @@ class NestedFunctionType(UDFType):
 	# Comes from looking up a nested function.
 	# Evaluating the type of such a beast /may/ involve looking in the static environment.
 	# Please note: One day I hope to use a compiler pass to
-	def __init__(self, fn:syntax.UserDefinedFunction, static_link:dict):
+	def __init__(self, fn:syntax.UserDefinedFunction, static_env:dict):
 		assert isinstance(fn, syntax.UserDefinedFunction)
-		assert isinstance(static_link, dict)
+		assert isinstance(static_env, dict)
 		self.fn = fn
+		self.static_env = static_env
 		# NB: The uniqueness notion here is excessive, but there's a plan to deal with that.
 		#     Whatever instantiates a nested function must enter it in the static scope without duplication.
 		#     Performance hacking may make for an even better cache than that.
