@@ -95,7 +95,7 @@ class Loader:
 		if self._report.issues: return "parse"
 		assert isinstance(module, Module)
 		
-		resolution.WordDefiner(outer, self._report).visit(module)
+		resolution.WordDefiner(module, outer, self._report)
 		if self._report.issues: return "define"
 		
 		resolution.StaticDepthPass(module)  # Cannot fail

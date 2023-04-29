@@ -59,23 +59,10 @@ class WordDefiner(_WordPass):
 	"""
 	globals : NS
 	
-	def __init__(self, outer:NS, report):
-		self._outer = outer
+	def __init__(self, module:syntax.Module, outer:NS, report):
 		self._on_error = report.on_error("Defining words")
 		self.redef, self.missing_foreign, self.broken_foreign = [], [], []
-
-	def _install(self, namespace: NS, dfn:Symbol):
-		try: namespace[dfn.nom.text] = dfn
-		except SymbolAlreadyExists: self.redef.append(dfn.nom)
-	
-	def _declare_type(self, td:syntax.TypeDeclaration):
-		self._install(self.globals, td)
-		ps = td.param_space = self.globals.new_child(place=td)
-		for p in td.parameters:
-			self._install(ps, p)
-	
-	def visit_Module(self, module:syntax.Module):
-		self.globals = module.globals = self._outer.new_child(module)
+		self.globals = module.globals = outer.new_child(module)
 		self.all_match_expressions = module.all_match_expressions = []
 		self.all_functions = module.all_functions = []
 		for td in module.types:
@@ -93,6 +80,15 @@ class WordDefiner(_WordPass):
 		if self.redef:
 			self._on_error(self.redef, "I see the same name defined earlier in the same scope:")
 
+	def _install(self, namespace: NS, dfn:Symbol):
+		try: namespace[dfn.nom.text] = dfn
+		except SymbolAlreadyExists: self.redef.append(dfn.nom)
+	
+	def _declare_type(self, td:syntax.TypeDeclaration):
+		self._install(self.globals, td)
+		ps = td.param_space = self.globals.new_child(place=td)
+		for p in td.parameters:
+			self._install(ps, p)
 	
 	def visit_Opaque(self, o:syntax.Opaque):
 		self._install(self.globals, o)
