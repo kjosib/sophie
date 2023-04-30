@@ -13,6 +13,12 @@ High-Order Type Checking (HOT)
 
 .. note:: This feature is under development, so the precise details may change.
 
+> And at one point while working on the type checker, I had the provenance epiphany.
+> The objects we pass around to represent types should include both the
+> type per-se (i.e. calculus.SophieType) and also the provenance,
+> or why the computer judged a particular type. Provenance can be
+> nontrivial -- maybe even recursive -- but traces a path of reasoning.
+
 I would like a rather precise up-front analysis phase based on what we can infer about the types of variables,
 but I do not mean to impose burdens normally associated with *dependent-type* systems.
 
@@ -20,28 +26,13 @@ In concept, my approach is to just run the program as-is, but in the realm of ty
 This is a whole-program approach to the question type-correctness:
 The same function might be safe-or-not depending on how you call it.
 
-My algorithm is something like:
-
-1. Simplify the Representation: Rewrite the value-program into a type-program.
-2. Simplify the Problem: Fold constant-expressions and reduce the rest to lowest terms.
-3. Determine the dynamic type-dependency front.
-4. Evaluate the Type-Program in the realm of types, without falling down the infinite-recursion rabbit hole.
-
-Simplify the Representation
----------------------------
-At ``sophie.hot.lift_pass`` lives ``class RewriteIntoTypeRealm`` which converts the rich Sophie expression syntax
-into a smaller core of type-transformer expression-nodes defined at ``sophie.hot.tdx``.
-This simplifies the remainder of type-analysis and checking because there are fewer distinct cases to worry about.
-
-Simplify the Problem
+Type Numbering
 ---------------------
-Let us fold constants and combine like terms. Something akin to value-numbering (but for types) will do nicely.
-Incidentally, that numbering table may come in quite handy during evaluation,
-because it's also a way to manage the memoization structure.
-
-Items are equivalent when they have the same operator and operand-numbers.
-An explicit type-parameter may be treated as a special unique constant for this purpose.
-
+Types can be nontrivial recursive objects.
+We need a quick way to tell if we're looking at two instances of the same type.
+Something akin to value-numbering will do nicely.
+For the Python implementation, I'll use the booze-tools ``EquivalenceClassifier``
+and make ``SophieType`` objects define ``__hash__`` and ``__eq__`` suitably.
 
 Dynamic Type Dependency Front
 ------------------------------
@@ -55,8 +46,6 @@ then the type of P influences the type of B which in turn influences the type of
 
 This is another data-flow problem. Start by associating all the non-local data dependencies,
 then flow these through that partial call-graph consisting of calls to non-global functions.
-
-(We found a different partial call graph earlier, in ``AliasChecker``, but it was only looking for circular definitions.)
 
 Finally, add the local variable dependencies specifically if they are mentioned.
 (This is because a function ``(a,b)->b`` does not depend on the type of ``a``.)

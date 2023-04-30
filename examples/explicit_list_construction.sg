@@ -1,4 +1,7 @@
 begin:
-    #cons("this", cons("that", nil));
+    nil;
     cons("that", nil);
+    cons("this", cons("that", nil));
+    cons("this", cons("that", cons("the", cons("other", nil))));
 
+end.
