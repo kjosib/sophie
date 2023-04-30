@@ -16,7 +16,7 @@ The design goals, *in priority order,* are:
 5. Call-by-need pure-functional for general computation.
 6. Turtle graphics.
 7. A modular import system, probably with explicit exports.
-8. Strong type-inference so run-time troubles are few and far between.
+8. Strong type-correctness (without requiring type-annotations) so run-time troubles are few and far between.
 9. Foreign Function Interface.
 10. Event-driven concurrency over a sensible (maybe pluggable?) process-model. (Probably actors, as in Erlang.)
 11. Other nice things to have.
@@ -27,16 +27,25 @@ but should produce excellent habits.
 
 Things on Deck
 ----------------
+
+* The new-style type-checker is coming along nicely, but still needs a good bit of work.
+* The next evolution of the import system: It's time to support the concept of a standard library.
+  This will get the turtle graphics stuff out of the standard preamble and into an importable module.
+
+  * Some magic with namespaces and maybe a new import form.
+  * Update the examples to match.
+  * Update the tutorial to explain about importing things a bit earlier.
+  * Update the FFI to support attaching drivers.
+
 The next increment will probably focus on one of:
 
-* String-oriented functions (by way of the new FFI)
-* Abstract interpretation to check the global type-correctness of a program.
+* String-oriented functions (by way of the new FFI) and a 99-bottles-of-beer demo.
+* Better error display. The abstract interpreter brings
 * Simple (nay, even simplistic!) console interaction
 
 Open Design Problems:
 ---------------------
 * Better error messages. (For parse errors, I have an idea related to sentential forms.)
-* Better error display.
 * *rest*-parameters
 * Partial functions
 * Actor Model? Algebraic Effects? Pluggable Drivers?
