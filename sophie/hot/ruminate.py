@@ -11,7 +11,7 @@ This module represents one straightforward type-level execution mechanism.
 The type side of things can be call-by-value, which is a bit easier I think.
 The tricky bit is (mutually) recursive functions.
 """
-from typing import Optional, Sequence
+from typing import Iterable, Sequence
 from boozetools.support.foundation import Visitor
 
 from .. import ontology, syntax, primitive, diagnostics
@@ -38,26 +38,30 @@ class ManifestBuilder(Visitor):
 	def __init__(self, tps:Sequence[syntax.TypeParameter], type_args: list[calculus.SophieType]):
 		self._bind = dict(zip(tps, type_args))
 		
+	def _make_product(self, formals:Iterable[syntax.ARGUMENT_TYPE]) -> calculus.ProductType:
+		return calculus.ProductType(map(self.visit, formals)).exemplar()
+		
 	def visit_RecordSpec(self, rs:syntax.RecordSpec) -> calculus.ProductType:
-		return calculus.ProductType(self.visit(field.type_expr) for field in rs.fields)
+		# This is sort of a handy special case: Things use it to build constructor arrows.
+		return self._make_product(field.type_expr for field in rs.fields)
 	
 	def visit_TypeCall(self, tc:syntax.TypeCall) -> calculus.SophieType:
 		dfn = tc.ref.dfn
 		if isinstance(dfn, syntax.TypeParameter):
 			return self._bind[dfn]
 		if isinstance(dfn, syntax.Opaque):
-			return calculus.OpaqueType(dfn)
+			return calculus.OpaqueType(dfn).exemplar()
 		args = [self.visit(a) for a in tc.arguments]
 		if isinstance(dfn, syntax.Record):
-			return calculus.RecordType(dfn, args)
+			return calculus.RecordType(dfn, args).exemplar()
 		if isinstance(dfn, syntax.Variant):
-			return calculus.SumType(dfn, args)
+			return calculus.SumType(dfn, args).exemplar()
 		if isinstance(dfn, syntax.TypeAlias):
 			return ManifestBuilder(dfn.parameters,args).visit(dfn.body)
 		raise NotImplementedError(type(dfn))
 	
 	def visit_ArrowSpec(self, spec:syntax.ArrowSpec):
-		return calculus.ArrowType(calculus.ProductType(map(self.visit, spec.lhs)), self.visit(spec.rhs))
+		return calculus.ArrowType(self._make_product(spec.lhs), self.visit(spec.rhs))
 
 class Rewriter(calculus.TypeVisitor):
 	def __init__(self, gamma:dict):
@@ -208,16 +212,18 @@ class UnionFinder(Visitor):
 			return self.visit_SumType(that, this)
 		elif isinstance(that, calculus.TaggedRecord):
 			return self.visit_TaggedRecord(that, this)
+	
+	@staticmethod
+	def visit__Error(this:calculus.ERROR, that:calculus.SophieType):
+		return this
 
 class DeductionEngine(Visitor):
-	_global_env : ENV
 	def __init__(self, report:diagnostics.Report, verbose:bool):
 		self._on_error = report.on_error("Checking Types")
 		self._verbose = verbose
-		self._global_env = {
-			ot.symbol: ot
-			for ot in _literal_type_map.values()
-		}
+		self._types = { ot.symbol: ot for ot in _literal_type_map.values() }
+		self._constructors : dict[syntax.Symbol, calculus.SophieType] = {}
+		self._ffi = {}
 		self._memo = {}
 		self._recursion = {}
 	
@@ -225,52 +231,44 @@ class DeductionEngine(Visitor):
 		for td in module.types: self.visit(td)
 		for fi in module.foreign: self.visit(fi)
 		for expr in module.main:
-			result = self.visit(expr, None)
+			result = self.visit(expr, {})
 			if self._verbose:
 				print(result.visit(Render()))
 		pass
 	
 	def visit_Record(self, r: syntax.Record):
 		type_args = [calculus.TypeVariable() for _ in r.parameters]
+		self._types[r] = calculus.RecordType(r, type_args)
 		arg = ManifestBuilder(r.parameters, type_args).visit(r.spec)
-		res = calculus.RecordType(r, type_args)
-		self._global_env[r] = calculus.ArrowType(arg, res)
+		self._constructors[r] = calculus.ArrowType(arg, self._types[r])
 	
 	def visit_Variant(self, v: syntax.Variant):
-		self._global_env[v] = None
 		type_args = [calculus.TypeVariable() for _ in v.parameters]
+		self._types[v] = calculus.SumType(v, type_args)
 		builder = ManifestBuilder(v.parameters, type_args)
 		for st in v.subtypes:
 			if st.body is None:
-				self._global_env[st] = calculus.EnumType(st)
+				self._constructors[st] = calculus.EnumType(st)
 			elif isinstance(st.body, syntax.RecordSpec):
 				arg = builder.visit(st.body)
 				res = calculus.TaggedRecord(st, type_args)
-				self._global_env[st] = calculus.ArrowType(arg, res)
+				self._constructors[st] = calculus.ArrowType(arg, res)
 				
 	def visit_TypeAlias(self, a: syntax.TypeAlias):
-		if isinstance(a.body, syntax.TypeCall):
-			dfn = a.body.ref.dfn
-			body_type = self._global_env[dfn]
-			if body_type is None:
-				self._global_env[a] = None
-				return
-			elif isinstance(body_type, calculus.OpaqueType):
-				self._global_env[a] = body_type
-			elif isinstance(body_type, calculus.SumType):
-				raise NotImplementedError
-			else:
-				raise NotImplementedError(type(body_type))
-		else:
-			assert isinstance(a.body, syntax.ArrowSpec)
-			self._global_env[a] = None
+		type_args = [calculus.TypeVariable() for _ in a.parameters]
+		self._types[a] = it = ManifestBuilder(a.parameters, type_args).visit(a.body)
+		if isinstance(it, calculus.RecordType):
+			formals = self._types[it.symbol].type_args
+			original = self._constructors[it.symbol]
+			gamma = dict(zip(formals, it.type_args))
+			self._constructors[a] = original.visit(Rewriter(gamma))
 	
 	def visit_ImportForeign(self, d:syntax.ImportForeign):
 		for group in d.groups:
 			type_args = [calculus.TypeVariable() for _ in group.type_params]
 			typ = ManifestBuilder(group.type_params, type_args).visit(group.type_expr)
 			for sym in group.symbols:
-				self._global_env[sym] = typ
+				self._ffi[sym] = typ
 	
 	@staticmethod
 	def visit_Literal(expr: syntax.Literal, env:ENV) -> calculus.SophieType:
@@ -346,19 +344,19 @@ class DeductionEngine(Visitor):
 		
 	def visit_Lookup(self, lu:syntax.Lookup, env:ENV) -> calculus.SophieType:
 		target = lu.ref.dfn
-		if target.static_depth == 0:
-			env = self._global_env
-		else:
-			for _ in range(lu.source_depth - target.static_depth):
-				env = env[STATIC_LINK]
+		if isinstance(target, (syntax.TypeDeclaration, syntax.SubTypeSpec)):
+			return self._constructors[target]  # Must succeed because of resolution.check_constructors
+		if isinstance(target, syntax.FFI_Alias):
+			return self._ffi[target]
+		for _ in range(lu.source_depth - target.static_depth):
+			env = env[STATIC_LINK]
 		if isinstance(target, syntax.UserDefinedFunction):
-			# The target won't be in the environment.
-			# Construct the type in-place based on the target.
 			if target.params:
 				return calculus.UDFType(target, env).exemplar()
 			else:
 				return self._apply(target, env)
 		else:
+			assert isinstance(target, (syntax.FormalParameter, syntax.Subject))
 			return env[target]
 		
 	def visit_ExplicitList(self, el:syntax.ExplicitList, env:ENV) -> calculus.SumType:
