@@ -53,6 +53,7 @@ Let's break this down:
 * Finally, every Sophie program ends with the phrase ``end.`` with a period.
 
     * Why? Because it looks nice in print.
+    * Ok, the ``end.`` is now optional in response to some random dude on the internet with an opinion.
 * At the moment, Sophie is implemented as a Python program.
 
     * So in general, you will invoke ``py -m sophie`` followed by the pathname_ to your program.
