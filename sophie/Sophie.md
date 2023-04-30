@@ -36,7 +36,9 @@ main_section    -> BEGIN ':' semicolon_list(expr)              | :empty
 Since I'd like Sophie to support a unit/module system,
 she needs a way to import modules and to navigate namespaces. Here is that way:
 ```
-import_directive -> short_string AS name  :ImportModule
+import_directive -> import_location AS name  :ImportModule
+
+import_location -> short_string
 
 reference -> name     :PlainReference
   | name '@' name     :QualifiedReference
