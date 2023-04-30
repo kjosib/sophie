@@ -167,7 +167,7 @@ class UserDefinedFunction(Function):
 	def has_value_domain(self): return True
 	def __repr__(self):
 		p = ", ".join(map(str, self.params))
-		return "{fn:%s(%s)}"%(self.nom.text, p)
+		return "{fn:%s(%s)|%s}"%(self.nom.text, p, getattr(self, "static_depth", "?"))
 	def __init__(
 			self,
 			nom: Nom,

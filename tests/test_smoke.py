@@ -18,7 +18,7 @@ class ExampleSmokeTests(unittest.TestCase):
 	""" Run all the examples; Test for no smoke. """
 	
 	def test_other_examples(self):
-		for name in ["some_arithmetic", "primes", "Newton", "Newton_2", "Newton_3", "case_when", "Fibonacci"]:
+		for name in ["primes", ]:
 			with self.subTest(name):
 				_good_example(name, False).run()
 	
@@ -39,6 +39,10 @@ class ExampleSmokeTests(unittest.TestCase):
 			"explicit_list_construction",
 			"Newton",
 			"Newton_2",
+			"Newton_3",
+			"case_when",
+			"some_arithmetic",
+			"Fibonacci",
 		]:
 			with self.subTest(name):
 				_good_example(name, True).run()

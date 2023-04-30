@@ -47,6 +47,8 @@ class SophieType:
 	def __eq__(self, other: "SophieType"): return type(self) is type(other) and self._key == other._key
 	def exemplar(self) -> "SophieType": return _type_numbering_subsystem.exemplars[self.number]
 
+ENV = dict[syntax.Symbol, SophieType]
+
 class TypeVariable(SophieType):
 	"""Did I say value-object? Not for type variables! These have identity."""
 	def __init__(self):
@@ -119,21 +121,9 @@ class ArrowType(SophieType):
 
 class UDFType(SophieType):
 	fn: syntax.UserDefinedFunction
+	static_env: ENV
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_udf(self)
-
-class TopLevelFunctionType(UDFType):
-	# Comes from looking up a function defined in the outermost scope.
-	# Such functions need not concern themselves with environmental types in nonlocal parameters.
-	def __init__(self, fn:syntax.UserDefinedFunction):
-		assert isinstance(fn, syntax.UserDefinedFunction)
-		self.fn = fn
-		super().__init__(fn)
-
-class NestedFunctionType(UDFType):
-	# Comes from looking up a nested function.
-	# Evaluating the type of such a beast /may/ involve looking in the static environment.
-	# Please note: One day I hope to use a compiler pass to
-	def __init__(self, fn:syntax.UserDefinedFunction, static_env:dict):
+	def __init__(self, fn:syntax.UserDefinedFunction, static_env:ENV):
 		assert isinstance(fn, syntax.UserDefinedFunction)
 		assert isinstance(static_env, dict)
 		self.fn = fn
@@ -142,27 +132,6 @@ class NestedFunctionType(UDFType):
 		#     Whatever instantiates a nested function must enter it in the static scope without duplication.
 		#     Performance hacking may make for an even better cache than that.
 		super().__init__(object())
-
-# class UnionType(SophieType):
-# 	def __init__(self, elements: Iterable[SophieType]):
-# 		self.elements = set(p.exemplar() for p in elements)
-# 		super().__init__(*sorted(e.number for e in self.elements))
-# 	def visit(self, visitor:"TypeVisitor"): return visitor.on_union(self)
-#
-# class FieldType(SophieType):
-# 	def __init__(self, subject: SophieType, field_name: syntax.Nom):
-# 		self._subject = subject
-# 		self._field_name = field_name
-# 		super().__init__(subject, field_name.text)
-# 	def visit(self, visitor:"TypeVisitor"): return visitor.on_field(self)
-#
-# class CallSiteType(SophieType):
-# 	def __init__(self, arrow:SophieType, arg:SophieType):
-# 		self._arrow = arrow.exemplar()
-# 		self._arg = arg.exemplar()
-# 		super().__init__(self._arrow, self._arg)
-# 	def visit(self, visitor:"TypeVisitor"): return visitor.on_call(self)
-#
 
 class _Bottom(SophieType):
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_bottom()
@@ -187,9 +156,6 @@ class TypeVisitor:
 	def on_arrow(self, a:ArrowType): raise NotImplementedError(type(self))
 	def on_product(self, p:ProductType): raise NotImplementedError(type(self))
 	def on_udf(self, f:UDFType): raise NotImplementedError(type(self))
-	# def on_union(self, u:"UnionType"): raise NotImplementedError(type(self))
-	# def on_field(self, n:"FieldType"): raise NotImplementedError(type(self))
-	# def on_call(self, c: "CallSiteType"): raise NotImplementedError(type(self))
 	def on_bottom(self): raise NotImplementedError(type(self))
 	def on_error_type(self): raise NotImplementedError(type(self))
 

@@ -23,7 +23,7 @@ class Symbol:
 	static_depth: int  # fill during StaticDepthPass.
 	def __init__(self, nom:Nom): self.nom = nom
 	def __repr__(self):
-		return "{%s:%s}" % (self.nom.text, type(self).__name__)
+		return "{%s:%s|%s}" % (self.nom.text, type(self).__name__, getattr(self,"static_depth", "?"))
 	def __str__(self): return self.nom.text
 	def head(self) -> slice: return self.nom.head()
 	@abstractmethod
