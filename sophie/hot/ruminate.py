@@ -18,9 +18,9 @@ from .. import ontology, syntax, primitive, diagnostics
 from . import calculus
 from .calculus import ENV
 
-TYPE_MISMATCH = "These don't have compatible types."
-
+# A couple useful keys for what's fast becoming an activation record:
 STATIC_LINK = object()
+CODE_SOURCE = object()
 
 _literal_type_map : dict[type, calculus.OpaqueType] = {
 	bool: primitive.literal_flag,
@@ -155,8 +155,8 @@ class UnionFinder(Visitor):
 			union = self.do(self._prototype, that)
 			if union is calculus.ERROR and that is not calculus.ERROR:
 				print("Failed to unify:")
-				print(self._prototype.visit(Render()))
-				print(that.visit(Render()))
+				print(self._prototype)
+				print(that)
 			self._prototype = union
 	
 	def parallel(self, these:Sequence[calculus.SophieType], those:Sequence[calculus.SophieType]):
@@ -230,21 +230,24 @@ class UnionFinder(Visitor):
 
 class DeductionEngine(Visitor):
 	def __init__(self, report:diagnostics.Report, verbose:bool):
-		self._on_error = report.on_error("Checking Types")
+		self._report = report  # .on_error("Checking Types")
 		self._verbose = verbose
 		self._types = { ot.symbol: ot for ot in _literal_type_map.values() }
 		self._constructors : dict[syntax.Symbol, calculus.SophieType] = {}
 		self._ffi = {}
 		self._memo = {}
 		self._recursion = {}
+		self._source_path = {}
 	
-	def visit_Module(self, module:syntax.Module):
+	def visit_Module(self, module:syntax.Module, source_path):
 		for td in module.types: self.visit(td)
 		for fi in module.foreign: self.visit(fi)
+		for fn in module.all_functions: self._source_path[fn] = source_path
+		env = {CODE_SOURCE:source_path}
 		for expr in module.main:
-			result = self.visit(expr, {})
+			result = self.visit(expr, env)
 			if self._verbose:
-				print(result.visit(Render()))
+				print(result)
 		pass
 	
 	def visit_Record(self, r: syntax.Record):
@@ -285,21 +288,7 @@ class DeductionEngine(Visitor):
 	def visit_Literal(expr: syntax.Literal, env:ENV) -> calculus.SophieType:
 		return _literal_type_map[type(expr.value)]
 	
-	def _perform(self, udf_type: calculus.UDFType, args:Sequence[syntax.Expr], env:ENV):
-		formals = udf_type.fn.params
-		if len(formals) != len(args):
-			self._on_error(args, "The called function wants %d arguments, but got %d instead"%(len(formals), len(args)))
-			return calculus.ERROR
-		if len(formals) != len(args):
-			self._on_error(args, "The called function wants %d arguments, but got %d instead"%(len(formals), len(args)))
-			return
-		arg_types = [self.visit(a, env) for a in args]
-		inner:ENV = dict(zip(formals, arg_types))
-		inner[STATIC_LINK] = udf_type.static_env
-		return self._apply(udf_type.fn, inner)
-		#####
-	
-	def _apply(self, fn:syntax.UserDefinedFunction, env:ENV):
+	def _apply(self, fn:syntax.UserDefinedFunction, env:ENV) -> calculus.SophieType:
 		# The part where memoization must happen.
 		mk = _memo_key(fn, env)
 		if mk in self._memo:
@@ -317,25 +306,37 @@ class DeductionEngine(Visitor):
 					self._memo[mk] = self.visit(fn.expr, env)
 		return self._memo[mk]
 	
-	def _call_site(self, fn_type, args, env:ENV) -> calculus.SophieType:
+	def _call_site(self, fn_type, args:Sequence[ontology.Expr], env:ENV) -> calculus.SophieType:
+		arg_types = [self.visit(a, env) for a in args]
+		if any(t is calculus.ERROR for t in arg_types):
+			return calculus.ERROR
 		
 		if isinstance(fn_type, calculus.ArrowType):
-			arg_types = [self.visit(a, env) for a in args]
-			if any(t is calculus.ERROR for t in arg_types):
+			assert isinstance(fn_type.arg, calculus.ProductType)  # Maybe not forever, but now.
+			arity = len(fn_type.arg.fields)
+			if arity != len(args):
+				self._report.wrong_arity(env[CODE_SOURCE], arity, args)
 				return calculus.ERROR
-			# 1. Try to bind the actual argument to the formal argument,
-			#    collecting variables along the way.
+			
 			binder = Binder()
-			binder.bind(fn_type.arg, calculus.ProductType(arg_types))
+			for expr, need, got in zip(args, fn_type.arg.fields, arg_types):
+				binder.bind(need, got)
+				if not binder.ok:
+					self._report.bad_type(env[CODE_SOURCE], expr, need, got)
+					return calculus.ERROR
+
 			# 2. Return the arrow's result-type rewritten using the bindings thus found.
-			if binder.ok:
-				return fn_type.res.visit(Rewriter(binder.gamma))
-			else:
-				self._on_error(args, "Problem here. Also, you deserve a better error message. That's coming soon.")
-				return calculus.ERROR
+			return fn_type.res.visit(Rewriter(binder.gamma))
 		
-		if isinstance(fn_type, calculus.UDFType):
-			return self._perform(fn_type, args, env)
+		elif isinstance(fn_type, calculus.UDFType):
+			formals = fn_type.fn.params
+			if len(formals) != len(args):
+				self._report.wrong_arity(env[CODE_SOURCE], len(formals), args)
+				return calculus.ERROR
+			inner: ENV = dict(zip(formals, arg_types))
+			inner[STATIC_LINK] = fn_type.static_env
+			inner[CODE_SOURCE] = self._source_path[fn_type.fn]
+			return self._apply(fn_type.fn, inner)
 		
 		raise NotImplementedError(type(fn_type))
 	
@@ -378,7 +379,7 @@ class DeductionEngine(Visitor):
 		for e in el.elts:
 			union_find.unify_with(self.visit(e, env))
 			if union_find.died:
-				self._on_error([el.elts[0], e],TYPE_MISMATCH+"(1)")
+				self._report.type_mismatch(env[CODE_SOURCE], el.elts[0], e)
 				return calculus.ERROR
 		element_type = union_find.result()
 		return calculus.SumType(primitive.LIST, (element_type,))
@@ -386,12 +387,12 @@ class DeductionEngine(Visitor):
 	def visit_Cond(self, cond:syntax.Cond, env:ENV) -> calculus.SophieType:
 		if_part_type = self.visit(cond.if_part, env)
 		if if_part_type != primitive.literal_flag:
-			self._on_error([cond.if_part], "The if-part doesn't make a flag, but "+if_part_type.visit(Render()))
+			self._on_error([cond.if_part], "The if-part doesn't make a flag, but "+if_part_type)
 			return calculus.ERROR
 		union_find = UnionFinder(self.visit(cond.then_part, env))
 		union_find.unify_with(self.visit(cond.else_part, env))
 		if union_find.died:
-			self._on_error([cond.then_part, cond.else_part], TYPE_MISMATCH+"(2)")
+			self._report.type_mismatch(env[CODE_SOURCE], cond.then_part, cond.else_part)
 			return calculus.ERROR
 		return union_find.result()
 	
@@ -405,7 +406,7 @@ class DeductionEngine(Visitor):
 				env[mx.subject] = _hypothesis(alt.pattern.dfn, subject_type.type_args)
 				union_find.unify_with(self.visit(alt.sub_expr, env))
 				if union_find.died:
-					self._on_error([alt.sub_expr],TYPE_MISMATCH+"(3)")
+					self._report.type_mismatch(env[CODE_SOURCE], mx.alternatives[0].sub_expr, alt.sub_expr)
 					return calculus.ERROR
 			return union_find.result()
 		elif isinstance(subject_type, calculus.SubType) and subject_type.st.variant is mx.variant:
@@ -413,7 +414,7 @@ class DeductionEngine(Visitor):
 			env[mx.subject] = subject_type
 			return self.visit(branch, env)
 		else:
-			self._on_error([mx.subject], subject_type.visit(Render())+" does not work here.")
+			self._report.bad_type(env[CODE_SOURCE], mx.subject.expr, mx.variant, subject_type)
 			return calculus.ERROR
 
 	def visit_FieldReference(self, fr:syntax.FieldReference, env:ENV) -> calculus.SophieType:
@@ -425,53 +426,15 @@ class DeductionEngine(Visitor):
 			spec = lhs_type.st.body
 			parameters = lhs_type.st.variant.parameters
 		else:
-			self._on_error([fr], "The type %s has no fields."%lhs_type.visit(Render()))
+			self._report.type_has_no_fields(env[CODE_SOURCE], fr, lhs_type)
 			return calculus.ERROR
 		try:
 			field_spec = spec.field_space[fr.field_name.text]
 		except KeyError:
-			self._on_error([fr], "The type %s does not have this field."%(lhs_type.visit(Render())))
+			self._report.record_lacks_field(env[CODE_SOURCE], fr, lhs_type)
 			return calculus.ERROR
 		assert isinstance(field_spec, syntax.FormalParameter), field_spec
 		return ManifestBuilder(parameters, lhs_type.type_args).visit(field_spec.type_expr)
-
-class Render(calculus.TypeVisitor):
-	""" Return a string representation of the term. """
-	def __init__(self):
-		self._var_names = {}
-	def on_variable(self, v: calculus.TypeVariable):
-		if v not in self._var_names:
-			self._var_names[v] = "?%s" % _name_variable(len(self._var_names) + 1)
-		return self._var_names[v]
-	def on_opaque(self, o: calculus.OpaqueType):
-		return o.symbol.nom.text
-	def _generic(self, params:tuple[calculus.SophieType]):
-		return "[%s]"%(",".join(t.visit(self) for t in params))
-	def on_record(self, r: calculus.RecordType):
-		return r.symbol.nom.text+self._generic(r.type_args)
-	def on_sum(self, n: calculus.SumType):
-		return n.variant.nom.text+self._generic(n.type_args)
-	def on_tag_enum(self, e: calculus.EnumType):
-		return e.st.nom.text
-	def on_tag_record(self, t: calculus.TaggedRecord):
-		return t.st.nom.text+self._generic(t.type_args)
-	def on_arrow(self, a: calculus.ArrowType):
-		return a.arg.visit(self)+"->"+a.res.visit(self)
-	def on_product(self, p: calculus.ProductType):
-		return "(%s)"%(",".join(t.visit(self) for t in p.fields))
-	def on_udf(self, f: calculus.UDFType):
-		return "<%s/%d>"%(f.fn.nom.text, len(f.fn.params))
-	def on_bottom(self):
-		return "?"
-	def on_error_type(self):
-		return "-/-"
-	
-def _name_variable(n):
-	name = ""
-	while n:
-		n, remainder = divmod(n-1, 26)
-		name = chr(97+remainder) + name
-	return name
 
 def _hypothesis(st:ontology.Symbol, type_args:tuple[calculus.SophieType]) -> calculus.SubType:
 	assert isinstance(st, syntax.SubTypeSpec)

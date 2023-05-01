@@ -46,6 +46,7 @@ class SophieType:
 	def __hash__(self): return self._hash
 	def __eq__(self, other: "SophieType"): return type(self) is type(other) and self._key == other._key
 	def exemplar(self) -> "SophieType": return _type_numbering_subsystem.exemplars[self.number]
+	def __str__(self) -> str: return self.visit(Render())
 
 ENV = dict[syntax.Symbol, SophieType]
 
@@ -159,4 +160,42 @@ class TypeVisitor:
 	def on_bottom(self): raise NotImplementedError(type(self))
 	def on_error_type(self): raise NotImplementedError(type(self))
 
+
+class Render(TypeVisitor):
+	""" Return a string representation of the term. """
+	def __init__(self):
+		self._var_names = {}
+	def on_variable(self, v: TypeVariable):
+		if v not in self._var_names:
+			self._var_names[v] = "?%s" % _name_variable(len(self._var_names) + 1)
+		return self._var_names[v]
+	def on_opaque(self, o: OpaqueType):
+		return o.symbol.nom.text
+	def _generic(self, params:tuple[SophieType]):
+		return "[%s]"%(",".join(t.visit(self) for t in params))
+	def on_record(self, r: RecordType):
+		return r.symbol.nom.text+self._generic(r.type_args)
+	def on_sum(self, n: SumType):
+		return n.variant.nom.text+self._generic(n.type_args)
+	def on_tag_enum(self, e: EnumType):
+		return e.st.nom.text
+	def on_tag_record(self, t: TaggedRecord):
+		return t.st.nom.text+self._generic(t.type_args)
+	def on_arrow(self, a: ArrowType):
+		return a.arg.visit(self)+"->"+a.res.visit(self)
+	def on_product(self, p: ProductType):
+		return "(%s)"%(",".join(t.visit(self) for t in p.fields))
+	def on_udf(self, f: UDFType):
+		return "<%s/%d>"%(f.fn.nom.text, len(f.fn.params))
+	def on_bottom(self):
+		return "?"
+	def on_error_type(self):
+		return "-/-"
+	
+def _name_variable(n):
+	name = ""
+	while n:
+		n, remainder = divmod(n-1, 26)
+		name = chr(97+remainder) + name
+	return name
 
