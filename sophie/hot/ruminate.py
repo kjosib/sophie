@@ -151,7 +151,13 @@ class UnionFinder(Visitor):
 	def result(self):
 		return self._prototype
 	def unify_with(self, that):
-		self._prototype = self.do(self._prototype, that)
+		if self._prototype is not calculus.ERROR:
+			union = self.do(self._prototype, that)
+			if union is calculus.ERROR and that is not calculus.ERROR:
+				print("Failed to unify:")
+				print(self._prototype.visit(Render()))
+				print(that.visit(Render()))
+			self._prototype = union
 	
 	def parallel(self, these:Sequence[calculus.SophieType], those:Sequence[calculus.SophieType]):
 		assert len(these) == len(those)
@@ -212,6 +218,11 @@ class UnionFinder(Visitor):
 			return self.visit_SumType(that, this)
 		elif isinstance(that, calculus.TaggedRecord):
 			return self.visit_TaggedRecord(that, this)
+		elif isinstance(that, calculus.EnumType):
+			if this.st.variant is that.st.variant:
+				type_args = tuple(calculus.BOTTOM for _ in this.st.variant.parameters)
+				return calculus.SumType(this.st.variant, type_args)
+
 	
 	@staticmethod
 	def visit__Error(this:calculus.ERROR, that:calculus.SophieType):
@@ -348,16 +359,16 @@ class DeductionEngine(Visitor):
 			return self._constructors[target]  # Must succeed because of resolution.check_constructors
 		if isinstance(target, syntax.FFI_Alias):
 			return self._ffi[target]
-		for _ in range(lu.source_depth - target.static_depth):
-			env = env[STATIC_LINK]
+		
+		static_env = _chase(lu.source_depth, target, env)
 		if isinstance(target, syntax.UserDefinedFunction):
 			if target.params:
-				return calculus.UDFType(target, env).exemplar()
+				return calculus.UDFType(target, static_env).exemplar()
 			else:
-				return self._apply(target, env)
+				return self._apply(target, static_env)
 		else:
 			assert isinstance(target, (syntax.FormalParameter, syntax.Subject))
-			return env[target]
+			return static_env[target]
 		
 	def visit_ExplicitList(self, el:syntax.ExplicitList, env:ENV) -> calculus.SumType:
 		# Since there's guaranteed to be at least one value,
@@ -367,7 +378,7 @@ class DeductionEngine(Visitor):
 		for e in el.elts:
 			union_find.unify_with(self.visit(e, env))
 			if union_find.died:
-				self._on_error([el.elts[0], e],TYPE_MISMATCH)
+				self._on_error([el.elts[0], e],TYPE_MISMATCH+"(1)")
 				return calculus.ERROR
 		element_type = union_find.result()
 		return calculus.SumType(primitive.LIST, (element_type,))
@@ -380,7 +391,7 @@ class DeductionEngine(Visitor):
 		union_find = UnionFinder(self.visit(cond.then_part, env))
 		union_find.unify_with(self.visit(cond.else_part, env))
 		if union_find.died:
-			self._on_error([cond.then_part, cond.else_part], TYPE_MISMATCH)
+			self._on_error([cond.then_part, cond.else_part], TYPE_MISMATCH+"(2)")
 			return calculus.ERROR
 		return union_find.result()
 	
@@ -394,7 +405,7 @@ class DeductionEngine(Visitor):
 				env[mx.subject] = _hypothesis(alt.pattern.dfn, subject_type.type_args)
 				union_find.unify_with(self.visit(alt.sub_expr, env))
 				if union_find.died:
-					self._on_error([alt.sub_expr],TYPE_MISMATCH)
+					self._on_error([alt.sub_expr],TYPE_MISMATCH+"(3)")
 					return calculus.ERROR
 			return union_find.result()
 		elif isinstance(subject_type, calculus.SubType) and subject_type.st.variant is mx.variant:
@@ -470,6 +481,17 @@ def _hypothesis(st:ontology.Symbol, type_args:tuple[calculus.SophieType]) -> cal
 	if isinstance(body, syntax.RecordSpec):
 		return calculus.TaggedRecord(st, type_args)
 
-def _memo_key(fn, inner):
-	# Wrong, but a start.
-	return fn
+def _chase(source_depth:int, target:ontology.Symbol, env:ENV):
+	for _ in range(source_depth - target.static_depth):
+		env = env[STATIC_LINK]
+	return env
+
+def _memo_key(fn:syntax.UserDefinedFunction, env:ENV):
+	# The given environment contains the function's formal parameters.
+	# It is thus one step deeper than the function's own static depth.
+	source_depth = fn.static_depth + 1
+	# This next step is unsound, but it's a temporary hack until I write a proper analysis pass:
+	memo_symbols = fn.params
+	# Now to the business at hand:
+	memo_types = tuple(_chase(source_depth, p, env)[p].number for p in memo_symbols)
+	return fn, memo_types

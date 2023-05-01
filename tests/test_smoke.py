@@ -29,7 +29,7 @@ class ExampleSmokeTests(unittest.TestCase):
 	def test_graphical_examples_compile(self):
 		for name in ["turtle", "color_spiral", "simple_designs"]:
 			with self.subTest(name):
-				_good_example(name, False)
+				_good_example(name, True)
 
 	def test_examples_that_should_type(self):
 		for name in [
