@@ -386,8 +386,9 @@ class DeductionEngine(Visitor):
 
 	def visit_Cond(self, cond:syntax.Cond, env:ENV) -> calculus.SophieType:
 		if_part_type = self.visit(cond.if_part, env)
+		if if_part_type is calculus.ERROR: return calculus.ERROR
 		if if_part_type != primitive.literal_flag:
-			self._on_error([cond.if_part], "The if-part doesn't make a flag, but "+if_part_type)
+			self._report.bad_type(env[CODE_SOURCE], cond.if_part, primitive.literal_flag, if_part_type)
 			return calculus.ERROR
 		union_find = UnionFinder(self.visit(cond.then_part, env))
 		union_find.unify_with(self.visit(cond.else_part, env))
@@ -397,18 +398,23 @@ class DeductionEngine(Visitor):
 		return union_find.result()
 	
 	def visit_MatchExpr(self, mx:syntax.MatchExpr, env:ENV) -> calculus.SophieType:
-		subject_type = self.visit(mx.subject.expr, env)
-		if subject_type is calculus.ERROR: return calculus.ERROR
-		assert isinstance(mx.variant, syntax.Variant)
-		if isinstance(subject_type, calculus.SumType) and subject_type.variant is mx.variant:
+		def try_everything(type_args:Sequence[calculus.SophieType]):
 			union_find = UnionFinder(calculus.BOTTOM)
 			for alt in mx.alternatives:
-				env[mx.subject] = _hypothesis(alt.pattern.dfn, subject_type.type_args)
+				env[mx.subject] = _hypothesis(alt.pattern.dfn, type_args)
 				union_find.unify_with(self.visit(alt.sub_expr, env))
 				if union_find.died:
 					self._report.type_mismatch(env[CODE_SOURCE], mx.alternatives[0].sub_expr, alt.sub_expr)
 					return calculus.ERROR
 			return union_find.result()
+
+		subject_type = self.visit(mx.subject.expr, env)
+		if subject_type is calculus.ERROR: return calculus.ERROR
+		assert isinstance(mx.variant, syntax.Variant)
+		if isinstance(subject_type, calculus.SumType) and subject_type.variant is mx.variant:
+			return try_everything(subject_type.type_args)
+		elif subject_type is calculus.BOTTOM:
+			return try_everything([calculus.BOTTOM]*len(mx.variant.parameters))
 		elif isinstance(subject_type, calculus.SubType) and subject_type.st.variant is mx.variant:
 			branch = mx.dispatch.get(subject_type.st.nom.text, mx.otherwise)
 			env[mx.subject] = subject_type
@@ -436,7 +442,7 @@ class DeductionEngine(Visitor):
 		assert isinstance(field_spec, syntax.FormalParameter), field_spec
 		return ManifestBuilder(parameters, lhs_type.type_args).visit(field_spec.type_expr)
 
-def _hypothesis(st:ontology.Symbol, type_args:tuple[calculus.SophieType]) -> calculus.SubType:
+def _hypothesis(st:ontology.Symbol, type_args:Sequence[calculus.SophieType]) -> calculus.SubType:
 	assert isinstance(st, syntax.SubTypeSpec)
 	body = st.body
 	if body is None:
