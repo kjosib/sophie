@@ -108,7 +108,7 @@ class Binder(Visitor):
 		assert len(formal) == len(actual)
 		return [self.bind(f, a) for f, a in zip(formal, actual)]
 	
-	def visit_ProductType(self, formal:calculus.ProductType, actual):
+	def visit_ProductType(self, formal:calculus.ProductType, actual:calculus.SophieType):
 		if not isinstance(actual, calculus.ProductType):
 			return self.fail()
 		if formal.number == actual.number:
@@ -117,13 +117,13 @@ class Binder(Visitor):
 			return self.fail()
 		self.parallel(formal.fields, actual.fields)
 		
-	def visit_OpaqueType(self, formal:calculus.OpaqueType, actual):
+	def visit_OpaqueType(self, formal:calculus.OpaqueType, actual:calculus.SophieType):
 		if formal.number == actual.number:
 			return
 		else:
 			self.fail()
 	
-	def visit_SumType(self, formal:calculus.SumType, actual):
+	def visit_SumType(self, formal:calculus.SumType, actual:calculus.SophieType):
 		if formal.number == actual.number:
 			return
 		elif isinstance(actual, calculus.SumType):
@@ -143,6 +143,12 @@ class Binder(Visitor):
 				self.fail()
 		else:
 			raise NotImplementedError(actual)
+	
+	def visit_RecordType(self, formal:calculus.RecordType, actual:calculus.SophieType):
+		if isinstance(actual, calculus.RecordType) and formal.symbol is actual.symbol:
+			self.parallel(formal.type_args, actual.type_args)
+		else:
+			self.fail()
 
 class UnionFinder(Visitor):
 	def __init__(self, prototype:calculus.SophieType):
@@ -431,6 +437,8 @@ class DeductionEngine(Visitor):
 		elif isinstance(lhs_type, calculus.TaggedRecord):
 			spec = lhs_type.st.body
 			parameters = lhs_type.st.variant.parameters
+		elif lhs_type is calculus.BOTTOM:
+			return calculus.BOTTOM
 		else:
 			self._report.type_has_no_fields(env[CODE_SOURCE], fr, lhs_type)
 			return calculus.ERROR

@@ -19,20 +19,30 @@
 # while working in what had been an unfamiliar part of the language-design space.
 # Now that I've gotten used to it and applied it to turtle graphics, I'm hooked.
 
+# The program is also no longer in the quite same form as when I first wrote it.
+# Thanks to the new type-checker, the program now needs an infinite-list type
+# and a couple related functions. I'm using the "i" prefix to distinguish these
+# from their normal-list brethren until I think up something better.
+
+type:
+    iList[x] is (head:x, tail:iList[x]);
+
 define:
 
-primes(max) : list[number] = nil IF max < 2 ELSE cons(2, odd_primes) where
-	odd_primes = more_primes(0, cons(4, map(square, odd_primes)), 3);
+primes(max) = prefix(iList(2, odd_primes)) where
+	odd_primes = more_primes(0, iList(4, iMap(square, odd_primes)), 3);
 	more_primes(bound, squares, candidate_prime) = CASE
-		WHEN candidate_prime > max THEN nil;
 		WHEN candidate_prime > squares.head THEN more_primes(bound+1, squares.tail, candidate_prime);
-		WHEN is_prime THEN cons(candidate_prime, successors);
+		WHEN is_prime THEN iList(candidate_prime, successors);
 		ELSE successors;
 	ESAC where
-		is_prime = NOT any (map(is_divisor, take(bound, odd_primes)));
+		is_prime = NOT any (map(is_divisor, iTake(bound, odd_primes)));
 		is_divisor(p) = candidate_prime MOD p == 0;
 		successors = more_primes(bound, squares, candidate_prime+2);
 	end more_primes;
+	prefix(xs) = nil if xs.head > max else cons(xs.head, prefix(xs.tail));
+	iMap(fn, xs) = iList(fn(xs.head), iMap(fn, xs.tail));
+	iTake(n, xs) = nil if n <= 0 else cons(xs.head, iTake(n-1, xs.tail));
 end primes;
 
 some_squares = map(square, [1,2,3]);  # You can use words before you define them,
