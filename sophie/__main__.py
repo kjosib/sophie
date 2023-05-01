@@ -40,7 +40,7 @@ def run(args):
 	from sophie.diagnostics import Report
 	from sophie.modularity import Loader
 	report = Report()
-	loader = Loader(report, verbose=args.check, experimental=args.experimental)
+	loader = Loader(report, verbose=args.check, experimental=args.experimental or args.check)
 	loader.load_program(os.getcwd(), args.program)
 	if report.issues:
 		report.complain_to_console()

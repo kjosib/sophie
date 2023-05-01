@@ -17,11 +17,6 @@ def _good_example(which, experimental) -> modularity.Loader:
 class ExampleSmokeTests(unittest.TestCase):
 	""" Run all the examples; Test for no smoke. """
 	
-	def test_other_examples(self):
-		for name in ["primes", ]:
-			with self.subTest(name):
-				_good_example(name, False).run()
-	
 	def test_alias(self):
 		""" The result of running a program is the value of its last expression. """
 		self.assertEqual(7, _good_example("alias", True).run())
@@ -31,7 +26,7 @@ class ExampleSmokeTests(unittest.TestCase):
 			with self.subTest(name):
 				_good_example(name, True)
 
-	def test_examples_that_should_type(self):
+	def test_other_examples(self):
 		for name in [
 			"hello_world",
 			"patron",
@@ -43,6 +38,7 @@ class ExampleSmokeTests(unittest.TestCase):
 			"case_when",
 			"some_arithmetic",
 			"Fibonacci",
+			"primes",
 		]:
 			with self.subTest(name):
 				_good_example(name, True).run()
