@@ -12,9 +12,8 @@ example_folder = base_folder/"examples"
 zoo_fail = base_folder/"zoo/fail"
 zoo_ok = base_folder/"zoo/ok"
 
-def _parse(folder, basename):
+def _parse(path):
 	REPORT.reset()
-	path = zoo_fail/folder/(basename+".sg")
 	assert path.exists(), path
 	REPORT.set_path(path)
 	REPORT.complain_to_console = mock.Mock()
@@ -25,7 +24,7 @@ def _parse(folder, basename):
 		assert REPORT.issues
 	else:
 		REPORT.assert_no_issues()
-		assert isinstance(sut, syntax.Module), (basename, sut)
+		assert isinstance(sut, syntax.Module), sut
 	return sut
 	
 
@@ -36,13 +35,15 @@ class ZooOfFail(unittest.TestCase):
 		super().setUpClass()
 		cls.loader = modularity.Loader(REPORT, verbose=True, experimental=True)
 	
-	def expect(self, what, cases):
+	def expect(self, folder, cases):
 		for basename in cases:
 			with self.subTest(basename):
-				sut = _parse(what, basename)
-				outer = self.loader._preamble.globals
-				result = self.loader._prepare_module(sut, outer)
-				self.assertEqual(what, result)
+				path = zoo_fail / folder / (basename + ".sg")
+				sut = _parse(path)
+				self.loader._enter(path)
+				phase_at_failure = self.loader._prepare_module(sut, self.loader._preamble.globals)
+				self.loader._exit()
+				self.assertEqual(folder, phase_at_failure)
 	
 	def test_00_syntax_error(self):
 		self.expect("parse", (

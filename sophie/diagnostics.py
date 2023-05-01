@@ -2,6 +2,7 @@ from typing import Sequence, Optional
 from pathlib import Path
 from boozetools.support.failureprone import SourceText, Issue, Evidence, Severity
 from .ontology import Expr
+from .syntax import FieldReference
 
 class Report:
 	""" Might this end up participating in a result-monad? """
@@ -47,12 +48,41 @@ class Report:
 		if self.issues:
 			self.complain_to_console()
 			assert False
+	
+	# Methods specific to report type-checking issues.
+	# Now this begins to look like something proper.
+	
+	def type_mismatch(self, path:Path, *args:Expr):
+		evidence = {path: [Evidence(e.head(),"") for e in args]}
+		issue = Issue("Checking Types", Severity.ERROR, "These don't have compatible types.", evidence)
+		self.issues.append(issue)
+	
+	def wrong_arity(self, path:Path, arity:int, args:Sequence[Expr]):
+		evidence = {path: [Evidence(a.head(), "") for a in args]}
+		pattern = "The called function wants %d arguments, but got %d instead."
+		issue = Issue("Checking Types", Severity.ERROR, pattern % (arity, len(args)), evidence)
+		self.issues.append(issue)
+
+	def bad_type(self, path: Path, expr: Expr, need, got):
+		evidence = {path: [Evidence(expr.head(),"This expression has type %s."%got)]}
+		issue = Issue("Checking Types", Severity.ERROR, "Needed %s; got something else." % need, evidence)
+		self.issues.append(issue)
+	
+	def type_has_no_fields(self, path: Path, fr:FieldReference, lhs_type):
+		evidence = {path: [Evidence(fr.lhs.head(),"This expression has type %s."%lhs_type)]}
+		issue = Issue("Checking Types", Severity.ERROR, "This type has no fields; in particular not %s."%fr.field_name.text, evidence)
+		self.issues.append(issue)
+		
+	def record_lacks_field(self, path: Path, fr:FieldReference, lhs_type):
+		evidence = {path: [Evidence(fr.lhs.head(),"This expression has type %s."%lhs_type)]}
+		issue = Issue("Checking Types", Severity.ERROR, "This type has no field called %s."%fr.field_name.text, evidence)
+		self.issues.append(issue)
 
 			
 def _fetch(path):
 	if path is None:
 		return SourceText("")
 	with open(path) as fh:
-		return SourceText(fh.read(), filename=path)
+		return SourceText(fh.read(), filename=str(path))
 
 

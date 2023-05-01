@@ -115,7 +115,7 @@ class Loader:
 		resolution.build_match_dispatch_tables(module)  # Cannot fail, for checks have been done earlier.
 		
 		if self._experimental:
-			self._deductionEngine.visit(module)
+			self._deductionEngine.visit(module, self._construction_stack[-1])
 			if self._report.issues: return "type_check"
 	
 	def _interpret_the_import_directives(self, module:Module, base_path):
