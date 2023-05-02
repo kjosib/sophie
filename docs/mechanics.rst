@@ -8,6 +8,50 @@ I'll add notes as they seem necessary while the overall system fills out.
     :local:
     :depth: 2
 
+Representing an AST Efficiently
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This is a technical note on something I may end up implementing.
+
+I ran across an article that rebooted my thinking on syntax-tree representation.
+I probably won't place too high a priority on this in the short run,
+but who knows? That day may come.
+
+    TL;DR:
+        Dr. Sampson's article_ explained a special case of arena-allocation that improved the
+        space and time performance in tree operations. He gave a rationale roughly as follows.
+
+        * A 32-bit index is half the size of a 64-bit pointer on modern architectures. Textbook-style syntax-trees are heavy on pointers.
+        * Packed-array structures require less overhead in the memory allocation subsystem than allocating each node separately.
+        * Packed structures have excellent locality-of-reference, which is favorable to a modern CPU cache.
+        * Nodes are allocated later than their children: He evaluates expressions by processing the array left-to-right, with a parallel array of values.
+        * *Hey, doesn't this vaguely resemble bytecode?*
+
+.. _article: https://www.cs.cornell.edu/~asampson/blog/flattening.html
+
+I began to think about some further implications. And that's when I realised:
+
+**We don't even need the index links!**
+
+* The array of "operators" (i.e. node-types) alone constitutes a Reverse-Polish Notation (RPN) expression.
+  If you process the array strictly left-to-right, and you know how many children each type of node has,
+  then you can run any bottom-up pass you like, with roughly logarithmic extra storage,
+  simply by maintaining a stack of child-nodes and referring to the operator-table as you go.
+* LR parsing is almost exactly this: You can think of it as filtering out the uninteresting tokens from scanner,
+  and then inserting the parse-rules where they go from that stream to make an RPN expression of the AST.
+  It's just that in a traditional parser, the RPN never exists per-se: instead, it's "executed" immediately
+  in the form of parse-actions.
+* In general, these separate arrays make it easy to allocate *uncoupled* space for different compiler activities.
+  It would be much less convenient if all the pass-specific data were attached to the AST nodes directly.
+* The same array processed right-to-left is effectively a top-down walk.
+  A stack with counters can track where the parents were, so information can trickle down this way.
+* Some operators (e.g. literal values, identifiers) will refer to ancillary information.
+  These can fit in a parallel list: Just keep a cursor for this and advance it as appropriate.
+
+Not everything fits in a neat little box yet.
+Some of Sophie's parse-actions re-arrange their subtrees slightly.
+I'm sure re-writes are feasible, but I'll need to revisit the problem.
+
 High-Order Type Checking (HOT)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -41,7 +85,7 @@ We want that so that the evaluator can *properly* memoize the results of its typ
 
 Naively this would be the set of all parameters that the function's body mentions.
 However, that's not quite right:
-If function A calls function B, and function B mentions parameter P not its own,
+If function A calls function B, and function B mentions parameter P (or match-subject id) not its own,
 then the type of P influences the type of B which in turn influences the type of A.
 
 This is another data-flow problem. Start by associating all the non-local data dependencies,
