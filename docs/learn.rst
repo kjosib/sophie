@@ -150,6 +150,9 @@ Apples and Oranges
 Introducing the Type Checker
 .............................
 
+.. note::
+    This feature is presently being reworked. For now, you can access it by asking. The example shows how.
+
 One of Sophie's key features is something called *static type-safety*.
 Before she runs any program, Sophie checks it carefully to make sure that
 no part of the program can produce a value of the wrong type for what uses it.
@@ -158,19 +161,21 @@ By that I mean:
 * Numbers are in places where numbers can go.
 * Text strings are in places where text strings can go.
 * Lists are in places where lists can go.
-* And so on, including the types you define in your own programs.
+* And so on, including all the types you define in your own programs.
 
 Try this bit of nonsense:
 
-.. literalinclude:: ../zoo/fail/num_plus_string.sg
+.. literalinclude:: ../zoo/fail/type_check/num_plus_string.sg
 
-When you try to run this nonsense::
+When you try to run this nonsense (and note the ``-c`` flag on the command line)::
 
-	D:\GitHub\sophie>py -m sophie zoo\fail\num_plus_string.sg
-	ERROR while Inferring Types: This tries to be both 'string' and also 'number', which cannot happen.
-	Excerpt from D:\GitHub\sophie\zoo\fail\num_plus_string.sg :
-	     4 :begin: 1 + "one"; end.
-	                 ^
+    D:\GitHub\sophie>py -m sophie zoo\fail\type_check\num_plus_string.sg -c
+    Loading D:\GitHub\sophie\zoo\fail\type_check\num_plus_string.sg
+    -/-
+    Error while Checking Types: Needed number; got something else.
+    Excerpt from D:\GitHub\sophie\zoo\fail\type_check\num_plus_string.sg :
+         4 :begin: 1 + "one"; end.
+                       ^^^^^ This expression has type string.
 
 Sophie worked out this addition of a number to text doesn't make any sense,
 and so gave us fair notice that something is not right about how we're using that ``+`` sign.
