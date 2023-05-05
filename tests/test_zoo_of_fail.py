@@ -49,12 +49,12 @@ class ZooOfFail(unittest.TestCase):
 		self.expect("parse", (
 			"syntax_error",
 			"mismatched_where",
+			"generic_opaque",
 		))
 
 	def test_01_define(self):
 		self.expect("define", [
 			"defined_twice",
-			"generic_opaque",
 		])
 	
 	def test_02_resolve(self):

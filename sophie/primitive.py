@@ -1,6 +1,6 @@
 from functools import lru_cache
 from .ontology import NS, Nom
-from .syntax import Generic, Opaque, Variant
+from .syntax import Opaque, Variant
 from .hot import calculus
 
 root_namespace = NS(place=None)
@@ -10,7 +10,7 @@ LIST : Variant  # Generated in the preamble.
 
 def _built_in_type(name:str) -> calculus.OpaqueType:
 	nom = Nom(name, None)
-	symbol = Opaque(Generic(nom, ()))
+	symbol = Opaque(nom)
 	term = calculus.OpaqueType(symbol)
 	root_namespace[name] = symbol
 	return term
