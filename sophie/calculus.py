@@ -31,7 +31,7 @@ I can reuse the one from booze-tools.
 """
 from typing import Iterable
 from boozetools.support.foundation import EquivalenceClassifier
-from .. import syntax, ontology
+from sophie import syntax, ontology
 
 _type_numbering_subsystem = EquivalenceClassifier()
 
@@ -84,6 +84,7 @@ class SumType(SophieType):
 		assert len(self.type_args) == len(variant.parameters)
 		super().__init__(self.variant, *(a.number for a in self.type_args))
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_sum(self)
+	def __repr__(self): return "[SumType:%s]"%self.variant.nom.text
 
 class SubType(SophieType):
 	st : syntax.SubTypeSpec
@@ -133,6 +134,7 @@ class UDFType(SophieType):
 		#     Whatever instantiates a nested function must enter it in the static scope without duplication.
 		#     Performance hacking may make for an even better cache than that.
 		super().__init__(object())
+	def __repr__(self): return "[UDFType:%s]"%self.fn.nom.text
 
 class _Bottom(SophieType):
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_bottom()

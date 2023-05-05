@@ -3,6 +3,8 @@ define:
     omega = omicron(omicron) where
         omicron(x) = x(x);
     end omega;
+begin:
+    omega;
 end.
 
 # It cannot type-check. It certainly cannot run, either.

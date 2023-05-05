@@ -6,6 +6,7 @@ from .diagnostics import Report
 from .front_end import parse_file
 from .syntax import Module, ImportModule
 from . import resolution
+from .type_evaluator import DeductionEngine
 
 class _CircularDependencyError(Exception):
 	""" This can only happen during a nested recursive call, so the exception is private. """
@@ -19,11 +20,7 @@ class Loader:
 		self.module_sequence = []
 		self._verbose = verbose
 		self._experimental = experimental
-		if self._experimental:
-			from .hot.ruminate import DeductionEngine
-			self._deductionEngine = DeductionEngine(report, verbose)
-		else:
-			self._deductionEngine = None
+		self._deductionEngine = DeductionEngine(report, verbose)
 		self._preamble = self._load_preamble()
 	
 	def need_module(self, base_path, module_path:str) -> Module:
@@ -58,9 +55,9 @@ class Loader:
 		
 	def load_program(self, base_path, module_path:str):
 		module = self.need_module(base_path, module_path)
-		if module and not module.main and not self._report.issues:
+		if module and not module.main and self._report.ok():
 			self._on_error([], str(module_path)+" has no `begin:` section and thus is not a main program.")
-		return not self._report.issues
+		return self._report.ok()
 	
 	def run(self):
 		from .simple_evaluator import run_program
@@ -82,7 +79,7 @@ class Loader:
 		if self._verbose:
 			print("Loading", abs_path, file=sys.stderr)
 		module = parse_file(abs_path, self._report)
-		if not self._report.issues:
+		if self._report.ok():
 			self._interpret_the_import_directives(module, os.path.dirname(abs_path))
 		self._prepare_module(module, self._preamble.globals)
 		return module
@@ -92,31 +89,30 @@ class Loader:
 		If this returns a string, it's the name of the pass in which a problem was first noted.
 		The end-user might not care about this, but it's handy for testing.
 		"""
-		if self._report.issues: return "parse"
+		if self._report.sick(): return "parse"
 		assert isinstance(module, Module)
 		
 		resolution.WordDefiner(module, outer, self._report)
-		if self._report.issues: return "define"
+		if self._report.sick(): return "define"
 		
 		resolution.StaticDepthPass(module)  # Cannot fail
 		
 		alias_constructors = resolution.WordResolver(module, self._report).dubious_constructors
-		if self._report.issues: return "resolve"
+		if self._report.sick(): return "resolve"
 		
 		resolution.AliasChecker(module, self._report)
-		if self._report.issues: return "alias"
+		if self._report.sick(): return "alias"
 		
 		resolution.check_constructors(alias_constructors, self._report)
-		if self._report.issues: return "constructors"
+		if self._report.sick(): return "constructors"
 
 		resolution.check_all_match_expressions(module, self._report)
-		if self._report.issues: return "match_check"
+		if self._report.sick(): return "match_check"
 		
 		resolution.build_match_dispatch_tables(module)  # Cannot fail, for checks have been done earlier.
 		
-		if self._experimental:
-			self._deductionEngine.visit(module, self._construction_stack[-1])
-			if self._report.issues: return "type_check"
+		self._deductionEngine.visit(module, self._construction_stack[-1])
+		if self._report.sick(): return "type_check"
 	
 	def _interpret_the_import_directives(self, module:Module, base_path):
 		""" Interpret the import directives in a module... """

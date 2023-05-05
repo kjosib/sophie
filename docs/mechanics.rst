@@ -55,8 +55,6 @@ I'm sure re-writes are feasible, but I'll need to revisit the problem.
 High-Order Type Checking (HOT)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. note:: This feature is under development, so the precise details may change.
-
 > And at one point while working on the type checker, I had the provenance epiphany.
 > The objects we pass around to represent types should include both the
 > type per-se (i.e. calculus.SophieType) and also the provenance,
@@ -102,16 +100,13 @@ The structure of ``sophie.hot.type_evaluator`` should bear a striking resemblanc
 However, I intend some different semantics. The type-evaluator can use memoization with eager/strict evaluation.
 It will also need a way to detect recursion, and a sensible theory of how to close such loops.
 
-    The usual approach is a *mu*-type, but that's only relevant if I bother with the optional simplification feature.
-
-On entry to a function, I take note of the fact it's been entered with these (type-)arguments.
-Using a scheme like value-numbering (but applied to types) it's easy to notice a recursive call.
+The *apply* operation takes care of recursion and memoization.
 
 Dealing with Recursion
 .......................
 
 Having reached a recursive call, there is a least-fixpoint problem.
-One idea is as follows:
+I take this approach:
 
 At first, hypothesize that the function returns *nothing.*
 Not a *maybe-monad* style ``nothing``, for that would be *something.*
@@ -156,14 +151,6 @@ Make progress by running the basic algorithm on that cycle.
 If all the result-types *and provisions* stay the same, and restricted to the SCC,
 then that SCC has reached its least-fixpoint, so drop all provisions pointing at its members.
 
-Implementation Phases
-----------------------
-
-1. Tag what's out there as a release.
-2. Turn off the existing type inference engine.
-3. Interpret the run-time semantics of nontrivial type-case expressions.
-4. ???
-5. Profit!
 
 Resolving Imports
 ~~~~~~~~~~~~~~~~~~~~

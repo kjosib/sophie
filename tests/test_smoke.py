@@ -5,9 +5,9 @@ from sophie import modularity, diagnostics, syntax
 base_folder = Path(__file__).parent.parent
 example_folder = base_folder/"examples"
 
-def _good_example(which, experimental) -> modularity.Loader:
+def _good_example(which) -> modularity.Loader:
 	report = diagnostics.Report()
-	loader = modularity.Loader(report, verbose=False, experimental=experimental)
+	loader = modularity.Loader(report, verbose=False, experimental=False)
 	if loader.load_program(example_folder, which + ".sg"):
 		return loader
 	else:
@@ -19,12 +19,12 @@ class ExampleSmokeTests(unittest.TestCase):
 	
 	def test_alias(self):
 		""" The result of running a program is the value of its last expression. """
-		self.assertEqual(7, _good_example("alias", True).run())
+		self.assertEqual(7, _good_example("alias").run())
 	
 	def test_graphical_examples_compile(self):
 		for name in ["turtle", "color_spiral", "simple_designs"]:
 			with self.subTest(name):
-				_good_example(name, True)
+				_good_example(name)
 
 	def test_other_examples(self):
 		for name in [
@@ -41,7 +41,7 @@ class ExampleSmokeTests(unittest.TestCase):
 			"primes",
 		]:
 			with self.subTest(name):
-				_good_example(name, True).run()
+				_good_example(name).run()
 
 if __name__ == '__main__':
 	unittest.main()
