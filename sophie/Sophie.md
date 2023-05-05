@@ -47,29 +47,24 @@ reference -> name     :PlainReference
 **The grammar of type declarations**
 
 ```
+type_declaration -> name IS OPAQUE                        :Opaque
+                  | name IS type_body                     :concrete_type
+                  | name square_list(name) IS type_body   :generic_type
 
-type_declaration -> type_name_is OPAQUE         :Opaque
-                  | type_name_is simple_type    :TypeAlias
-                  | type_name_is record_spec    :Record
-                  | type_name_is variant_spec   :Variant
+type_body -> simple_type | record_spec | variant_spec
+simple_type -> named_type | arrow_type
 
-type_name_is -> name type_parameters IS   :Generic
-type_parameters -> optional_square_list(name)
+named_type  -> reference optional(square_list(simple_type))   :TypeCall
+arrow_type  -> round_list(simple_type) '->' simple_type       :ArrowSpec
+record_spec  -> round_list(field)                             :RecordSpec
+variant_spec -> CASE ':' semicolon_list(subtype) ESAC         :VariantSpec
 
-record_spec -> round_list(field)  :RecordSpec
 field -> name ':' simple_type   :FormalParameter
-
-variant_spec -> CASE ':' semicolon_list(subtype) ESAC
 
 subtype  -> name record_spec    :SubTypeSpec
           | name simple_type    :SubTypeSpec
           | name                :SubTypeSpec
-
-simple_type -> named_type | arrow_type
-named_type  -> reference optional_square_list(simple_type)    :TypeCall
-arrow_type  -> round_list(simple_type) '->' simple_type       :ArrowSpec
 ```
-**Caveat:** Opaque type declarations should not have type-parameters.
 
 **The general structure of a function:**
 ```
@@ -87,7 +82,7 @@ annotation ->  :nothing | ':' arg_type
 
 arg_type ->  '?'                               :ImplicitTypeVariable
   | '?' name                                   :ExplicitTypeVariable
-  | reference optional_square_list(arg_type)   :TypeCall
+  | reference optional(square_list(arg_type))  :TypeCall
   | round_list(arg_type) '->' arg_type         :ArrowSpec
 ```
 I suppose it bears mention that all Sophie functions are implicitly generic
@@ -155,7 +150,7 @@ so they get their own section.
 ```
 import_directive -> FOREIGN short_string WHERE semicolon_list(ffi_group) END   :ImportForeign
 
-ffi_group -> comma_list(ffi_symbol) ':' type_parameters simple_type  :FFI_Group
+ffi_group -> comma_list(ffi_symbol) ':' optional(square_list(name)) simple_type  :FFI_Group
 ffi_symbol -> name                    :FFI_Symbol
             | name '@' short_string   :FFI_Alias
 ```
@@ -174,7 +169,6 @@ comma_list(x) ->  comma_separated_list(x) | comma_separated_list(x) ','
 semicolon_list(x) ->  x ';' :first  | _ x ';' :more
 optional(x) -> :nothing | x
 
-optional_square_list(x) -> :empty | square_list(x) 
 square_list(x) -> '[' comma_list(x) ']'
 round_list(x) -> '(' comma_list(x) ')'
 ```

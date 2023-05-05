@@ -23,19 +23,14 @@ class TypeParameter(Symbol):
 	def has_value_domain(self) -> bool:
 		return False
 
-class Generic(NamedTuple):
-	nom: Nom
-	param_names: Sequence[Nom]
-
 class TypeDeclaration(Symbol, ABC):
+	static_depth = 0
 	param_space: NS   # Will address the type parameters. Word-definer fills this.
 	parameters: tuple[TypeParameter]
-	static_depth = 0
 	
-	def __init__(self, generic:Generic):
-		assert isinstance(generic, Generic)
-		super().__init__(generic.nom)
-		self.parameters = tuple(TypeParameter(n) for n in generic.param_names)
+	def __init__(self, nom: Nom, param_names:Sequence[Nom]):
+		super().__init__(nom)
+		self.parameters = tuple(TypeParameter(n) for n in param_names)
 
 class SimpleType(Expr):
 	def can_construct(self) -> bool: raise NotImplementedError(type(self))
@@ -71,7 +66,7 @@ class ArrowSpec(SimpleType):
 	def can_construct(self) -> bool: return False
 
 class TypeCall(SimpleType):
-	def __init__(self, ref: Reference, arguments: Sequence[ARGUMENT_TYPE] = ()):
+	def __init__(self, ref: Reference, arguments: Optional[Sequence[ARGUMENT_TYPE]] = ()):
 		assert isinstance(ref, Reference)
 		self.ref, self.arguments = ref, arguments or ()
 	def head(self) -> slice: return self.ref.head()
@@ -109,31 +104,46 @@ class RecordSpec:
 	def field_names(self):
 		return [f.nom.text for f in self.fields]
 
+class VariantSpec(NamedTuple):
+	subtypes: list["SubTypeSpec"]
+
+class Opaque(TypeDeclaration):
+	def __init__(self, nom: Nom):
+		super().__init__(nom, ())
+	def has_value_domain(self): return False
+
 class TypeAlias(TypeDeclaration):
 	body: SimpleType
-	def __init__(self, generic:Generic, body:SimpleType):
-		super().__init__(generic)
+	def __init__(self, nom: Nom, param_names:list[Nom], body:SimpleType):
+		super().__init__(nom, param_names)
 		self.body = body
 	def has_value_domain(self) -> bool: return self.body.can_construct()
 
-
-class Opaque(TypeDeclaration):
-	def has_value_domain(self): return False
-
 class Record(TypeDeclaration):
-	def __init__(self, generic:Generic, spec:RecordSpec):
-		super().__init__(generic)
+	def __init__(self, nom: Nom, param_names:list[Nom], spec:RecordSpec):
+		super().__init__(nom, param_names)
 		self.spec = spec
 	def has_value_domain(self) -> bool: return True
 
 class Variant(TypeDeclaration):
 	sub_space: NS  # WordDefiner pass fills this in.
-	def __init__(self, generic:Generic, subtypes: list["SubTypeSpec"]):
-		super().__init__(generic)
-		self.subtypes = subtypes
-		for s in subtypes: s.variant = self
+	def __init__(self, nom: Nom, param_names:list[Nom], spec:VariantSpec):
+		super().__init__(nom, param_names)
+		self.subtypes = spec.subtypes
+		for s in spec.subtypes: s.variant = self
 	def has_value_domain(self) -> bool: return False
-	
+
+_spec_to_decl = {
+	RecordSpec : Record,
+	VariantSpec : Variant,
+	TypeCall : TypeAlias,
+	ArrowSpec : TypeAlias,
+}
+
+def concrete_type(nom: Nom, body): return generic_type(nom, (), body)
+def generic_type(nom: Nom, param_names: Sequence[Nom], body):
+	return _spec_to_decl[body.__class__](nom, param_names, body)
+
 class SubTypeSpec(Symbol):
 	body: Optional[Union[RecordSpec, TypeCall, ArrowSpec]]
 	variant: Variant
@@ -363,9 +373,9 @@ def FFI_Symbol(nom:Nom):
 	return FFI_Alias(nom, None)
 
 class FFI_Group:
-	def __init__(self, symbols:list[FFI_Alias], type_params:Sequence[TypeParameter], type_expr:SimpleType):
+	def __init__(self, symbols:list[FFI_Alias], type_params:Optional[Sequence[TypeParameter]], type_expr:SimpleType):
 		self.symbols = symbols
-		self.type_params = type_params
+		self.type_params = type_params or ()
 		self.type_expr = type_expr
 
 class ImportForeign(ImportDirective):
