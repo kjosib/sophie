@@ -150,9 +150,6 @@ Apples and Oranges
 Introducing the Type Checker
 .............................
 
-.. note::
-    This feature is presently being reworked. For now, you can access it by asking. The example shows how.
-
 One of Sophie's key features is something called *static type-safety*.
 Before she runs any program, Sophie checks it carefully to make sure that
 no part of the program can produce a value of the wrong type for what uses it.
@@ -185,8 +182,8 @@ Sophie carries this same checking through any depth of functions and data struct
 This turns out to be a big help as your programs gets big:
 It's easy to forget some relevant detail, but Sophie will remind you.
 
-Admittedly, these particular error messages are not exactly God's gift to programmers,
-but they'll do for now, and in time Sophie might get better in this regard.
+Admittedly, these particular messages are not exactly God's gift to aspiring programmers,
+but I've tried to make them informative, and in time Sophie might get better in this regard.
 
 * Exercise:
     Try introducing some deliberate type-errors into the ``define_functions.sg`` example,

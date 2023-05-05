@@ -21,7 +21,7 @@ def _parse(path):
 		sut = parse_file(path, REPORT)
 		assert 0 == REPORT.complain_to_console.call_count
 	if sut is None:
-		assert REPORT.issues
+		assert REPORT.sick()
 	else:
 		REPORT.assert_no_issues()
 		assert isinstance(sut, syntax.Module), sut
@@ -96,8 +96,11 @@ class ZooOfFail(unittest.TestCase):
 	
 	def test_06_type_check(self):
 		self.expect("type_check", [
+			"circular_function_mutually",
+			"circular_function_trivially",
 			"mismatched_case_when",
 			"num_plus_string",
+			"omega",
 			"wrong_arity",
 		])
 	
@@ -112,7 +115,7 @@ class ZooOfFail(unittest.TestCase):
 				module = loader.need_module(zoo_fail/"import", basename + ".sg")
 				# Then
 				assert type(module) is syntax.Module
-				assert report.issues
+				assert report.sick()
 	
 
 

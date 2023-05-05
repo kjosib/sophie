@@ -1,7 +1,7 @@
 from functools import lru_cache
 from .ontology import NS, Nom
 from .syntax import Opaque, Variant
-from .hot import calculus
+from . import calculus
 
 root_namespace = NS(place=None)
 ops = {}
@@ -22,7 +22,7 @@ literal_flag = _built_in_type("flag")
 def _arrow_of_math(arity:int) -> calculus.ArrowType:
 	return _arrow_of(literal_number, arity)
 
-def _arrow_of(typ:calculus.SophieType, arity:int) -> calculus.ArrowType:
+def _arrow_of(typ: calculus.SophieType, arity:int) -> calculus.ArrowType:
 	assert arity > 0
 	return calculus.ArrowType(calculus.ProductType((typ,) * arity), typ)
 

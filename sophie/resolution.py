@@ -9,46 +9,49 @@ from boozetools.support.symtab import NoSuchSymbol, SymbolAlreadyExists
 from . import syntax, diagnostics
 from .ontology import NS, Symbol
 
-class _WordPass(Visitor):
-	""" Simple pass-through for word-agnostic expression syntax. """
-	def visit_ArrowSpec(self, it: syntax.ArrowSpec, env: NS):
+class _TopDown(Visitor):
+	"""
+	Convenience base-class to handle the dreary bits of a
+	perfectly ordinary top-down walk through a syntax tree.
+	"""
+	def visit_ArrowSpec(self, it: syntax.ArrowSpec, env):
 		for a in it.lhs:
 			self.visit(a, env)
 		self.visit(it.rhs, env)
 	
-	def visit_Literal(self, l:syntax.Literal, env:NS): pass
-	def visit_ImplicitType(self, it:syntax.ImplicitTypeVariable, env:NS): pass
+	def visit_Literal(self, l:syntax.Literal, env): pass
+	def visit_ImplicitType(self, it:syntax.ImplicitTypeVariable, env): pass
 
-	def visit_ShortCutExp(self, it: syntax.ShortCutExp, env: NS):
+	def visit_ShortCutExp(self, it: syntax.ShortCutExp, env):
 		self.visit(it.lhs, env)
 		self.visit(it.rhs, env)
 	
-	def visit_BinExp(self, it: syntax.BinExp, env: NS):
+	def visit_BinExp(self, it: syntax.BinExp, env):
 		self.visit(it.lhs, env)
 		self.visit(it.rhs, env)
 	
-	def visit_UnaryExp(self, expr: syntax.UnaryExp, env: NS):
+	def visit_UnaryExp(self, expr: syntax.UnaryExp, env):
 		self.visit(expr.arg, env)
 	
-	def visit_FieldReference(self, expr: syntax.FieldReference, env: NS):
+	def visit_FieldReference(self, expr: syntax.FieldReference, env):
 		# word-agnostic until we know the type of expr.lhs.
 		self.visit(expr.lhs, env)
 	
-	def visit_Call(self, expr: syntax.Call, env: NS):
+	def visit_Call(self, expr: syntax.Call, env):
 		self.visit(expr.fn_exp, env)
 		for a in expr.args:
 			self.visit(a, env)
 	
-	def visit_Cond(self, expr: syntax.Cond, env: NS):
+	def visit_Cond(self, expr: syntax.Cond, env):
 		self.visit(expr.if_part, env)
 		self.visit(expr.then_part, env)
 		self.visit(expr.else_part, env)
 	
-	def visit_ExplicitList(self, expr: syntax.ExplicitList, env: NS):
+	def visit_ExplicitList(self, expr: syntax.ExplicitList, env):
 		for e in expr.elts:
 			self.visit(e, env)
 
-class WordDefiner(_WordPass):
+class WordDefiner(_TopDown):
 	"""
 	At the end of this phase:
 		Names used in declarations have an attached symbol table entry.
@@ -176,7 +179,7 @@ class WordDefiner(_WordPass):
 		else: self._install(env, sym)
 	
 
-class StaticDepthPass(_WordPass):
+class StaticDepthPass(_TopDown):
 	# Assign static depth to the definitions of all parameters and functions.
 	# This pass cannot fail.
 	def __init__(self, module):
@@ -199,15 +202,18 @@ class StaticDepthPass(_WordPass):
 		self.visit(mx.subject.expr, depth)
 		for alt in mx.alternatives:
 			self.visit(alt.sub_expr, depth)
+			for sub_ex in alt.where:
+				self.visit(sub_ex, depth)
 		if mx.otherwise is not None:
 			self.visit(mx.otherwise, depth)
+		
 
 	def visit_Lookup(self, l:syntax.Lookup, depth:int):
 		assert not hasattr(l, "source_depth")
 		l.source_depth = depth
 
 
-class WordResolver(_WordPass):
+class WordResolver(_TopDown):
 	"""
 	At the end of this action, every name-reference in the source text is visible where it's used.
 	That is, a corresponding definition-object is in scope. It may not make sense,
@@ -476,4 +482,88 @@ def build_match_dispatch_tables(module: syntax.Module):
 			key = alt.pattern.nom.key()
 			mx.dispatch[key] = alt.sub_expr
 
+class DependencyPass(_TopDown):
+	"""
+	Solve the problem of which-all formal parameters does the value (and thus, type)
+	of each user-defined function actually depend on. A simplistic answer would be to just
+	use the parameters of the outermost function in a given nest. But inner functions
+	might not be so generic as all that. Better precision here means smarter memoization,
+	and thus faster type-checking.
+	
+	Incidentally:
+	The same analysis could determine the deepest non-local needed for a function,
+	which could possibly allow some functions to run at a shallower static-depth
+	than however they may appear in the source code. This could make the simple evaluator
+	a bit faster by improving the lifetime of thunks.
+	"""
+	def __init__(self):
+		self.depends : dict[Symbol:syntax.FormalParameter] = {}
+		self._outer = {}
+		self._outflows = {}
+		self._overflowing = set()
+		
+	def _prepare(self, sym:Symbol):
+		self.depends[sym] = set()
+		self._outer[sym] = set()
+		self._outflows[sym] = set()
+	
+	def _insert(self, parameter:syntax.FormalParameter, env:Symbol):
+		self.depends[env].add(parameter)
+		if parameter.static_depth <= env.static_depth:
+			# i.e. The parameter is non-local...
+			outer = self._outer[env]
+			if parameter not in outer:
+				self._outer[env].add(parameter)
+				self._overflowing.add(env)
+
+	def _flow_dependencies(self):
+		# This algorithm might not be theoretically perfect,
+		# but for what it's about, it should be plenty fast.
+		# And it's straightforward to understand.
+		while self._overflowing:
+			source = self._overflowing.pop()
+			spill = self._outer[source]
+			for destination in self._outflows[source]:
+				for parameter in spill:
+					self._insert(parameter, destination)
+	
+	def _clean_up_after(self, module: syntax.Module):
+		self._outer.clear()
+		self._overflowing.clear()
+		self._outflows.clear()
+		for mx in module.all_match_expressions:
+			del self.depends[mx.subject]
+
+	def visit_Module(self, module: syntax.Module):
+		for fn in module.all_functions:
+			self._prepare(fn)
+		for mx in module.all_match_expressions:
+			self._prepare(mx.subject)
+		for fn in module.all_functions:
+			self.visit(fn.expr, fn)
+		self._flow_dependencies()
+		self._clean_up_after(module)
+
+	def visit_Lookup(self, lu: syntax.Lookup, env):
+		self.visit(lu.ref, env)
+		
+	def visit_PlainReference(self, ref:syntax.PlainReference, env):
+		dfn = ref.dfn
+		if dfn.static_depth == 0:
+			return
+		elif isinstance(dfn, syntax.FormalParameter):
+			self._insert(dfn, env)
+		elif isinstance(dfn, (syntax.UserDefinedFunction, syntax.Subject)):
+			assert hasattr(dfn, "static_depth"), dfn
+			if dfn.static_depth:
+				self._outflows[dfn].add(env)
+		else:
+			assert False, (dfn, type(dfn))
+				
+	def visit_MatchExpr(self, mx:syntax.MatchExpr, env:NS):
+		self.visit(mx.subject.expr, mx.subject)
+		for alt in mx.alternatives:
+			self.visit(alt.sub_expr, env)
+		if mx.otherwise is not None:
+			self.visit(mx.otherwise, env)
 

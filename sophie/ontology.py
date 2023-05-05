@@ -1,5 +1,4 @@
-from abc import ABC, abstractmethod
-from typing import Any, Sequence
+from typing import Any
 from boozetools.support.symtab import NameSpace
 
 class Nom:
@@ -26,8 +25,7 @@ class Symbol:
 		return "{%s:%s|%s}" % (self.nom.text, type(self).__name__, getattr(self,"static_depth", "?"))
 	def __str__(self): return self.nom.text
 	def head(self) -> slice: return self.nom.head()
-	@abstractmethod
-	def has_value_domain(self) -> bool: pass
+	def has_value_domain(self) -> bool: raise NotImplementedError(type(self))
 
 NS = NameSpace[Symbol]
 
