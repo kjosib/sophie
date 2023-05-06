@@ -133,6 +133,8 @@ class UDFType(SophieType):
 		# NB: The uniqueness notion here is excessive, but there's a plan to deal with that.
 		#     Whatever instantiates a nested function must enter it in the static scope without duplication.
 		#     Performance hacking may make for an even better cache than that.
+		# TODO: It would be sufficient to key on the types captured in the lexical closure.
+		#       Only DeductionEngine.visit_Lookup creates these, so it could provide the capture.
 		super().__init__(object())
 	def __repr__(self): return "[UDFType:%s]"%self.fn.nom.text
 
