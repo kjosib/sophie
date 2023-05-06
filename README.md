@@ -48,7 +48,7 @@ and then take notes on how things go.
 * Sophie has Turtle-graphics! (See [here](https://github.com/kjosib/sophie/blob/main/examples/turtle.sg) for examples.)
 * The evaluator can run programs and display results, including turtle graphics as mentioned.
 * The new, much more precise type-checker now gives excellent feedback.
-  It is not finished yet, but it is good enough that `-c` check mode now includes the type-checks by default.
+  It is not *quite* finished yet, but it is good enough to turn it on at all times.
 * List comprehension (expressions like `[expr FOR name IN expr]`) are removed from the syntax for now.
   Something will take its place, but it will take some work.
   I need to figure out how I want to support variable-arity functions.

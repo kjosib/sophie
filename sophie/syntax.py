@@ -303,10 +303,6 @@ class ExplicitList(ValExpr):
 	def head(self) -> slice:
 		raise AssertionError
 
-class SubjectWithExpr(NamedTuple):
-	expr: ValExpr
-	nom: Nom
-
 class Alternative(ValExpr):
 	pattern: Reference
 	sub_expr: ValExpr
