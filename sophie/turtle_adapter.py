@@ -1,5 +1,11 @@
+NIL : dict
 
-def do_turtle_graphics(force, NIL, drawing):
+def sophie_init(force, nil):
+	global NIL
+	NIL = force(nil)
+	return {'drawing':do_turtle_graphics}
+
+def do_turtle_graphics(force, drawing):
 	import turtle, tkinter
 	root = tkinter.Tk()
 	root.focus_force()

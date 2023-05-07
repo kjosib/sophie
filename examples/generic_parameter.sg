@@ -1,0 +1,31 @@
+# This program demonstrates a slick capability of Sophie's type-system.
+
+# If I understand right, you can't do this trick with ordinary (Hindley-Milner style) unification:
+
+type:
+    thing is (xs:list[number], ys:list[string]);
+
+define:
+    example(m, ns) = thing(m(twice,ns), m(fizz,ns));
+
+# The `example` function's first parameter (`m` here) is itself a higher-order function.
+# We can see this must be true, because in the first instance, it has to return a list of `number`,
+# and in the second instance, it clearly must return a list of `string`.
+# The difference is based on what `twice` and `fizz` return.
+
+    twice(x) = x * 2;
+    fizz(x) = case
+        when x mod 15 == 0 then "fizzbuzz";
+        when x mod 5 == 0 then "buzz";
+        when x mod 3 == 0 then "fizz";
+        else "beep";
+    esac;
+
+# The example works fine, and it makes perfect sense to someone coming from a
+# background in dynamic languages. Here's a practical demonstration:
+
+    sample_data = example(map, [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]);
+
+begin:
+    sample_data.xs;    # Prints a list of numbers.
+    sample_data.ys;    # Prints a list of strings.

@@ -241,9 +241,8 @@ class UnionFinder(Visitor):
 		return this
 
 class DeductionEngine(Visitor):
-	def __init__(self, report:diagnostics.Report, verbose:bool):
+	def __init__(self, report:diagnostics.Report):
 		self._report = report  # .on_error("Checking Types")
-		self._verbose = verbose
 		self._types = { ot.symbol: ot for ot in _literal_type_map.values() }
 		self._constructors : dict[syntax.Symbol, SophieType] = {}
 		self._ffi = {}
@@ -260,8 +259,7 @@ class DeductionEngine(Visitor):
 		env = {CODE_SOURCE:source_path}
 		for expr in module.main:
 			result = self.visit(expr, env)
-			if self._verbose:
-				print(result)
+			self._report.info(result)
 		pass
 	
 	def visit_Record(self, r: syntax.Record):

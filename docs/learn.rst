@@ -673,14 +673,15 @@ A word about ``reduce``:
 Turtle Graphics
 ----------------
 
-Sophie has Turtle-graphics!
+**Sophie** has Turtle-graphics!
 
 When I was a little kid, one fun thing to do in the school computer lab was to write short
 Logo programs to make intricate designs with its distinctive turtle-graphics feature.
 This was secretly also a nice introduction to several important aspects of the art of computer programming,
 but we kids were all having way too much fun to notice. (Perhaps we might have learned more with more structure?)
 
-In this early revision of **Sophie**, turtle graphics are available with no special effort.
+In this early revision of **Sophie**, turtle graphics are available with no great effort.
+The one genuinely new concept is an ``import:`` section. For now, just follow along.
 
 Case Study: Simple Designs
 ............................
@@ -698,7 +699,12 @@ Useful components (like ``repeat``, above) might move into either the preamble o
 All the turtle-y things
 .........................
 
-The system pre-defines two data types for turtle graphics::
+To activate Sophie's turtle graphics:
+
+1. Import the turtle-graphics library (as in the example), along with the particular symbols you want from it.
+2. Construct ``drawing`` records in the ``begin:`` section of your module.
+
+The turtle graphics module defines two data types::
 
 	drawing is (steps: list[turtle_step]);
 
@@ -717,8 +723,6 @@ The system pre-defines two data types for turtle graphics::
 		showturtle;
 		hideturtle;
 	esac;
-
-Currently that's done in the standard preamble. One day, it might become an import. Or not. We'll see.
 
 I'm not *currently* supporting filled areas, predefined shapes, multiple turtles, or other sophisticated extras.
 I might do some of those eventually, if there's demand.
@@ -794,9 +798,17 @@ You can run this program as follows::
 
 I'll grant it's not a very imposing result, but it shows that the mechanism works -- at least to some degree.
 
-.. note::
-	This is just the beginning.
-	In time, the modularity system will get a few more features.
+-----
+
+Between this example and the turtle-graphics import, you've seen how to:
+
+1. Import specific words from a system-defined module.
+2. Import an entire user-module *as* a word.
+
+You can actually perform any and all combinations of these.
+Sooner or later I'll do a few more complete examples.
+
+.. note:: This is only the second version of the modularity system. In time, it may get a few more features.
 
 All the other bits
 ------------------
@@ -811,6 +823,7 @@ These sections are still on the drawing board...
 * Starmap-like functors
 * Input from files
 * Input from the console, and other event-driven things
+* Ad-hoc polymorphic multimethods (sort of; I have some notions.)
 
 
 Congratulations

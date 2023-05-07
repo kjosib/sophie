@@ -159,7 +159,7 @@ Up-front design for the algorithm to resolve imports,
 and for the ways in which it might reasonably be expanded later.
 This is probably a pretty common approach, but it's worth repeating here.
 
-Algorithm One: Simple Recursive Import
+Simple Recursive Import Algorithm
 ---------------------------------------
 
 A runtime must contain:

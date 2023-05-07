@@ -28,20 +28,12 @@ but should produce excellent habits.
 Things on Deck
 ----------------
 
-* The next evolution of the import system: It's time to support the concept of a standard library.
-  This will get the turtle graphics stuff out of the standard preamble and into an importable module.
-
-  * Some magic with namespaces and maybe a new import form.
-  * Update the examples to match.
-  * Update the tutorial to explain about importing things a bit earlier.
-  * Update the FFI to support attaching drivers.
-
 The next increment will probably focus on one of:
 
-* Better error messages, particularly for parse engine.
 * String-oriented functions (by way of the new FFI) and a 99-bottles-of-beer demo.
 * Simple (nay, even simplistic!) console interaction
 * Better error display.
+* Better error messages, particularly for parse engine.
 
 Open Design Problems:
 ---------------------

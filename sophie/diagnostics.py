@@ -1,3 +1,4 @@
+import sys
 from typing import Sequence, Optional
 from pathlib import Path
 from boozetools.support.failureprone import SourceText, Issue, Evidence, Severity
@@ -9,7 +10,8 @@ class Report:
 	_issues : list[Issue]
 	_path : Optional[Path]
 	
-	def __init__(self):
+	def __init__(self, verbose:bool):
+		self._verbose = verbose
 		self._issues = []
 		self._path = None
 	
@@ -18,6 +20,10 @@ class Report:
 	
 	def reset(self):
 		self._issues.clear()
+	
+	def info(self, *args):
+		if self._verbose:
+			print(*args, file=sys.stderr)
 	
 	def set_path(self, path:Optional[Path]):
 		""" Let the report know which file is under consideration, for in case of error. """
@@ -55,6 +61,11 @@ class Report:
 			self.complain_to_console()
 			assert False
 	
+	# Methods the front-end is likely to call:
+	def file_error(self, path:Path, msg:str):
+		issue = Issue("trying to read a file", Severity.ERROR, msg, {})
+		self._issues.append(issue)
+
 	# Methods specific to report type-checking issues.
 	# Now this begins to look like something proper.
 	

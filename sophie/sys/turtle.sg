@@ -1,0 +1,27 @@
+# Bits for Turtle Graphics.
+
+# This moved out of the standard preamble to prove it could be done.
+
+import:
+foreign "sophie.turtle_adapter" (nil) ;
+
+type:
+
+	drawing is (steps: list[turtle_step]);
+
+	turtle_step is case:
+		forward(distance:number);
+		backward(distance:number);
+		right(angle:number);
+		left(angle:number);
+		goto(x:number, y:number);
+		setheading(angle:number);
+		home;
+		pendown;
+		penup;
+		color(color:string);
+		pensize(width:number);
+		showturtle;
+		hideturtle;
+	esac;
+

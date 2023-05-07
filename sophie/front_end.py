@@ -16,9 +16,10 @@ class SophieParseError(ParseError):
 	pass
 
 _tables = make_tables(Path(__file__).parent/"Sophie.md")
+_parse_table = _tables['parser']
 
 class SophieParser(TypicalApplication):
-	RESERVED = frozenset(t for t in _tables["parser"]["terminals"] if t.isupper() and t.isalpha())
+	RESERVED = frozenset(t for t in _parse_table["terminals"] if t.isupper() and t.isalpha())
 	
 	def scan_ignore(self, yy: IterableScanner): pass
 	def scan_punctuation(self, yy: IterableScanner):
@@ -53,26 +54,84 @@ class SophieParser(TypicalApplication):
 
 sophie_parser = SophieParser(_tables)
 
-def parse_file(pathname, report:Report):
+def parse_file(path:Path, report:Report):
 	"""Read file given by name; pass contents to next phase."""
 	try:
-		with open(pathname, "r") as fh:
+		with open(path, "r") as fh:
 			text = fh.read()
 	except FileNotFoundError:
-		report.error("Reading Code", [], "Sorry, there's no such file as %r"%pathname)
+		report.file_error(path, "I see no file called " + str(path))
 	except OSError:
-		report.error("Reading Code", [], "Something went pear-shaped while trying to read file %r"%pathname)
+		report.file_error(path, "Something went pear-shaped while trying to read " + str(pathname))
 	else:
-		return parse_text(text, pathname, report)
+		return parse_text(text, path, report)
 
-def parse_text(text:str, pathname:Path, report:Report) -> Union[syntax.Module, Issue]:
+def parse_text(text:str, path:Path, report:Report) -> Union[syntax.Module, Issue]:
 	""" Submit text to parser; submit the resulting tree to subsequent pass """
+	assert isinstance(path, Path)
 	try:
-		return sophie_parser.parse(text, filename=str(pathname))
+		module = sophie_parser.parse(text, filename=str(path))
+		module.path = path
+		return module
 	except syntax.MismatchedBookendsError as ex:
-		report.error("Checking Bookends", ex.args, "Mismatched where-clause end needs to match")
+		report.error("Checking Bookends", ex.args, "These names don't line up. Has part of a function been lost?")
 	except ParseError as ex:
-		stack_symbols, kind, where = ex.args
-		description = "Unexpected token at %r %s %r" % (stack_symbols, DOT, kind)
+		stack_symbols, lookahead, where = ex.args
+		hint = _best_hint(stack_symbols, lookahead)
+		description = "Sophie is confused by this %r here.\n%s"%(lookahead, hint)
 		report.error("Parsing", [where], description)
+
+##########################
+#
+#  I've been meaning to improve parse error messages.
+#  Code from here down represents progress in that direction.
+#
+
+_vocabulary = set(_parse_table['terminals']).union(_parse_table['nonterminals'])
+ETC = "???"
+assert ETC not in _vocabulary
+_advice_tree = {t:{} for t in _parse_table['terminals']}
+_advice_tree[ETC] = {}
+
+def _hint(path, text):
+	symbols = path.split()
+	node = _advice_tree[symbols.pop()]
+	for symbol in reversed(symbols):
+		if symbol == ETC:
+			node[ETC] = True
+		else:
+			assert symbol in _vocabulary, symbol
+			if symbol not in node:
+				node[symbol] = {}
+			node = node[symbol]
+	assert '' not in node, path
+	node[''] = text
+
+def _best_hint(stack_symbols, lookahead):
+	"""
+	What we have here tries to find a match between parse stack situations and hints.
+	If it fails utterly, then it reads out the parser state so it's easy to add a corresponding hint.
+	"""
+	best = None
+	nodes = [_advice_tree[ETC]]
+	if lookahead in _advice_tree: nodes.append(_advice_tree[lookahead])
+	for symbol in reversed(stack_symbols):
+		subsequent = []
+		for n in nodes:
+			if symbol in n: subsequent.append(n[symbol])
+			if ETC in n: subsequent.append(n)
+		nodes = subsequent
+		for n in nodes:
+			if '' in n: best = n['']
+	if best:
+		return "Here's my best hint:\n\t"+best
+	else:
+		return "Guru Meditation:\n\t"+" ".join(stack_symbols + [DOT, lookahead])
+
+# I suppose I could read the hints from a data file on demand.
+# But for now, I'll just hard-code some.
+
+_hint("TYPE : ??? name square_list(name) IS OPAQUE", "Opaque types cannot be made generic.")
+
+assert _best_hint("export_section import_section TYPE : name square_list(name) IS".split(), 'OPAQUE')
 

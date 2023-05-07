@@ -68,14 +68,16 @@ class WordDefiner(_TopDown):
 		self.globals = module.globals = outer.new_child(module)
 		self.all_match_expressions = module.all_match_expressions = []
 		self.all_functions = module.all_functions = []
-		for td in module.types:
-			self.visit(td)
-		for d in module.foreign:
-			self.visit(d, module.globals)
+		
+		for d in module.imports: self.visit(d, module)
+		for td in module.types: self.visit(td)
+		for d in module.foreign: self.visit(d, module.globals)
+		
 		if self.missing_foreign:
 			self._on_error(self.missing_foreign, "Some foreign code could not be found.")
 		if self.broken_foreign:
 			self._on_error(self.broken_foreign, "Attempting to import this module threw an exception.")
+			
 		for fn in module.outer_functions:  # Can't iterate all-functions yet; must build it first.
 			self.visit(fn, module.globals)
 		for expr in module.main:  # Might need to define some case-match symbols here.
@@ -163,6 +165,19 @@ class WordDefiner(_TopDown):
 			self.visit(sub_ex, env)
 		self.visit(alt.sub_expr, env)
 	
+	def visit_ImportModule(self, im:syntax.ImportModule, module:syntax.Module):
+		if im.nom is not None:
+			self._install(module.module_imports, im)
+		for alias in im.vocab:
+			yonder, hither = alias.yonder, alias.hither or alias.yonder
+			try: module.globals[hither.text] = im.module.globals[yonder.text]
+			except SymbolAlreadyExists:
+				collision = module.globals[hither.text].nom
+				self._on_error([collision, hither], "This symbol is already defined.")
+			except KeyError:
+				self._on_error([im.nom, yonder], "There is no corresponding symbol to import.")
+		pass
+	
 	def visit_ImportForeign(self, d:syntax.ImportForeign, env:NS):
 		try: py_module = import_module(d.source.value)
 		except ModuleNotFoundError: self.missing_foreign.append(d.source)
@@ -177,7 +192,8 @@ class WordDefiner(_TopDown):
 		try: sym.val = getattr(py_module, key)
 		except KeyError: self.missing_foreign.append(sym)
 		else: self._install(env, sym)
-	
+
+
 
 class StaticDepthPass(_TopDown):
 	# Assign static depth to the definitions of all parameters and functions.
@@ -275,9 +291,11 @@ class WordResolver(_TopDown):
 	
 	def visit_QualifiedReference(self, ref:syntax.QualifiedReference, env:NS):
 		# Search among imports.
-		space = self._lookup(ref.space, self.module.module_imports)
-		if isinstance(space, Bogon): return space
-		ref.dfn = self._lookup(ref.nom, space)
+		im = self._lookup(ref.space, self.module.module_imports)
+		if isinstance(im, Bogon): ref.dfn = im
+		else:
+			assert isinstance(im, syntax.ImportModule)
+			ref.dfn = self._lookup(ref.nom, im.module.globals)
 	
 	def visit_GenericType(self, ref:syntax.ExplicitTypeVariable, env:NS):
 		ref.dfn = self._lookup(ref.nom, env)
@@ -310,9 +328,10 @@ class WordResolver(_TopDown):
 		dfn = lu.ref.dfn
 		if isinstance(dfn, syntax.TypeAlias) or not dfn.has_value_domain():
 			self.dubious_constructors.append(lu.ref)
-			
 
 	def visit_ImportForeign(self, d:syntax.ImportForeign):
+		for ref in d.linkage or ():
+			self.visit(ref, self.module.globals)
 		for group in d.groups:
 			self.visit(group.type_expr, self.module.globals)
 

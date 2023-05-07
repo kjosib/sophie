@@ -3,6 +3,7 @@ Call-By-Need with Direct Interpretation
 No longer quite the simplest, most straight-forward possible implementation.
 
 """
+import sys
 from typing import Any, Union, Sequence
 from collections import namedtuple, deque
 import abc
@@ -211,16 +212,23 @@ class Constructor(Procedure):
 		return structure
 
 def run_program(static_root, each_module: Sequence[syntax.Module]):
+	drivers = {}
 	_prepare_root_environment(static_root)
 	result = None  # Pacify the IDE
 	for module in each_module:
 		_prepare_global_scope(SOPHIE_GLOBALS, module.globals.local.items())
+		for d in module.foreign:
+			if d.linkage is not None:
+				py_module = sys.modules[d.source.value]
+				linkage = [SOPHIE_GLOBALS[ref.dfn] for ref in d.linkage]
+				drivers.update(py_module.sophie_init(actual_value, *linkage))
+				
 		for expr in module.main:
 			result = strict(expr, SOPHIE_GLOBALS)
 			if isinstance(result, dict):
 				tag = result.get("")
-				if tag == 'drawing':
-					do_turtle_graphics(actual_value, NIL, result)
+				if tag in drivers:
+					drivers[tag](actual_value, result)
 					continue
 				dethunk(result)
 				if tag == 'cons':

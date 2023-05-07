@@ -2,6 +2,8 @@
 # Native types flag, number, and string are installed separately in "native" Python.
 # Also for the moment, I import (most of) Python's math library.
 
+# The turtle-graphics stuff that used to be here has moved to its own separate library.
+
 import:
 
 foreign "math" where
@@ -48,24 +50,6 @@ type:
 	ESAC;
 
 	pair[a,b] is (fst:a, snd:b);
-
-	drawing is (steps: list[turtle_step]);
-
-	turtle_step is case:
-		forward(distance:number);
-		backward(distance:number);
-		right(angle:number);
-		left(angle:number);
-		goto(x:number, y:number);
-		setheading(angle:number);
-		home;
-		pendown;
-		penup;
-		color(color:string);
-		pensize(width:number);
-		showturtle;
-		hideturtle;
-	esac;
 
 define:
 	id(x) = x;

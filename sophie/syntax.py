@@ -4,7 +4,7 @@ The parser calls these constructors with subordinate semantic-values in a bottom
 These constructors may add a touch of organization.
 Class-level type annotations make peace with pycharm wherever later passes add fields.
 """
-from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Optional, Any, Sequence, NamedTuple, Union
 from boozetools.parsing.interface import SemanticError
 from boozetools.support.symtab import NameSpace
@@ -13,6 +13,11 @@ from .ontology import (
 	Expr, Function,
 )
 
+class MismatchedBookendsError(SemanticError):
+	# The one semantic error we catch early enough to interrupt the parse.
+	# It's early warning that things have gotten out of whack.
+	def __init__(self, head: slice, coda: slice):
+		super().__init__(head, coda)
 
 class TypeParameter(Symbol):
 	static_depth = 0
@@ -23,7 +28,7 @@ class TypeParameter(Symbol):
 	def has_value_domain(self) -> bool:
 		return False
 
-class TypeDeclaration(Symbol, ABC):
+class TypeDeclaration(Symbol):
 	static_depth = 0
 	param_space: NS   # Will address the type parameters. Word-definer fills this.
 	parameters: tuple[TypeParameter]
@@ -158,12 +163,6 @@ class SubTypeSpec(Symbol):
 	def head(self) -> slice: return self.nom.head()
 	def key(self): return self.nom.key()
 	def __repr__(self): return "<:%s:%s>"%(self.nom.text, self.body)
-
-class MismatchedBookendsError(SemanticError):
-	# The one semantic error we catch early enough to interrupt the parse.
-	# It's early warning that things have gotten out of whack.
-	def __init__(self, head: slice, coda: slice):
-		super().__init__(head, coda)
 
 def _bookend(head: Nom, coda: Nom):
 	if head.text != coda.text:
@@ -352,12 +351,17 @@ class MatchExpr(ValExpr):
 	def head(self) -> slice:
 		return self.subject.head()
 
-class ImportDirective: pass
+class ImportSymbol(NamedTuple):
+	yonder : Nom
+	hither : Optional[Nom]
 
-class ImportModule(ImportDirective):
-	def __init__(self, relative_path:Literal, nom:Nom):
+class ImportModule(Symbol):
+	module : "Module"  # Module loader fills this.
+	def __init__(self, package:Optional[Nom], relative_path:Literal, nom:Optional[Nom], vocab:Optional[Sequence[ImportSymbol]]):
+		super().__init__(nom)
+		self.package = package
 		self.relative_path = relative_path
-		self.nom = nom
+		self.vocab = vocab or ()
 
 class FFI_Alias(NativeFunction):
 	def __init__(self, nom:Nom, alias:Optional[Literal]):
@@ -374,15 +378,19 @@ class FFI_Group:
 		self.type_params = type_params or ()
 		self.type_expr = type_expr
 
-class ImportForeign(ImportDirective):
-	def __init__(self, source:Literal, groups:list[FFI_Group]):
+class ImportForeign:
+	def __init__(self, source:Literal, linkage:Optional[Sequence[Reference]], groups:list[FFI_Group]):
 		self.source = source
+		self.linkage = linkage
 		self.groups = groups
 
+ImportDirective = Union[ImportModule, ImportForeign]
+
 class Module:
+	path: Path # Front end fills this in.
 	imports: list[ImportModule]
 	foreign: list[ImportForeign]
-	module_imports: NameSpace[NS]  # Modules imported with an "as" clause.
+	module_imports: NS  # Modules imported with an "as" clause.
 	wildcard_imports: NS  # Names imported with a wildcard. Sits underneath globals.
 	globals: NS  # WordDefiner pass creates this.
 	all_functions: list[UserDefinedFunction]  # WordDefiner pass creates this.
