@@ -18,9 +18,7 @@ For more information, see:
 Documentation: https://sophie.readthedocs.io/en/latest/
        GitHub: https://github.com/kjosib/sophie
 """
-import os
-import sys
-import argparse
+import os, sys, argparse
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -39,9 +37,9 @@ def run(args):
 	
 	from sophie.diagnostics import Report
 	from sophie.modularity import Loader
-	report = Report()
-	loader = Loader(report, verbose=args.check, experimental=args.experimental)
-	loader.load_program(os.getcwd(), args.program)
+	report = Report(verbose=args.check)
+	loader = Loader(report, experimental=args.experimental)
+	loader.load_program(Path.cwd(), args.program)
 	if report.sick():
 		report.complain_to_console()
 		return 1

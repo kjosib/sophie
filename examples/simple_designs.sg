@@ -1,3 +1,6 @@
+import:
+    sys."turtle.sg" (drawing, forward, left, right);
+
 define:
     square(size) = repeat(4, [forward(size), right(90)]);
 

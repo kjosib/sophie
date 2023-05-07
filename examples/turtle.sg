@@ -6,6 +6,9 @@
 #   1. That you have the right to submit the design as either public-domain or your own original work.
 #   2. How you'd like your name to appear in the credits for inclusion of your work.
 
+import:
+    sys."turtle.sg" (drawing, color, forward, left, right, pensize, penup, pendown, goto);
+
 type:
     hilbert is case:
         # Evidently, I shall want to do something about proper mappings.

@@ -7,7 +7,6 @@ She was, among other things, a number theorist.
 **This document is no mere reference.**
 It is the very source-file from which Sophie's parser and scanner are generated.
 It is up to date by definition.
-(However, it might get out ahead of the evaluator.)
 
 ## Productions start
 
@@ -36,9 +35,10 @@ main_section    -> BEGIN ':' semicolon_list(expr)              | :empty
 Since I'd like Sophie to support a unit/module system,
 she needs a way to import modules and to navigate namespaces. Here is that way:
 ```
-import_directive -> import_location AS name  :ImportModule
-
-import_location -> short_string
+import_directive ->  optional(package) short_string alias optional(round_list(import_symbol))   :ImportModule
+package -> name '.'
+import_symbol ->  name alias  :ImportSymbol
+alias -> AS name | :nothing
 
 reference -> name     :PlainReference
   | name '@' name     :QualifiedReference
@@ -52,10 +52,8 @@ type_declaration -> name IS OPAQUE                        :Opaque
                   | name square_list(name) IS type_body   :generic_type
 
 type_body -> simple_type | record_spec | variant_spec
-simple_type -> named_type | arrow_type
+simple_type -> generic(simple_type) | arrow_of(simple_type)
 
-named_type  -> reference optional(square_list(simple_type))   :TypeCall
-arrow_type  -> round_list(simple_type) '->' simple_type       :ArrowSpec
 record_spec  -> round_list(field)                             :RecordSpec
 variant_spec -> CASE ':' semicolon_list(subtype) ESAC         :VariantSpec
 
@@ -65,7 +63,13 @@ subtype  -> name record_spec    :SubTypeSpec
           | name simple_type    :SubTypeSpec
           | name                :SubTypeSpec
 ```
-
+*Sidebar:* The "simple" types in type declarations have a close cousin found in function declarations.
+The commonality is as follows:
+```
+generic(item)  -> reference optional(square_list(item))   :TypeCall
+arrow_of(item) -> round_list(item) '->' item              :ArrowSpec
+```
+-----
 **The general structure of a function:**
 ```
 function -> name optional(round_list(parameter)) annotation '=' expr optional(where_clause)    :UserDefinedFunction
@@ -80,10 +84,10 @@ and Sophie will deal with it sensibly.
 parameter  ->   name annotation   :FormalParameter
 annotation ->  :nothing | ':' arg_type
 
-arg_type ->  '?'                               :ImplicitTypeVariable
-  | '?' name                                   :ExplicitTypeVariable
-  | reference optional(square_list(arg_type))  :TypeCall
-  | round_list(arg_type) '->' arg_type         :ArrowSpec
+arg_type -> generic(arg_type) | arrow_of(arg_type)
+          | '?' name    :ExplicitTypeVariable
+          | '?'         :ImplicitTypeVariable
+
 ```
 I suppose it bears mention that all Sophie functions are implicitly generic
 to whatever extent the body-expression can support.
@@ -148,14 +152,14 @@ Experience may later suggest expanding the `pattern` grammar, but this will do f
 Most Sophie users won't need to worry about these rules,
 so they get their own section.
 ```
-import_directive -> FOREIGN short_string WHERE semicolon_list(ffi_group) END   :ImportForeign
+import_directive -> FOREIGN short_string ffi_linkage ffi_body   :ImportForeign
 
-ffi_group -> comma_list(ffi_symbol) ':' optional(square_list(name)) simple_type  :FFI_Group
-ffi_symbol -> name                    :FFI_Symbol
-            | name '@' short_string   :FFI_Alias
+ffi_linkage -> round_list(reference)     |    '(' ')' :empty    |    :nothing
+ffi_body    -> WHERE semicolon_list(ffi_group)  END             |    :empty
+ffi_group   -> comma_list(ffi_symbol) ':' optional(square_list(name)) simple_type  :FFI_Group
+ffi_symbol  -> name                    :FFI_Symbol
+             | name '@' short_string   :FFI_Alias
 ```
-
-One caveat: ImplicitTypeVariable is not acceptable in the arg_type mentioned in an FFI_Group.
 
 -----
 

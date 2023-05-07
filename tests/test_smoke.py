@@ -6,8 +6,8 @@ base_folder = Path(__file__).parent.parent
 example_folder = base_folder/"examples"
 
 def _good_example(which) -> modularity.Loader:
-	report = diagnostics.Report()
-	loader = modularity.Loader(report, verbose=False, experimental=False)
+	report = diagnostics.Report(verbose=False)
+	loader = modularity.Loader(report, experimental=False)
 	if loader.load_program(example_folder, which + ".sg"):
 		return loader
 	else:
@@ -39,6 +39,7 @@ class ExampleSmokeTests(unittest.TestCase):
 			"some_arithmetic",
 			"Fibonacci",
 			"primes",
+			"generic_parameter",
 		]:
 			with self.subTest(name):
 				_good_example(name).run()

@@ -45,17 +45,24 @@ and then take notes on how things go.
 
 ## Current Status
 
+Some things are going well:
+
 * Sophie has Turtle-graphics! (See [here](https://github.com/kjosib/sophie/blob/main/examples/turtle.sg) for examples.)
 * The evaluator can run programs and display results, including turtle graphics as mentioned.
 * The new, much more precise type-checker now gives excellent feedback.
   It is not *quite* finished yet, but it is good enough to turn it on at all times.
+* The module system got an upgrade: there is now a notion of a system-package and the beginnings of a standard library.
+* The FFI (into Python) got an upgrade: It's now possible to install arbitrary linkages between Sophie and Python.
+* Error display is improved in various ways. There is also now an easy way to install helpful messages for parse errors.
+  This works; there just aren't many good messages yet.
+
+Certain things are not ready for prime time:
+
+* There is no interactivity yet. I currently lean towards an event-driven model as simplest to get working.
 * List comprehension (expressions like `[expr FOR name IN expr]`) are removed from the syntax for now.
   Something will take its place, but it will take some work.
   I need to figure out how I want to support variable-arity functions.
   Until then, we'll need the equivalent of `map2` and `map3` and etc.
-* There is no interactivity yet. I currently lean towards an event-driven model as simplest to get working.
-* There is a basic module system, so imports work. It's not yet possible to restrict exports.
-* There is also an FFI (into Python) although it has certain limits. I should standardize a way to call back into Sophie.
 
 For FPA, maybe controlling a bank of elevators would be a good concrete example problem?
 The pipe-dream is an asynchronous and resilient processes network similar to Erlang.

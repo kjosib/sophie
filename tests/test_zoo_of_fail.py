@@ -5,7 +5,7 @@ from unittest import mock
 from sophie.front_end import parse_file
 from sophie import syntax, diagnostics, modularity, resolution
 
-REPORT = diagnostics.Report()
+REPORT = diagnostics.Report(verbose=True)
 
 base_folder = Path(__file__).parent.parent
 example_folder = base_folder/"examples"
@@ -33,7 +33,7 @@ class ZooOfFail(unittest.TestCase):
 	@classmethod
 	def setUpClass(cls) -> None:
 		super().setUpClass()
-		cls.loader = modularity.Loader(REPORT, verbose=True, experimental=True)
+		cls.loader = modularity.Loader(REPORT, experimental=True)
 	
 	def expect(self, folder, cases):
 		for basename in cases:
@@ -106,13 +106,17 @@ class ZooOfFail(unittest.TestCase):
 	
 	
 	def test_07_import(self):
-		for basename in ["missing_import", "broken_import", "circular_import"]:
+		for basename in [
+			"circular_import",
+			"missing_import",
+			"broken_import",
+		]:
 			with self.subTest(basename):
 				# Given
-				report = diagnostics.Report()
-				loader = modularity.Loader(report, verbose=False)
+				report = diagnostics.Report(verbose=False)
+				loader = modularity.Loader(report)
 				# When
-				module = loader.need_module(zoo_fail/"import", basename + ".sg")
+				module = loader.need_module(zoo_fail/"import"/ (basename + ".sg"))
 				# Then
 				assert type(module) is syntax.Module
 				assert report.sick()
@@ -138,20 +142,6 @@ class ZooOfFail(unittest.TestCase):
 # 			type_inference.infer_types(module, self.report, verbose=True)
 # 			return module
 #
-# 	def test_Newton(self):
-# 		module = self.load(example_folder, "Newton")
-# 		assert not self.report.issues, self.report.complain_to_console()
-# 		assert_convergent(module.globals['iterate_four_times'])
-# 		root = module.globals['root']
-# 		assert_convergent(root)
-# 		assert isinstance(root.typ, algebra.Arrow)
-# 		arg = root.typ.arg
-# 		assert isinstance(arg, algebra.Product)
-# 		assert len(arg.fields) == 1
-# 		a0 = arg.fields[0]
-# 		assert isinstance(a0, algebra.Nominal)
-# 		assert a0.dfn is primitive.literal_number.dfn
-#
 # 	def test_bipartite(self):
 # 		module = self.load(zoo_ok, "bipartite_list")
 # 		assert not self.report.issues, self.report.complain_to_console()
@@ -162,12 +152,6 @@ class ZooOfFail(unittest.TestCase):
 # 		assert isinstance(res, algebra.Nominal)
 # 		assert res.dfn.nom.text == "critter"
 # 		assert res.params[0] != res.params[1]
-#
-# 	def test_recur(self):
-# 		""" (number, number) -> list[<a>] is the wrong type for a recurrence relation. """
-# 		module = self.load(zoo_ok, "recur")
-# 		assert not self.report.issues, self.report.complain_to_console()
-# 		assert_convergent(module.globals['recur'])
 #
 # 	def test_sequence(self):
 # 		""" Structural recursion should do the right thing. """
