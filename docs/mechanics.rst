@@ -52,17 +52,25 @@ Not everything fits in a neat little box yet.
 Some of Sophie's parse-actions re-arrange their subtrees slightly.
 I'm sure re-writes are feasible, but I'll need to revisit the problem.
 
+In any case, *some* linkage structure is probably nice to have around.
+Leaf nodes need at least an external index to their semantic value.
+(For example, maybe you have a table of identifiers, and a table of quoted strings, and of literal numbers...)
+That makes room for an index associated with each operator too.
+One interesting candidate would be the node's leftmost leaf.
+Intrinsically a node's left-sibling occupies the index just before the node's leftmost leaf.
+This allows a reasonable-compromise means to navigate the tree directly.
+
 High-Order Type Checking (HOT)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-> And at one point while working on the type checker, I had the provenance epiphany.
-> The objects we pass around to represent types should include both the
-> type per-se (i.e. calculus.SophieType) and also the provenance,
-> or why the computer judged a particular type. Provenance can be
-> nontrivial -- maybe even recursive -- but traces a path of reasoning.
-
 I would like a rather precise up-front analysis phase based on what we can infer about the types of variables,
 but I do not mean to impose burdens normally associated with *dependent-type* systems.
+
+    And at one point while working on the type checker, I had the epiphany about provenance.
+    The objects we pass around to represent types should include both the
+    type per-se (i.e. ``calculus.SophieType``) and also the provenance,
+    or why the computer judged a particular type. Provenance can be
+    nontrivial -- maybe even recursive -- but traces a path of reasoning.
 
 In concept, my approach is to just run the program as-is, but in the realm of types rather than values.
 This is a whole-program approach to the question type-correctness:
@@ -113,7 +121,7 @@ Not a *maybe-monad* style ``nothing``, for that would be *something.*
 I mean more like a *Never-Ending Story* kind of nothing.
 (See the film with your kids, if you haven't already done.)
 
-In the land of type theory, the *nothing* has a type and that type is called "Bottom".
+In the land of type theory, *The Nothing* has a type and that type is called "Bottom".
 Note in particular the following algebraic **laws of Bottom:**
 
 1. Bottom is a universal *subtype:* ``union(X, Bottom) => X``.
@@ -126,30 +134,16 @@ Note in particular the following algebraic **laws of Bottom:**
     that *X* must be a record (or a function, respectively), we can rely on the type-evaluator
     to get around to that point with a specific *X* type.
 
-At the end of this preliminary round of inference,
+At the end of this preliminary round of deduction,
 we have a sensible lower-bound return-type for the function *as it was actually called.*
 
 If that preliminary lower-bound is *Bottom*, then the function's induction lacks a base-case,
 which is an error. Otherwise:
 
-* Put this lower-bound return-type in the cache line for this type-context.
-* Mark the entry as *provisional*.
-* Later, work to solve the provisions.
-
-Solving Provisional Types
-..........................
-
-Any expression whose type depends on a provisional type is itself provisionally-typed.
-In fact, the provisionality of types forms a directed dependency graph.
-To handle this on the level of individual expressions might be too much detail,
-but we can create a provisionality graph between function result-type cache entries.
-
-With that graph, we can work in SCC order to finalize the types of functions.
-
-Take a leaf-cycle in this graph: Some function's type depends upon itself, or there's a mutual dependency.
-Make progress by running the basic algorithm on that cycle.
-If all the result-types *and provisions* stay the same, and restricted to the SCC,
-then that SCC has reached its least-fixpoint, so drop all provisions pointing at its members.
+* Put the updated lower-bound return-type in the cache line for this type-context.
+* Attempt the *apply* again, with this new updated hypothesis in the cache.
+* Repeat the above two-step dance until the resulting type stops changing.
+* Call it a day.
 
 
 Resolving Imports
@@ -213,46 +207,35 @@ To kick this whole process off, the main entry-point can simply ``need`` whateve
 If that fails, then presumably the appropriate error reports are scheduled.
 Otherwise, it can proceed to run the activity schedule.
 
-Avenues for Extension
------------------------
-
-URI-Like Paths
-...............
+A Rudimentary Package System
+------------------------------
 
 The algorithm above implicitly relies on a filesystem-like API.
 It presumes to use absolute paths as keys, to deal suitably with relative paths,
 and to read the contents of a file given a path.
-Let's replace all that with a composite driver.
-Suppose Sophie interprets the "path" component as similar to a URI.
-The URI-schema provides a natural and extensible way to tie into
-both a "standard-library" notion and more general configuration-management.
 
-A first iteration of the "URI-paths" idea would *mostly* be about configuring
-the location(s) of installed libraries. That's a minor design problem.
-The main idea is to use the schema in the sub-procedure "Figure out how to load the module".
+Sophie now supports a rudimentary notion of "package". You can do something like::
 
-Native Modules
-...............
+    import:
+        sys."turtle.sg" as t;
 
-Right now the primitive-root namespace gets a bunch of math functions.
-It would be nice to allow more "foreign" import modules.
-Some general facility to marshal and unmarshal data may one day come out of this,
-but in the meanwhile it seems the natural path to embrace existing ecosystems.
+The ``sys.`` here means to look in the package called ``sys`` for the file ``"turtle.sg"``.
+This provides a natural way to tie into both a "standard-library" notion and more general configuration-management.
+Something somewhere must map package symbols back to filesystem paths.
+Then we can again rely on the *absolute-path* thing.
 
-The natural approach here (for now) is to add a schema-driver that imports Python modules instead,
-and maybe calls some expected module-attribute to make it prepare itself as a namespace.
-Details of precisely what objects to put in that namespace are left for later.
+For the moment, there is only the one package called ``sys``.
+Code in ``modularity.py`` wires it up to a sub-folder relative to the location of that file.
+It's crude but effective at meaning I can in principle run Sophie code from anywhere in the filesystem
+and yet retain access to import shared doodads.
 
-Un-Bundling The Turtle
-..............................
+Bringing this to the next level must involve some concept of *installing* the Sophie ecosystem.
+As long as Sophie remains but a disconnected Python program,
+that notion may be a pre-equine renaissance natural philosopher:
+Descartes before the horse.
 
-Presently, the run-time looks at the type of an object to decide how to interpret its contents.
-For example, if it sees a list, then it tries to manifest and print that entire list.
-If it sees a ``drawing`` record, then it does the turtle-graphics thing.
-I'd like to have a scenario in which (at least) system-level modules can install drivers.
-Considering also that native modules might need to interact with the laziness inherent in the system,
-there could be some challenges in the modular structure of the overall Sophie interpreter.
-But I think it will work out.
+Avenues for Extension
+-----------------------
 
 Object-Code Cache
 ...................
@@ -319,7 +302,7 @@ a data constructor, or indeed even a native-function binding.
 Although parameters, functions, and data-constructors are easily distinguished syntax objects,
 the situation *within* the realm of functions is a bit more complicated.
 Syntax alone does not distinguish global functions (which close over nothing)
-from nested functions (which close over the *current* dynamic scope) or "uncles"
+from nested functions (which close over the *current* dynamic scope) or *siblings and uncles*
 which close over some outer dynamic scope -- findable only by traversing static links.
 
 There is a straightforward *partial* solution to this smaller problem:
@@ -371,5 +354,7 @@ The decisions currently are:
     * Use a global dictionary, keyed for now to the corresponding definition-object.
     * Prepare in advance.
 
-This will mean changing function ``run_module`` but it's only used in a few places.
-It can take the list of loaded modules in topological order straight from a ``Loader`` object.
+The function ``run_module`` take the list of loaded modules in topological order straight from a ``Loader`` object.
+It then prepares and evaluates each module in succession, using the same global dictionary.
+This works fine because the syntax objects from different modules are all distinct as hash-keys.
+

@@ -1,0 +1,27 @@
+# 99 bottles of ... soda ... on the wall. Yeah. Definitely soda. We'll keep it safe for the whole family here.
+
+import:
+    sys."teletype.sg" (done, echo);
+
+define:
+    bottles(n) = case
+        when n < 1 then cat(verse("no"), coda);
+        else flat[verse(str(n)), bridge, bottles(n-1)];
+    esac;
+
+    verse(how_many) = [
+        how_many, " bottles of soda on the wall,", EOL,
+        how_many, " bottles of soda.", EOL, EOL,
+    ];
+
+    bridge = ['If one of those bottles should happen to fall,', EOL];
+
+    coda = [
+        'Go to the store and buy some more!', EOL,
+        '99 bottles of soda on the wall!', EOL,
+    ];
+
+    EOL = chr(10);  # I might consider adding string-escapes soon?
+
+begin:
+    echo(cons(EOL, bottles(5)), done);  # Increase 5 to 99 for the full experience.

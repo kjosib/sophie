@@ -7,7 +7,6 @@ import sys
 from typing import Any, Union, Sequence
 from collections import namedtuple, deque
 import abc
-from .turtle_adapter import do_turtle_graphics
 from . import syntax, primitive, ontology
 
 STATIC_LINK = object()

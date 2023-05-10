@@ -15,17 +15,11 @@ Status Quo
 Probably these names ought to be mentioned in the target module's ``export:`` list,
 but enforcing that stricture can come later if at all.
 
-Benefits:
-    You can see at a glance where every name comes from, wherever the reference may be buried.
-    This can be important in a several-hundred-line source file that orchestrates several other modules.
 
     The bulk of code is decoupled from how the modules may be laid out in the filesystem,
     and can use convenient local names for imported units.
 
-    Namespace conflicts are essentially impossible, because there is nothing to conflict.
 
-Points of possible aggravation:
-    Tagging every mention of an imported symbol with te
     typecase syntax has the program recite the names of constructors *as visible,*
     but they necessarily must form cohorts according to the variant-in-common.
 
@@ -41,22 +35,6 @@ Almost from day one, some sort of shortcut for the qualified-names will be desir
 There's a trade-off between being terse and being stable:
 If you add a name to a module, does that change the meaning of programs which import it?
 Arguably it should not.
-One option is to explicitly list identifiers to import from the module::
-
-    import:
-    "path/to/cat/in/hat" (thing_one, thing_two);
-
-The semantics would be to import ``thing_one`` and ``thing_two`` to the current module's own global name-space.
-That's well enough for a few things at a time, but not well suited to larger lexicons.
-
-We could combine the forms::
-
-    import:
-    "path/to/cat/in/hat" as cat (thing_one, thing_two);
-
-semantics being that you get ``thing_one`` and ``thing_two`` as global names, but can also
-reference ``worried_goldfish@cat`` if you need it.
-
 Another idea is wildcards::
 
     import:
@@ -80,9 +58,9 @@ So it's important to track the "strength" of an imported name.
 The last idea is to do some sort of scope-zone thing::
 
     import:
-    "path/to/cat/in/hat" as cat;
+        "path/to/cat/in/hat" as cat;
     define:
-    foo = tabby@cat(123);  # expression must explicitly qualify cat-module reference
+        foo = tabby@cat(123);  # expression must explicitly qualify cat-module reference
 
     with cat:
         bar = tabby(456);  # expressions have access to all cat-exports

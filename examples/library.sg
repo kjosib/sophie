@@ -1,5 +1,6 @@
 # This is a simple sample shared module.
-# The idea is to export a function (or several) that a client can use without re-implementing it.
+# The idea is to export a function (or several) that a
+# client can use without re-implementing it/them.
 
 define:
 nice_book = "Gulliver's Travels";

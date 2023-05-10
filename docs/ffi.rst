@@ -63,9 +63,13 @@ A foreign import declaration contains:
 
 * The keyword ``foreign``.
 * A literal string (like ``"math"``) that locates the foreign code. (Presently this means a Python module-path.)
-* The keyword ``where``.
-* One or more *foreign-import groups,* ending in a semicolon.
-* The keyword ``end``, followed by a semicolon.
+* Optionally, an *initializer*. More about that later.
+* And then usually:
+
+  * The keyword ``where``.
+  * One or more *foreign-import groups,* ending in a semicolon.
+  * The keyword ``end``.
+* and finally, a semicolon.
 
 A foreign-import group consists of:
 
@@ -82,6 +86,48 @@ A foreign-import group consists of:
     with two different signatures. Python's ``math.log`` takes an optional argument for the
     base of the logarithm (defaulting to ``e``), but Sophie functions do not play that game.
 
+Providing Interaction
+~~~~~~~~~~~~~~~~~~~~~~
+
+A foreign import-module can also now supply an initialization function.
+The foreign import-declaration can specify Sophie objects to pass in to said function.
+The result of that function can specify linkages to I/O drivers, like so::
+
+    import:
+    foreign "sophie.adapters.turtle_adapter" (nil) ;
+
+For each expression in the ``begin:`` section,
+the run-time looks at the type of an object to decide how to interpret its contents.
+The ``sophie_init`` function in ``sophie.adapters.turtle_adapter`` binds a little
+something to the to ``drawing`` type::
+
+    def sophie_init(force, nil):
+        ... # save nil for later # ...
+        return {'drawing':do_turtle_graphics}
+
+These driver-functions generally need to interact with the laziness inherent in the system.
+Continuing the turtle-graphics example, the driver's prototype is::
+
+    def do_turtle_graphics(force, drawing):
+        ...
+
+The text of ``do_turtle_graphics`` can call ``force`` on a Sophie-object to get
+a strict-object. Now if that strict-object happens to be a record-like thing,
+then its fields may also be lazy / thunks, and so ``do_turtle_graphics`` is
+responsible to call ``force`` responsibly.
+
+*One last thing:* I've passed Sophie's ``nil`` into the driver's initializer
+because I know it will be a singleton object and I can thus use an ``is`` test
+in Python to detect the thing. But more to the point, you can pass in whatever you need.
+If you have *nothing* to pass in, but you still want to register a driver,
+you can *in this one place* use an empty pair of parenthesis::
+
+    import:
+    foreign "something.something.something" () where
+        ...
+        ...
+    end;
+
 Known Problems
 ~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -90,12 +136,11 @@ Sophie will surely soon get a `result-type similar to Rust's <https://doc.rust-l
 along with some handy connectors, but no single strategy is suitable to translate all exceptions from foreign code.
 Binding to an exception-laden API must involve some amount of wrapper-code to deal with the semantic mismatch.
 
-For the moment, all "foreign" functions are assumed to have strict (not lazy) semantics:
+For the moment, foreign functions *other than drivers* are assumed to have strict (not lazy) semantics:
 They get passed evaluated values (not thunks) as arguments.
 This is fine for commandeering the pure functions from an existing ecosystem like Python.
 However, if the arguments are record-types, then the fields within may contain thunks.
-The current FFI does not define how foreign code might force a thunk.
-It's unclear how best to address that, but it will need a solution in time.
+One possible work-around is to make a note of the ``force`` argument to the initializer.
 
 Python's ability to find a Python module depends on its module path, which Sophie code doesn't have any control over.
 Obviously built-in and standard-library modules are no problem, but random extra Python code could get weird.
