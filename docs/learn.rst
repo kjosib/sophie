@@ -63,7 +63,7 @@ Let's break this down:
 Super-Fancy Calculator
 --------------------------
 
-Here's a small program showing how math (and comments) in Sophie appears::
+Here's a small program showing how math (and comments) in Sophie appears:
 
 .. literalinclude:: ../examples/simple_calculations.sg
 
