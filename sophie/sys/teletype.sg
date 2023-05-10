@@ -1,0 +1,21 @@
+# This is meant to be just enough to get a simple text game going.
+# It also fills a few blanks in the type system
+
+# A teletype application consists of:
+# Something to print
+# Either done-ness, or a thing that responds to the next thing typed.
+# This allows to construct simple keyboard-and-screen interactive programs.
+# Incidentally, it's also probably time to create a "random stream" sequence.
+
+import:
+    foreign "sophie.adapters.teletype_adapter"(nil);
+
+type:
+    app is case:
+        done;
+        echo (text:list[string], next:app);
+        read (next: (string)->app);
+        random (next: (number)->app);
+    esac;
+
+

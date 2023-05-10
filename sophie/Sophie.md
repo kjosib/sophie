@@ -215,13 +215,16 @@ sigil           ([#$]|0[xX])
 ```
 ## Patterns
 As with the parser, the scan-actions are given by `:words`.
+An action consisting of the `|` vertical-bar character means to use the identical action as the following rule.
 ```
-{wholeNumber}      :integer
-{real}             :real
-[{alpha}_]{word}*     :word
-\"[^"\v]*\"        :short_string
-\s+|\#.*           :ignore
+{wholeNumber}           :integer
+{real}                  :real
+[{alpha}_]{word}*       :word
+\"[^"\v]*\"             |
+\'[^'\v]*\'             :short_string
+\s+|\#.*                :ignore
 [<:>!=]=|[-=]>|{punct}  :punctuation
 ```
 
-
+There is not (yet?) any particular support for string-escapes as commonly found in languages like C or Java.
+I'm not entirely sure it's important at all.

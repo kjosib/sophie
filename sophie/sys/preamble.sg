@@ -25,12 +25,14 @@ foreign "math" where
 end;
 
 foreign "builtins" where
-	chr : (number) -> string;
+	chr, str : (number) -> string;
 	len, ord : (string) -> number;
+	int : (number) -> number;
 end;
 
-foreign "sophie.yarn" where
+foreign "sophie.adapters.yarn" where
 	mid : (string, number, number) -> string;
+	val : (string) -> maybe[number];
 end;
 
 foreign "operator" where
@@ -48,6 +50,10 @@ type:
 		 cons(head:x, tail:list[x]);
 		 nil;
 	ESAC;
+	maybe[x] is case:
+	    this(item:x);
+	    nope;
+	esac;
 
 	pair[a,b] is (fst:a, snd:b);
 
