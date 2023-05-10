@@ -7,75 +7,8 @@ This chapter is a stream-of-consciousness about uncertain design questions.
     :local:
     :depth: 2
 
-Module System
+Package System
 ~~~~~~~~~~~~~~~~~~
-
-Status Quo
-------------
-Probably these names ought to be mentioned in the target module's ``export:`` list,
-but enforcing that stricture can come later if at all.
-
-
-    The bulk of code is decoupled from how the modules may be laid out in the filesystem,
-    and can use convenient local names for imported units.
-
-
-    typecase syntax has the program recite the names of constructors *as visible,*
-    but they necessarily must form cohorts according to the variant-in-common.
-
-    If that variant is in an imported module, but the constructors are not brought into the local namespace,
-    then today the patterns would need to mention the same module over and over again, which is bananas.
-    It should be possible to just once hint at where to find a variant's definition,
-    and then not mention it again.
-
-
-Stage Two
-------------
-Almost from day one, some sort of shortcut for the qualified-names will be desired.
-There's a trade-off between being terse and being stable:
-If you add a name to a module, does that change the meaning of programs which import it?
-Arguably it should not.
-Another idea is wildcards::
-
-    import:
-    "path/to/cat/in/hat" as cat (*);
-
-Here, presume you get all the exports as global names.
-This brings with it the likelihood of a name conflict.
-One resolution is to declare an error,
-but it would be better to emit a warning instead and then mark conflicted names as ambiguous.
-Attempting to actually *use* the (unqualified) name might result in a proper error,
-or it might later be resolved with the aid of type-checking.
-
-    A third option would treat the wildcard as just another
-
-Also, if an implicitly-imported name is later defined, it should probably shadow the import.
-Conversely, if an explicitly-imported name is later defined at top-level, that *is* a naming conflict.
-So it's important to track the "strength" of an imported name.
-
-(One approach: have an ``implicit`` namespace between ``static_root`` and module-globals.)
-
-The last idea is to do some sort of scope-zone thing::
-
-    import:
-        "path/to/cat/in/hat" as cat;
-    define:
-        foo = tabby@cat(123);  # expression must explicitly qualify cat-module reference
-
-    with cat:
-        bar = tabby(456);  # expressions have access to all cat-exports
-        baz = manx(789);   # without repeatedly mentioning the cat module
-    end with;
-    ...
-
-The notion here is that at most one import is in the implicit scope at any given place,
-so you can't really have a naming conflict.
-Although that raises a question: Should the standard preamble get special status
-to remain in-scope behind ``with cat:``? Probably yes, all things considered.
-
-
-Stage Three
-------------.
 
 Inherently, a language is going to have several sources of "batteries" that it might include or support.
 These include standard libraries, system-internal/reflective things,
@@ -199,47 +132,8 @@ Classically the answer was to stop when any input did, but maybe that's not the 
 I think there's room for some sort of telescoping operator that helps build lock-step parallel functions,
 but I don't have a clear plan yet.
 
-Error Messages?
-~~~~~~~~~~~~~~~~
-
-This is an issue on several levels.
-Each represents an interesting problem to solve.
-
-Parse Errors
----------------
-
-In the initial version, parse errors yield an arcane report.
-I can't expect a new learner to figure out what they mean.
-I need a better solution.
-And I don't want to pollute the grammar specification.
-
-If the parser blocks, I get back a picture of the parse stack
-in terms of which symbols have been pushed so far, and what token is "next".
-I can imagine writing (something like) a regular-expression over those symbols
-and attaching that regex to a rule about which message to display.
-This has a few interesting sub-problems.
-
-Probably the patterns should be:
-
-* structured like filename globs.
-* validated internally against the parse tables.
-* ranked from most to least specific.
-* exhaustive in covering the entire space of possible situations.
-
-I will want a way to display a diagnostic of how the reporter
-decided which message to display.
-
-Possibly, I might want patterns that include more right-context.
-In that case, it should be possible for the error handler to pull some more tokens.
-
-Scan Errors
-------------.
-
-The answer to a blocked scan is to present the next character as a token
-and let the parse-error machinery deal with it.
-
 Error Context Displays
-------------------------
+~~~~~~~~~~~~~~~~~~~~~~~
 
 The bit that displays excerpts is presently too dumb:
 It can possibly display the same line more than once,
@@ -247,6 +141,9 @@ and it repeats the file-name every time.
 It ought to sort and group this information to present a nicer excerpt.
 Also, some ansi color would be nice.
 (Incidentally, what if input source contains terminal control codes?)
+
+I stumbled on a nice Python library for this sort of thing,
+but I forgot to write down the reference.
 
 Concurrency
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -318,7 +215,7 @@ Simply put, I was not impressed with the ELM approach to JSON.
 It felt like such a fight to wrap my head around their JSON combinator library.
 There was no intuitive way to understand it, so it was hard to compose bits.
 
-If the language has a generic ``result[x,y]`` type ( ``case: ok x; fail:y; end;`` )
+If the language has a generic ``result[x,y]`` type ( ``case: ok x; fail:y; esac;`` )
 then we should compose with that for all the sorts of things where things go wrong.
 Incidentally, different applications might want/need more or less detail about failures.
 So an application should be able to provide and use its own *bind* operator

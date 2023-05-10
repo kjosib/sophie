@@ -8,6 +8,46 @@ I'll add notes as they seem necessary while the overall system fills out.
     :local:
     :depth: 2
 
+Not-Embarrassing Error Messages
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Parse Errors
+---------------
+
+If the parser blocks, the front-end gets back a list of symbols representing the contents of the parse stack,
+as well as the identity (and location) of the look-ahead token.
+
+The front-end now creates, and can use, a tree-structure to represent error scenarios/patterns and suggested messages.
+The patterns are:
+
+* structured like filename globs.
+* ranked from most to least specific.
+
+Nice-to-have but *not* implemented:
+
+* validated internally against the parse tables.
+* exhaustive in covering the entire space of possible situations.
+* additional right-context beyond the look-ahead token.
+
+Basically, the concept is to walk the stack backwards looking for the longest-matching pattern,
+and then use the corresponding message as the front-end's best guess at what advice to give.
+
+If no rule matches, then instead the message contains a so-called "Guru Meditation" which is
+just a stack-picture. I can then pick one of these up and use it directly to construct a suitable rule,
+once I've looked the situation over and decided what text I want to provide.
+
+The specific code is ``_hint`` and ``_best_hint`` in ``front_end.py``.
+
+    At the time of this writing, there is only one hint-pattern.
+    Kind of underwhelming I know, but the machinery works and is tested.
+
+Scan Errors
+------------
+
+The answer to a blocked scan is to present the next character as a token
+and let the parse-error machinery deal with it.
+
+
 Representing an AST Efficiently
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 

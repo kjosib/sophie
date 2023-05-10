@@ -62,7 +62,7 @@ def parse_file(path:Path, report:Report):
 	except FileNotFoundError:
 		report.file_error(path, "I see no file called " + str(path))
 	except OSError:
-		report.file_error(path, "Something went pear-shaped while trying to read " + str(pathname))
+		report.file_error(path, "Something went pear-shaped while trying to read " + str(path))
 	else:
 		return parse_text(text, path, report)
 

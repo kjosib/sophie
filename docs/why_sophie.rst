@@ -31,15 +31,8 @@ Sophie is different on all accounts.
   changes behind your back. That may also sound impossibly constraining, but trust me: it's fine.
 * Sophie ... doesn't dirty herself with *objects* of the usual sort. (There is a better way.)
 * Sophie is fastidious about preventing errors up front, before they cause trouble during operation.
-  Through *abstract interpretation*, Sophie can check in advance for many kinds of
+  Through a form of *abstract interpretation*, Sophie can check in advance for many kinds of
   latent problems that testing alone might not catch -- which can save you a whole mess of effort.
-
-.. note::
-    That last statement is presently under construction.
-    There was a type checker in a previous release,
-    and it worked reasonably well, but it was unsound around certain field-access expressions.
-    The new checker (i.e. the abstract interpreter) will be much more precise,
-    but it does not yet work and is therefore presently turned off by default.
 
 Moreover, learning Sophie will affect you in different ways from learning a conventional starter-language.
 Sophie teaches you how to think about problems and design solutions effectively.
