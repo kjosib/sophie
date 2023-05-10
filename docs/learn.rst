@@ -258,7 +258,7 @@ More Fun with Functions
 -------------------------
 
 You can do quite a bit with functions.
-Consider this example::
+Consider this example:
 
 .. literalinclude:: ../examples/Newton.sg
 
@@ -302,7 +302,7 @@ I'll cover the first two of these here, and the last in the section about data s
 
 Case Study: Age Classifier
 ...........................
-Here's an example of a not-always-totally-respectful age-classifier::
+Here's an example of a not-always-totally-respectful age-classifier:
 
 .. literalinclude:: ../examples/case_when.sg
 
@@ -351,7 +351,7 @@ Case Study: Improved Root-Finder
 Let's improve our root-finding program.
 You may have noticed that it did significantly better with ``root(2)`` than with ``root(17)``.
 To get a better answer for larger numbers, one approach we could take is to iterate Newton's method more times.
-We could do this::
+We could do this:
 
 
 .. literalinclude:: ../examples/Newton_2.sg
@@ -370,7 +370,7 @@ Feed a big enough number into the ``root(...)`` function and it stops too soon.
 	so long as there is a digit on both sides of every underscore.
 
 It would be nice if we could let Sophie figure out when to stop.
-Perhaps we come up with a function like this::
+Perhaps we come up with a function like this:
 
 .. literalinclude:: ../examples/Newton_3.sg
 
@@ -580,7 +580,7 @@ like ``fib(n) = 1 if n < 2 else fib(n-1) + fib(n-2);`` but that has three proble
 
 What I'd like to do instead is define the infinite list of Fibonacci numbers,
 and then have a convenient way to get a prefix of that list.
-Here's one way to do it::
+Here's one way to do it:
 
 .. literalinclude:: ../examples/Fibonacci.sg
 
