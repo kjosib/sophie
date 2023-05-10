@@ -112,7 +112,7 @@ def _eval_match_expr(expr:syntax.MatchExpr, dynamic_env:dict):
 	except KeyError:
 		branch = expr.otherwise
 		if branch is None:
-			raise RuntimeError("Confused by tag %r; this will not be possible after type-checking works."%tag)
+			raise RuntimeError("Confused by tag %r; should not be possible now that type-checking works."%tag)
 	return delay(dynamic_env, branch)
 
 def _lookup_udf(udf: syntax.UserDefinedFunction, env: dict):
@@ -168,7 +168,7 @@ def delay(dynamic_env:dict, item) -> LAZY_VALUE:
 class Closure(Procedure):
 	""" The run-time manifestation of a sub-function: a callable value tied to its natal environment. """
 
-	def __init__(self, static_link:dict, udf:syntax.Function):
+	def __init__(self, static_link:dict, udf:syntax.UserDefinedFunction):
 		self._udf = udf
 		self._static_link = static_link
 		self._params = [p.nom.text for p in udf.params]
