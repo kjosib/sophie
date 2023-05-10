@@ -131,6 +131,9 @@ you can *in this one place* use an empty pair of parenthesis::
 Known Problems
 ~~~~~~~~~~~~~~~~~~~~~~~
 
+There's not yet a way for a driver to call a function written in Sophie.
+This item is high on the agenda.
+
 Sophie does not have exceptions. If a foreign function throws one, Sophie will quit unceremoniously.
 Sophie will surely soon get a `result-type similar to Rust's <https://doc.rust-lang.org/std/result/>`_
 along with some handy connectors, but no single strategy is suitable to translate all exceptions from foreign code.
