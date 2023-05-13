@@ -10,7 +10,6 @@ REPORT = diagnostics.Report(verbose=True)
 base_folder = Path(__file__).parent.parent
 example_folder = base_folder/"examples"
 zoo_fail = base_folder/"zoo/fail"
-zoo_ok = base_folder/"zoo/ok"
 
 def _parse(path):
 	REPORT.reset()
@@ -123,25 +122,6 @@ class ZooOfFail(unittest.TestCase):
 	
 
 
-
-# class ThingsThatShouldConverge(unittest.TestCase):
-# 	""" These assert that things which should converge, do. For the contrapositive, see the ZooOfFail. """
-#
-# 	def setUp(self) -> None:
-# 		algebra.TypeVariable._counter = 0
-# 		self.report = diagnostics.Report()
-#
-# 	def load(self, folder, which):
-# 		report = self.report
-# 		loader = modularity.Loader(report, verbose=False)
-# 		module = loader.need_module(folder, which + ".sg")
-# 		if report.issues:
-# 			report.complain_to_console()
-# 			assert False
-# 		else:
-# 			type_inference.infer_types(module, self.report, verbose=True)
-# 			return module
-#
 # 	def test_bipartite(self):
 # 		module = self.load(zoo_ok, "bipartite_list")
 # 		assert not self.report.issues, self.report.complain_to_console()
@@ -160,23 +140,6 @@ class ZooOfFail(unittest.TestCase):
 # 		assert_convergent(module.globals['m1'])
 # 		assert_convergent(module.globals['m2'])
 #
-#
-# def assert_convergent(sym):
-# 	# Maybe a function's type is "convergent" when it has no free variables in the result.
-# 	# In other words, all the type-variables in the result appear somewhere in a binding context:
-# 	# either its own parameters, or those of its parent functions.
-# 	assert isinstance(sym, syntax.Function)
-# 	typ = sym.typ
-# 	assert isinstance(typ, algebra.Arrow), typ
-# 	arg = set()
-# 	typ.arg.poll(arg)
-#
-# 	res = set()
-# 	typ.res.poll(res)
-#
-# 	free = res - arg
-#
-# 	assert not free, (typ.visit(algebra.Render()), free)
 
 if __name__ == '__main__':
 	unittest.main()

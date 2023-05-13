@@ -68,7 +68,7 @@ class RecordType(SophieType):
 		assert type(r) is syntax.Record
 		self.symbol = r
 		self.type_args = tuple(a.exemplar() for a in type_args)
-		assert len(self.type_args) == len(r.parameters)
+		assert len(self.type_args) == len(r.type_params)
 		super().__init__(self.symbol, *(a.number for a in self.type_args))
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_record(self)
 
@@ -81,7 +81,7 @@ class SumType(SophieType):
 		assert isinstance(variant, syntax.Variant)
 		self.variant = variant
 		self.type_args = tuple(a.exemplar() for a in type_args)
-		assert len(self.type_args) == len(variant.parameters)
+		assert len(self.type_args) == len(variant.type_params)
 		super().__init__(self.variant, *(a.number for a in self.type_args))
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_sum(self)
 	def __repr__(self): return "[SumType:%s]"%self.variant.nom.text
@@ -103,7 +103,7 @@ class TaggedRecord(SubType):
 		assert isinstance(st.body, syntax.RecordSpec)
 		self.st = st
 		self.type_args = tuple(a.exemplar() for a in type_args)
-		assert len(self.type_args) == len(st.variant.parameters)
+		assert len(self.type_args) == len(st.variant.type_params)
 		super().__init__(st, *(a.number for a in self.type_args))
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_tag_record(self)
 	def family(self) -> ontology.Symbol: return self.st.variant

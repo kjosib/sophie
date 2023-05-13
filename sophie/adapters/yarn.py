@@ -10,3 +10,7 @@ def val(aString):
 	try: answer = float(aString)
 	except ValueError: return nope
 	else: return {"":"this", "item":answer}
+
+def identity(x):
+	# This one's just for messing around with the type system.
+	return x

@@ -1,0 +1,21 @@
+# I should be able to supply the identity arrow where I need an arrow from strings to strings.
+
+import:
+
+foreign "sophie.adapters.yarn" where
+	arrow@"identity" : [a] (a)->a;
+end;
+
+
+type:
+    identity_arrow[a] is (a)->a;
+    string_arrow is identity_arrow[string];
+    number_arrow is identity_arrow[number];
+    two_arrows is (foo:string_arrow, bar:number_arrow);
+
+define:
+    two = two_arrows(arrow, arrow);
+
+begin:
+    two.foo("fred");
+    two.bar(5);

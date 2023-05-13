@@ -31,11 +31,14 @@ class TypeParameter(Symbol):
 class TypeDeclaration(Symbol):
 	static_depth = 0
 	param_space: NS   # Will address the type parameters. Word-definer fills this.
-	parameters: tuple[TypeParameter]
+	type_params: tuple[TypeParameter]
 	
-	def __init__(self, nom: Nom, param_names:Sequence[Nom]):
+	def __init__(self, nom: Nom, type_params:Sequence[TypeParameter]):
 		super().__init__(nom)
-		self.parameters = tuple(TypeParameter(n) for n in param_names)
+		self.type_params = type_params
+
+def type_parameters(param_names:Sequence[Nom]):
+	return tuple(TypeParameter(n) for n in param_names)
 
 class SimpleType(Expr):
 	def can_construct(self) -> bool: raise NotImplementedError(type(self))
@@ -198,7 +201,7 @@ class UserDefinedFunction(Function):
 	def head(self) -> slice: return self.nom.head()
 
 class WhereClause(NamedTuple):
-	sub_fns: Sequence[Function]
+	sub_fns: Sequence[UserDefinedFunction]
 	end_name: Nom
 
 class Literal(ValExpr):
@@ -305,7 +308,7 @@ class ExplicitList(ValExpr):
 class Alternative(ValExpr):
 	pattern: Reference
 	sub_expr: ValExpr
-	where: Sequence[Function]
+	where: Sequence[UserDefinedFunction]
 	
 	namespace: NS  # WordDefiner fills
 	
@@ -373,6 +376,7 @@ def FFI_Symbol(nom:Nom):
 	return FFI_Alias(nom, None)
 
 class FFI_Group:
+	param_space: NS   # Will address the type parameters. Word-definer fills this.
 	def __init__(self, symbols:list[FFI_Alias], type_params:Optional[Sequence[TypeParameter]], type_expr:SimpleType):
 		self.symbols = symbols
 		self.type_params = type_params or ()
