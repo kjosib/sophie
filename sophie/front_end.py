@@ -132,6 +132,9 @@ def _best_hint(stack_symbols, lookahead):
 # But for now, I'll just hard-code some.
 
 _hint("TYPE : ??? name square_list(name) IS OPAQUE", "Opaque types cannot be made generic.")
+_hint("( ??? expr ;", "I suspect a missing ')' closing parentheses.")
+_hint("CASE WHEN ??? :", "CASE WHEN needs THEN")
+_hint("CASE semicolon_list(when_clause) ELSE expr ; ???", "CASE expression is missing ESAC")
 
 assert _best_hint("export_section import_section TYPE : name square_list(name) IS".split(), 'OPAQUE')
 

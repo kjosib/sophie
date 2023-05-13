@@ -33,6 +33,7 @@ end;
 foreign "sophie.adapters.yarn" where
 	mid : (string, number, number) -> string;
 	val : (string) -> maybe[number];
+	strict@"identity" : [a] (a)->a;  # Proof of concept; test-case; what-have-you.
 end;
 
 foreign "operator" where

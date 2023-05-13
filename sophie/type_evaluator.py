@@ -63,7 +63,7 @@ class ManifestBuilder(Visitor):
 		if isinstance(dfn, syntax.Variant):
 			return SumType(dfn, args).exemplar()
 		if isinstance(dfn, syntax.TypeAlias):
-			return ManifestBuilder(dfn.parameters,args).visit(dfn.body)
+			return ManifestBuilder(dfn.type_params,args).visit(dfn.body)
 		raise NotImplementedError(type(dfn))
 	
 	def visit_ArrowSpec(self, spec:syntax.ArrowSpec):
@@ -94,7 +94,7 @@ class Binder(Visitor):
 		self.ok = False
 	
 	def bind(self, formal: SophieType, actual: SophieType):
-		if actual is BOTTOM:
+		if actual is BOTTOM or formal.number == actual.number:
 			return
 		else:
 			self.visit(formal, actual)
@@ -112,27 +112,38 @@ class Binder(Visitor):
 	
 	def parallel(self, formal: Sequence[SophieType], actual: Sequence[SophieType]):
 		assert len(formal) == len(actual)
-		return [self.bind(f, a) for f, a in zip(formal, actual)]
+		for f, a in zip(formal, actual): self.bind(f, a)
 	
 	def visit_ProductType(self, formal: ProductType, actual: SophieType):
 		if not isinstance(actual, ProductType):
 			return self.fail()
-		if formal.number == actual.number:
-			return
 		if len(formal.fields) != len(actual.fields):
 			return self.fail()
 		self.parallel(formal.fields, actual.fields)
 		
-	def visit_OpaqueType(self, formal: OpaqueType, actual: SophieType):
-		if formal.number == actual.number:
-			return
+	def visit_ArrowType(self, formal: ArrowType, actual: SophieType):
+		if isinstance(actual, ArrowType):
+			# Use a nested type-environment to bind the arguments "backwards":
+			# The argument to the formal-function must be acceptable to the actual-function.
+			# The actual-function does its work on that set of bindings.
+			# The actual-result, which should presumably be concrete,
+			# must be suitable as what the formal-result dictates.
+			save_gamma = self.gamma
+			self.gamma = dict(save_gamma)  # Generally fairly small, so asymptotic is NBD here.
+			self.bind(actual.arg, formal.arg)
+			result = actual.res.visit(Rewriter(self.gamma))
+			self.gamma = save_gamma
+			self.bind(formal.res, result)
+		elif isinstance(actual, UDFType):
+			self.fail()
 		else:
 			self.fail()
 	
+	def visit_OpaqueType(self, formal: OpaqueType, actual: SophieType):
+		self.fail()
+	
 	def visit_SumType(self, formal: SumType, actual: SophieType):
-		if formal.number == actual.number:
-			return
-		elif isinstance(actual, SumType):
+		if isinstance(actual, SumType):
 			if formal.variant is actual.variant:
 				self.parallel(formal.type_args, actual.type_args)
 			else:
@@ -232,7 +243,7 @@ class UnionFinder(Visitor):
 			return self.visit_TaggedRecord(that, this)
 		elif isinstance(that, EnumType):
 			if this.st.variant is that.st.variant:
-				type_args = tuple(BOTTOM for _ in this.st.variant.parameters)
+				type_args = tuple(BOTTOM for _ in this.st.variant.type_params)
 				return SumType(this.st.variant, type_args)
 
 	
@@ -263,15 +274,15 @@ class DeductionEngine(Visitor):
 		pass
 	
 	def visit_Record(self, r: syntax.Record):
-		type_args = [TypeVariable() for _ in r.parameters]
+		type_args = [TypeVariable() for _ in r.type_params]
 		self._types[r] = RecordType(r, type_args)
-		arg = ManifestBuilder(r.parameters, type_args).visit(r.spec)
+		arg = ManifestBuilder(r.type_params, type_args).visit(r.spec)
 		self._constructors[r] = ArrowType(arg, self._types[r])
 	
 	def visit_Variant(self, v: syntax.Variant):
-		type_args = [TypeVariable() for _ in v.parameters]
+		type_args = [TypeVariable() for _ in v.type_params]
 		self._types[v] = SumType(v, type_args)
-		builder = ManifestBuilder(v.parameters, type_args)
+		builder = ManifestBuilder(v.type_params, type_args)
 		for st in v.subtypes:
 			if st.body is None:
 				self._constructors[st] = EnumType(st)
@@ -281,8 +292,8 @@ class DeductionEngine(Visitor):
 				self._constructors[st] = ArrowType(arg, res)
 				
 	def visit_TypeAlias(self, a: syntax.TypeAlias):
-		type_args = [TypeVariable() for _ in a.parameters]
-		self._types[a] = it = ManifestBuilder(a.parameters, type_args).visit(a.body)
+		type_args = [TypeVariable() for _ in a.type_params]
+		self._types[a] = it = ManifestBuilder(a.type_params, type_args).visit(a.body)
 		if isinstance(it, RecordType):
 			formals = self._types[it.symbol].type_args
 			original = self._constructors[it.symbol]
@@ -432,7 +443,7 @@ class DeductionEngine(Visitor):
 		if isinstance(subject_type, SumType) and subject_type.variant is mx.variant:
 			return try_everything(subject_type.type_args)
 		elif subject_type is BOTTOM:
-			return try_everything([BOTTOM] * len(mx.variant.parameters))
+			return try_everything([BOTTOM] * len(mx.variant.type_params))
 		elif isinstance(subject_type, SubType) and subject_type.st.variant is mx.variant:
 			branch = mx.dispatch.get(subject_type.st.nom.text, mx.otherwise)
 			env[mx.subject] = subject_type
@@ -445,12 +456,16 @@ class DeductionEngine(Visitor):
 		lhs_type = self.visit(fr.lhs, env)
 		if isinstance(lhs_type, RecordType):
 			spec = lhs_type.symbol.spec
-			parameters = lhs_type.symbol.parameters
+			parameters = lhs_type.symbol.type_params
 		elif isinstance(lhs_type, TaggedRecord):
 			spec = lhs_type.st.body
-			parameters = lhs_type.st.variant.parameters
+			parameters = lhs_type.st.variant.type_params
 		elif lhs_type is BOTTOM:
-			return BOTTOM
+			# In principle the evaluator could make an observation / infer a constraint
+			return lhs_type
+		elif lhs_type is ERROR:
+			# Complaint has already been issued.
+			return lhs_type
 		else:
 			self._report.type_has_no_fields(env[CODE_SOURCE], fr, lhs_type)
 			return ERROR

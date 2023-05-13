@@ -4,6 +4,7 @@ By the time this pass is finished, every name points to its symbol table entry,
 from which we can find the kind, type, and definition.
 """
 from importlib import import_module
+from typing import Union
 from boozetools.support.foundation import Visitor, strongly_connected_components_hashable
 from boozetools.support.symtab import NoSuchSymbol, SymbolAlreadyExists
 from . import syntax, diagnostics
@@ -69,9 +70,9 @@ class WordDefiner(_TopDown):
 		self.all_match_expressions = module.all_match_expressions = []
 		self.all_functions = module.all_functions = []
 		
-		for d in module.imports: self.visit(d, module)
+		for d in module.imports: self.visit_ImportModule(d, module)
 		for td in module.types: self.visit(td)
-		for d in module.foreign: self.visit(d, module.globals)
+		for d in module.foreign: self.visit_ImportForeign(d)
 		
 		if self.missing_foreign:
 			self._on_error(self.missing_foreign, "Some foreign code could not be found.")
@@ -91,14 +92,17 @@ class WordDefiner(_TopDown):
 	
 	def _declare_type(self, td:syntax.TypeDeclaration):
 		self._install(self.globals, td)
-		ps = td.param_space = self.globals.new_child(place=td)
-		for p in td.parameters:
-			self._install(ps, p)
+		self._define_type_params(td)
 	
+	def _define_type_params(self, item:Union[syntax.TypeDeclaration, syntax.FFI_Group]):
+		ps = item.param_space = self.globals.new_child(place=item)
+		for p in item.type_params:
+			self._install(ps, p)
+
 	def visit_Opaque(self, o:syntax.Opaque):
 		self._install(self.globals, o)
-		if o.parameters:
-			self._on_error(o.parameters, "Opaque types are not to be made generic.")
+		if o.type_params:
+			self._on_error(o.type_params, "Opaque types are not to be made generic.")
 	
 	def visit_Variant(self, v:syntax.Variant):
 		self._declare_type(v)
@@ -178,20 +182,21 @@ class WordDefiner(_TopDown):
 				self._on_error([im.nom, yonder], "There is no corresponding symbol to import.")
 		pass
 	
-	def visit_ImportForeign(self, d:syntax.ImportForeign, env:NS):
+	def visit_ImportForeign(self, d:syntax.ImportForeign):
 		try: py_module = import_module(d.source.value)
 		except ModuleNotFoundError: self.missing_foreign.append(d.source)
 		except ImportError: self.broken_foreign.append(d.source)
 		else:
 			for group in d.groups:
+				self._define_type_params(group)
 				for sym in group.symbols:
-					self.visit(sym, env, py_module)
+					self.visit(sym, group.param_space, py_module)
 	
 	def visit_FFI_Alias(self, sym:syntax.FFI_Alias, env:NS, py_module):
 		key = sym.nom.text if sym.alias is None else sym.alias.value
 		try: sym.val = getattr(py_module, key)
 		except KeyError: self.missing_foreign.append(sym)
-		else: self._install(env, sym)
+		else: self._install(self.globals, sym)
 
 
 
@@ -297,9 +302,6 @@ class WordResolver(_TopDown):
 			assert isinstance(im, syntax.ImportModule)
 			ref.dfn = self._lookup(ref.nom, im.module.globals)
 	
-	def visit_GenericType(self, ref:syntax.ExplicitTypeVariable, env:NS):
-		ref.dfn = self._lookup(ref.nom, env)
-	
 	def visit_TypeCall(self, tc:syntax.TypeCall, env:NS):
 		self.visit(tc.ref, env)
 		for p in tc.arguments:
@@ -333,7 +335,7 @@ class WordResolver(_TopDown):
 		for ref in d.linkage or ():
 			self.visit(ref, self.module.globals)
 		for group in d.groups:
-			self.visit(group.type_expr, self.module.globals)
+			self.visit(group.type_expr, group.param_space)
 
 class Bogon(syntax.Symbol):
 	
@@ -389,7 +391,7 @@ class AliasChecker(Visitor):
 		self.graph[tc] = edges = list(tc.arguments)
 		referent = tc.ref.dfn
 		if isinstance(referent, syntax.TypeDeclaration):
-			param_arity = len(referent.parameters)
+			param_arity = len(referent.type_params)
 			edges.append(referent)
 		elif isinstance(referent, syntax.TypeParameter):
 			param_arity = 0

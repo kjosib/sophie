@@ -49,7 +49,9 @@ reference -> name     :PlainReference
 ```
 type_declaration -> name IS OPAQUE                        :Opaque
                   | name IS type_body                     :concrete_type
-                  | name square_list(name) IS type_body   :generic_type
+                  | name type_parameters IS type_body   :generic_type
+
+type_parameters -> square_list(name)   :type_parameters
 
 type_body -> simple_type | record_spec | variant_spec
 simple_type -> generic(simple_type) | arrow_of(simple_type)
@@ -156,7 +158,7 @@ import_directive -> FOREIGN short_string ffi_linkage ffi_body   :ImportForeign
 
 ffi_linkage -> round_list(reference)     |    '(' ')' :empty    |    :nothing
 ffi_body    -> WHERE semicolon_list(ffi_group)  END             |    :empty
-ffi_group   -> comma_list(ffi_symbol) ':' optional(square_list(name)) simple_type  :FFI_Group
+ffi_group   -> comma_list(ffi_symbol) ':' optional(type_parameters) simple_type  :FFI_Group
 ffi_symbol  -> name                    :FFI_Symbol
              | name '@' short_string   :FFI_Alias
 ```
