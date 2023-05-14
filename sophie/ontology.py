@@ -1,4 +1,5 @@
-from typing import Any
+from pathlib import Path
+from typing import Any, Optional, TypeVar, Generic
 from boozetools.support.symtab import NameSpace
 
 class Nom:
@@ -47,3 +48,11 @@ class Reference(Expr):
 	dfn:Symbol   # Should happen during WordResolver pass.
 	def __init__(self, nom:Nom): self.nom = nom
 
+T = TypeVar("T")
+
+class ActivationRecord(Generic[T]):
+	bindings : dict[Symbol, T]
+	def __init__(self, source_path:Path, static_link:Optional["ActivationRecord[T]"], keys, values):
+		self.source_path = source_path
+		self.static_link = static_link
+		self.bindings = dict(zip(keys, values))

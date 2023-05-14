@@ -48,7 +48,7 @@ class SophieType:
 	def exemplar(self) -> "SophieType": return _type_numbering_subsystem.exemplars[self.number]
 	def __str__(self) -> str: return self.visit(Render())
 
-ENV = dict[syntax.Symbol, SophieType]
+ENV = ontology.ActivationRecord[SophieType]
 
 class TypeVariable(SophieType):
 	"""Did I say value-object? Not for type variables! These have identity."""
@@ -116,7 +116,7 @@ class ProductType(SophieType):
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_product(self)
 	
 class ArrowType(SophieType):
-	def __init__(self, arg: SophieType, res: SophieType):
+	def __init__(self, arg: ProductType, res: SophieType):
 		self.arg, self.res = arg.exemplar(), res.exemplar()
 		super().__init__(self.arg, self.res)
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_arrow(self)
@@ -127,7 +127,7 @@ class UDFType(SophieType):
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_udf(self)
 	def __init__(self, fn:syntax.UserDefinedFunction, static_env:ENV):
 		assert isinstance(fn, syntax.UserDefinedFunction)
-		assert isinstance(static_env, dict)
+		assert isinstance(static_env, ontology.ActivationRecord)
 		self.fn = fn
 		self.static_env = static_env
 		# NB: The uniqueness notion here is excessive, but there's a plan to deal with that.

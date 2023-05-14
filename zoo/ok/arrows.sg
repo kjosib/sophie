@@ -15,7 +15,10 @@ type:
 
 define:
     two = two_arrows(arrow, arrow);
+    more = two_arrows(id, id);
 
 begin:
     two.foo("fred");
     two.bar(5);
+    more.foo("wilma");
+    more.bar(7);
