@@ -10,7 +10,7 @@ define:
         goal = int(r*100)+1;
         turn(score) = echo(["What is your guess? "], read(guess)) where
             guess(g) = case val(g) as v of
-                this -> consider(int(g.item));  # I find `g.item` here verbose and redundant.
+                this -> consider(int(v.item));  # I find `v.item` here verbose and redundant.
                 nope -> echo(["I didn't grok that number.", EOL], turn(score));
             esac;
             consider(g:number) = case

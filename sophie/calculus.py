@@ -155,7 +155,7 @@ class TypeVisitor:
 	def on_variable(self, v:TypeVariable): raise NotImplementedError(type(self))
 	def on_opaque(self, o: OpaqueType): raise NotImplementedError(type(self))
 	def on_record(self, r:RecordType): raise NotImplementedError(type(self))
-	def on_sum(self, n:SumType): raise NotImplementedError(type(self))
+	def on_sum(self, s:SumType): raise NotImplementedError(type(self))
 	def on_tag_enum(self, e: EnumType): raise NotImplementedError(type(self))
 	def on_tag_record(self, t: TaggedRecord): raise NotImplementedError(type(self))
 	def on_arrow(self, a:ArrowType): raise NotImplementedError(type(self))
@@ -179,8 +179,8 @@ class Render(TypeVisitor):
 		return "[%s]"%(",".join(t.visit(self) for t in params))
 	def on_record(self, r: RecordType):
 		return r.symbol.nom.text+self._generic(r.type_args)
-	def on_sum(self, n: SumType):
-		return n.variant.nom.text+self._generic(n.type_args)
+	def on_sum(self, s: SumType):
+		return s.variant.nom.text+self._generic(s.type_args)
 	def on_tag_enum(self, e: EnumType):
 		return e.st.nom.text
 	def on_tag_record(self, t: TaggedRecord):

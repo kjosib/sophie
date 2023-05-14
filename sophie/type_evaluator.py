@@ -79,6 +79,8 @@ class Rewriter(TypeVisitor):
 		return RecordType(r.symbol, [a.visit(self) for a in r.type_args])
 	def on_variable(self, v: TypeVariable):
 		return self._gamma.get(v, BOTTOM)
+	def on_sum(self, s:SumType):
+		return SumType(s.variant, [a.visit(self) for a in s.type_args])
 
 class Binder(Visitor):
 	"""
