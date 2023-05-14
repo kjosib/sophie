@@ -13,8 +13,8 @@ The tricky bit is (mutually) recursive functions.
 """
 from typing import Iterable, Sequence
 from boozetools.support.foundation import Visitor
-
-from . import ontology, syntax, primitive, diagnostics
+from .ontology import Symbol, Expr
+from . import syntax, primitive, diagnostics
 from .resolution import DependencyPass
 from .calculus import (
 	ENV, SophieType, TypeVisitor,
@@ -24,9 +24,8 @@ from .calculus import (
 	BOTTOM, ERROR,
 )
 
-# A couple useful keys for what's fast becoming an activation record:
-STATIC_LINK = "STATIC_LINK"
-CODE_SOURCE = "CODE_SOURCE"
+class ArityError(Exception):
+	pass
 
 _literal_type_map : dict[type, OpaqueType] = {
 	bool: primitive.literal_flag,
@@ -86,9 +85,10 @@ class Binder(Visitor):
 	Discovers (or fails) a substitution-of-variables (in the formal)
 	which make the formal accept the actual as an instance.
 	"""
-	def __init__(self):
+	def __init__(self, engine:"DeductionEngine"):
 		self.gamma = {}
 		self.ok = True
+		self._engine = engine
 		
 	def fail(self):
 		self.ok = False
@@ -135,7 +135,14 @@ class Binder(Visitor):
 			self.gamma = save_gamma
 			self.bind(formal.res, result)
 		elif isinstance(actual, UDFType):
-			self.fail()
+			if len(actual.fn.params) != len(formal.arg.fields):
+				self.fail()
+			else:
+				result = self._engine.apply_UDF(actual, formal.arg.fields)
+				if result is ERROR:
+					self.fail()
+				else:
+					self.bind(formal.res, result)
 		else:
 			self.fail()
 	
@@ -267,7 +274,7 @@ class DeductionEngine(Visitor):
 		for td in module.types: self.visit(td)
 		for fi in module.foreign: self.visit(fi)
 		for fn in module.all_functions: self._source_path[fn] = source_path
-		env = {CODE_SOURCE:source_path}
+		env = ENV(source_path, None, (), ())
 		for expr in module.main:
 			result = self.visit(expr, env)
 			self._report.info(result)
@@ -311,11 +318,18 @@ class DeductionEngine(Visitor):
 	def visit_Literal(expr: syntax.Literal, env:ENV) -> SophieType:
 		return _literal_type_map[type(expr.value)]
 	
-	def _apply(self, fn:syntax.UserDefinedFunction, env:ENV) -> SophieType:
+	def apply_UDF(self, fn_type:UDFType, arg_types:Sequence[SophieType]) -> SophieType:
+		fn = fn_type.fn
+		arity = len(fn.params)
+		if arity != len(arg_types): raise ArityError
+		inner = ENV(self._source_path[fn], fn_type.static_env, fn.params, arg_types)
+		return self.exec_UDF(fn, inner)
+		
+	def exec_UDF(self, fn:syntax.UserDefinedFunction, env:ENV):
 		# The part where memoization must happen.
 		memo_symbols = self._deps_pass.depends[fn]
 		source_depth = fn.static_depth + bool(fn.params)  # By construction, this is the depth of the given env, above.
-		memo_types = tuple(_chase(source_depth, p, env)[p].number for p in memo_symbols)
+		memo_types = tuple(_chase(source_depth, p, env).bindings[p].number for p in memo_symbols)
 		memo_key = fn, memo_types
 		if memo_key in self._memo:
 			return self._memo[memo_key]
@@ -323,6 +337,9 @@ class DeductionEngine(Visitor):
 			self._recursion[memo_key] = True
 			return BOTTOM
 		else:
+			# TODO: check argument and return against declared contract.
+			#       Could do this with a binder if FormalParam gets associated SophieType.
+			#       Also, pass around judgements not just types.
 			self._recursion[memo_key] = False
 			self._memo[memo_key] = self.visit(fn.expr, env)
 			if self._recursion.pop(memo_key):
@@ -331,11 +348,11 @@ class DeductionEngine(Visitor):
 					prior = self._memo[memo_key]
 					self._memo[memo_key] = self.visit(fn.expr, env)
 				if prior is BOTTOM:
-					self._report.ill_founded_function(env[CODE_SOURCE], fn)
+					self._report.ill_founded_function(env.source_path, fn)
 					
 		return self._memo[memo_key]
 	
-	def _call_site(self, fn_type, args:Sequence[ontology.Expr], env:ENV) -> SophieType:
+	def _call_site(self, fn_type, args:Sequence[Expr], env:ENV) -> SophieType:
 		arg_types = [self.visit(a, env) for a in args]
 		if any(t is ERROR for t in arg_types):
 			return ERROR
@@ -344,30 +361,28 @@ class DeductionEngine(Visitor):
 			assert isinstance(fn_type.arg, ProductType)  # Maybe not forever, but now.
 			arity = len(fn_type.arg.fields)
 			if arity != len(args):
-				self._report.wrong_arity(env[CODE_SOURCE], arity, args)
+				self._report.wrong_arity(env.source_path, arity, args)
 				return ERROR
 			
-			binder = Binder()
+			binder = Binder(self)
 			for expr, need, got in zip(args, fn_type.arg.fields, arg_types):
 				binder.bind(need, got)
 				if not binder.ok:
-					self._report.bad_type(env[CODE_SOURCE], expr, need, got)
+					self._report.bad_type(env.source_path, expr, need, got)
 					return ERROR
 
 			# 2. Return the arrow's result-type rewritten using the bindings thus found.
 			return fn_type.res.visit(Rewriter(binder.gamma))
 		
 		elif isinstance(fn_type, UDFType):
-			formals = fn_type.fn.params
-			if len(formals) != len(args):
-				self._report.wrong_arity(env[CODE_SOURCE], len(formals), args)
+			try:
+				return self.apply_UDF(fn_type, arg_types)
+			except ArityError:
+				self._report.wrong_arity(env.source_path, len(fn_type.fn.params), args)
 				return ERROR
-			inner: ENV = dict(zip(formals, arg_types))
-			inner[STATIC_LINK] = fn_type.static_env
-			inner[CODE_SOURCE] = self._source_path[fn_type.fn]
-			return self._apply(fn_type.fn, inner)
-		
-		raise NotImplementedError(type(fn_type))
+			
+		else:
+			raise NotImplementedError(type(fn_type))
 	
 	def visit_Call(self, site: syntax.Call, env: ENV) -> SophieType:
 		fn_type = self.visit(site.fn_exp, env)
@@ -395,10 +410,10 @@ class DeductionEngine(Visitor):
 			if target.params:
 				return UDFType(target, static_env).exemplar()
 			else:
-				return self._apply(target, static_env)
+				return self.exec_UDF(target, static_env)
 		else:
 			assert isinstance(target, (syntax.FormalParameter, syntax.Subject))
-			return static_env[target]
+			return static_env.bindings[target]
 		
 	def visit_ExplicitList(self, el:syntax.ExplicitList, env:ENV) -> SumType:
 		# Since there's guaranteed to be at least one value,
@@ -408,7 +423,7 @@ class DeductionEngine(Visitor):
 		for e in el.elts:
 			union_find.unify_with(self.visit(e, env))
 			if union_find.died:
-				self._report.type_mismatch(env[CODE_SOURCE], el.elts[0], e)
+				self._report.type_mismatch(env.source_path, el.elts[0], e)
 				return ERROR
 		element_type = union_find.result()
 		return SumType(primitive.LIST, (element_type,))
@@ -417,12 +432,12 @@ class DeductionEngine(Visitor):
 		if_part_type = self.visit(cond.if_part, env)
 		if if_part_type is ERROR: return ERROR
 		if if_part_type != primitive.literal_flag:
-			self._report.bad_type(env[CODE_SOURCE], cond.if_part, primitive.literal_flag, if_part_type)
+			self._report.bad_type(env.source_path, cond.if_part, primitive.literal_flag, if_part_type)
 			return ERROR
 		union_find = UnionFinder(self.visit(cond.then_part, env))
 		union_find.unify_with(self.visit(cond.else_part, env))
 		if union_find.died:
-			self._report.type_mismatch(env[CODE_SOURCE], cond.then_part, cond.else_part)
+			self._report.type_mismatch(env.source_path, cond.then_part, cond.else_part)
 			return ERROR
 		return union_find.result()
 	
@@ -430,10 +445,10 @@ class DeductionEngine(Visitor):
 		def try_everything(type_args:Sequence[SophieType]):
 			union_find = UnionFinder(BOTTOM)
 			for alt in mx.alternatives:
-				env[mx.subject] = _hypothesis(alt.pattern.dfn, type_args)
+				env.bindings[mx.subject] = _hypothesis(alt.pattern.dfn, type_args)
 				union_find.unify_with(self.visit(alt.sub_expr, env))
 				if union_find.died:
-					self._report.type_mismatch(env[CODE_SOURCE], mx.alternatives[0].sub_expr, alt.sub_expr)
+					self._report.type_mismatch(env.source_path, mx.alternatives[0].sub_expr, alt.sub_expr)
 					return ERROR
 			return union_find.result()
 
@@ -446,10 +461,10 @@ class DeductionEngine(Visitor):
 			return try_everything([BOTTOM] * len(mx.variant.type_params))
 		elif isinstance(subject_type, SubType) and subject_type.st.variant is mx.variant:
 			branch = mx.dispatch.get(subject_type.st.nom.text, mx.otherwise)
-			env[mx.subject] = subject_type
+			env.bindings[mx.subject] = subject_type
 			return self.visit(branch, env)
 		else:
-			self._report.bad_type(env[CODE_SOURCE], mx.subject.expr, mx.variant, subject_type)
+			self._report.bad_type(env.source_path, mx.subject.expr, mx.variant, subject_type)
 			return ERROR
 
 	def visit_FieldReference(self, fr:syntax.FieldReference, env:ENV) -> SophieType:
@@ -467,17 +482,17 @@ class DeductionEngine(Visitor):
 			# Complaint has already been issued.
 			return lhs_type
 		else:
-			self._report.type_has_no_fields(env[CODE_SOURCE], fr, lhs_type)
+			self._report.type_has_no_fields(env.source_path, fr, lhs_type)
 			return ERROR
 		try:
 			field_spec = spec.field_space[fr.field_name.text]
 		except KeyError:
-			self._report.record_lacks_field(env[CODE_SOURCE], fr, lhs_type)
+			self._report.record_lacks_field(env.source_path, fr, lhs_type)
 			return ERROR
 		assert isinstance(field_spec, syntax.FormalParameter), field_spec
 		return ManifestBuilder(parameters, lhs_type.type_args).visit(field_spec.type_expr)
 
-def _hypothesis(st:ontology.Symbol, type_args:Sequence[SophieType]) -> SubType:
+def _hypothesis(st:Symbol, type_args:Sequence[SophieType]) -> SubType:
 	assert isinstance(st, syntax.SubTypeSpec)
 	body = st.body
 	if body is None:
@@ -485,7 +500,7 @@ def _hypothesis(st:ontology.Symbol, type_args:Sequence[SophieType]) -> SubType:
 	if isinstance(body, syntax.RecordSpec):
 		return TaggedRecord(st, type_args)
 
-def _chase(source_depth:int, target:ontology.Symbol, env:ENV):
+def _chase(source_depth:int, target:Symbol, env:ENV) -> ENV:
 	for _ in range(source_depth - target.static_depth):
-		env = env[STATIC_LINK]
+		env = env.static_link
 	return env
