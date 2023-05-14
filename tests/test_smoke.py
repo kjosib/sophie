@@ -28,6 +28,11 @@ class ExampleSmokeTests(unittest.TestCase):
 			with self.subTest(name):
 				_good(examples, name)
 
+	def test_interactive_examples_compile(self):
+		for name in ["guess_the_number"]:
+			with self.subTest(name):
+				_good(examples, name)
+
 	def test_other_examples(self):
 		for name in [
 			"hello_world",
