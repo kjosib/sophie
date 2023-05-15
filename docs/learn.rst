@@ -7,10 +7,10 @@ but *vive la différence!* I hope she gives you a new perspective on CS.
 
 .. contents::
     :local:
-    :depth: 2
+    :depth: 3
 
 Initial Preparations
----------------------
+~~~~~~~~~~~~~~~~~~~~~
 
 Sophie is first and foremost a language for expressing ideas about computations that might happen.
 That means you can write *and reason about* Sophie programs without any computer.
@@ -22,7 +22,7 @@ you'll need an interpreter. You can get one easily enough:
 Follow the directions at :doc:`quick_start` and then come back here.
 
 Your First Program in Sophie
-------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Virtually every programming tutorial starts the same way:
 
@@ -61,7 +61,7 @@ Let's break this down:
 
 
 Super-Fancy Calculator
---------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Here's a small program showing how math (and comments) in Sophie appears:
 
@@ -101,7 +101,7 @@ You can see more examples in the ``some_arithmetic.sg`` example file.
 	Can you make sense of the diagnostic messages?
 
 Define your own!
-------------------
+~~~~~~~~~~~~~~~~~~
 
 Functions are the backbone of programming.
 Indeed, all of computing amounts to evaluating functions of varying complexity.
@@ -145,10 +145,10 @@ Let's break this down:
     The most abstract names of all are single letters near the end of the alphabet.
 
 Apples and Oranges
---------------------
+~~~~~~~~~~~~~~~~~~~~
 
 Introducing the Type Checker
-.............................
+-----------------------------
 
 One of Sophie's key features is something called *static type-safety*.
 Before she runs any program, Sophie checks it carefully to make sure that
@@ -164,11 +164,10 @@ Try this bit of nonsense:
 
 .. literalinclude:: ../zoo/fail/type_check/num_plus_string.sg
 
-When you try to run this nonsense (and note the ``-c`` flag on the command line)::
+When you try to run this nonsense::
 
-    D:\GitHub\sophie>py -m sophie zoo\fail\type_check\num_plus_string.sg -c
+    D:\GitHub\sophie>py -m sophie zoo\fail\type_check\num_plus_string.sg
     Loading D:\GitHub\sophie\zoo\fail\type_check\num_plus_string.sg
-    -/-
     Error while Checking Types: Needed number; got something else.
     Excerpt from D:\GitHub\sophie\zoo\fail\type_check\num_plus_string.sg :
          4 :begin: 1 + "one"; end.
@@ -183,7 +182,7 @@ This turns out to be a big help as your programs gets big:
 It's easy to forget some relevant detail, but Sophie will remind you.
 
 Admittedly, these particular messages are not exactly God's gift to aspiring programmers,
-but I've tried to make them informative, and in time Sophie might get better in this regard.
+but I've tried to make them informative, and in time Sophie will get better in this regard.
 
 * Exercise:
     Try introducing some deliberate type-errors into the ``define_functions.sg`` example,
@@ -198,7 +197,7 @@ but I've tried to make them informative, and in time Sophie might get better in 
 	then you need a *much* higher degree of quality assurance. But that's a rant for another day.
 
 Checking Programs Without Running Them
-.......................................
+---------------------------------------
 
 You can ask Sophie to check your program without running it, using the ``-c`` option.
 In that case, Sophie will list the inferred types of all the functions::
@@ -210,6 +209,13 @@ In that case, Sophie will list the inferred types of all the functions::
 	2 >> area_of_rectangle : (number, number) -> number
 	1 >> five : number
 
+.. note:
+    Um... actually... this is not exactly correct anymore.
+    Right now, Sophie deduces the types of all the ``begin:`` expressions.
+    This means working through the types of functions *as they actually get used* in your program.
+    (Or else she prints an error message -- hopefully informative.)
+    Per-function type read-outs *may* come back some day, but they're not a top priority right now.
+
 Here we see the inferred types. The arrows mean "function".
 For example, ``area_of_rectangle`` is a function from ``(number, number)`` to ``number``.
 By contrast, ``five`` is just a number.
@@ -219,7 +225,11 @@ By contrast, ``five`` is just a number.
 	Does anything surprise you?
 
 How to Influence Type-Checking
-...............................
+-------------------------------
+
+.. note::
+    This section is presently on ice. I have plans to bring it back to life soon.
+    Sophie continues to recognize the syntax, but she ignores it in favor of her own deductions.
 
 If Sophie comes to surprising (or inadequate) conclusions about the types of your functions,
 it's possible to add *type annotations* to make Sophie take your intentions into account.
@@ -244,18 +254,14 @@ return-types, or nothing at all and just let Sophie read your mind.
 Type annotations are rarely necessary from Sophie's perspective,
 but they can be a nice adjunct to explanatory comments, since they get checked automatically.
 
-.. note::
-	At the moment, type inference works pretty well but it is not *quite* finished.
-	You may find it handy to use type annotations to fill holes in what Sophie can see.
-
 * Exercise:
 	Try giving an incorrect type annotation to a function, and see what happens.
-	For example, maybe you write ``double(x:flag) = x + x;``
+	For example, maybe you write ``double(x:flag) = x + x;`` and then call ``double(10)``
 
 
 
 More Fun with Functions
--------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~
 
 You can do quite a bit with functions.
 Consider this example:
@@ -287,13 +293,13 @@ Once again, let's study the bits.
     This phenomenon is called *closure*.
 
 More Apples and More Oranges
-..............................
+------------------------------
 
 * *Take a look at type-report and ``iterate_four_times`` specifically.*
 * *Discuss the types of higher-order functions generally.*
 
 Making Decisions
---------------------
+~~~~~~~~~~~~~~~~~~~~
 
 So far, we've seen arithmetic and how to use functions, but no way to decide between options.
 Let's fix that.
@@ -301,7 +307,7 @@ Sophie has three of what we call *conditional forms,* or ways to represent decis
 I'll cover the first two of these here, and the last in the section about data structures.
 
 Case Study: Age Classifier
-...........................
+---------------------------
 Here's an example of a not-always-totally-respectful age-classifier:
 
 .. literalinclude:: ../examples/case_when.sg
@@ -346,7 +352,7 @@ If no ``when`` clause is true, then Sophie evaluates the ``else`` clause instead
 	If so, how does your idea change when the conditions get more complicated?
 
 Case Study: Improved Root-Finder
-...................................
+-----------------------------------
 
 Let's improve our root-finding program.
 You may have noticed that it did significantly better with ``root(2)`` than with ``root(17)``.
@@ -415,7 +421,7 @@ Success! But ... What just happened? There's a lot going on in this case-study.
     This exercise is just practice for learning the concepts.
 
 Wrapping Up
-..............
+--------------
 
 We have seen how to do multi-way selection based on conditions,
 and we have seen a short-cut notation when there are only two options.
@@ -424,7 +430,7 @@ One or the other syntax will more or less represent how you think about
 any given decision point.
 
 Seven Moving Parts
--------------------
+~~~~~~~~~~~~~~~~~~~
 
 This might be a good point to pause and reflect.
 You have seen functions and decision points.
@@ -449,7 +455,7 @@ We've yet to tackle:
 * The eventual plans for solving *big* problems with Sophie.
 
 Fantastic Lists and Where to Find Them
---------------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 So far, almost all the data in the tutorial has been numbers,
 with the occasional bit of text (what programmers often call "strings" for historical reasons).
@@ -460,7 +466,7 @@ In other words, we want structured data.
 Sophie provides two primary data structuring conventions: records and variants.
 
 Case Study: Music Archive
-..........................
+--------------------------
 
 Suppose you're going to write some code that deals with a library of music.
 You might end up with some type definitions like this::
@@ -552,7 +558,7 @@ but within the ``cons ->`` branch, ``xs`` certainly has the subtype of ``cons``,
 so we can access ``xs.head`` and ``xs.tail`` only within that branch.
 
 Case Study: Fibonacci Numbers
-..............................
+------------------------------
 
 Everything you ever wanted to know about these numbers are at https://en.wikipedia.org/wiki/Fibonacci_number
 but here's the extremely short version:
@@ -628,7 +634,7 @@ Exercises:
 .. _Pell numbers: https://en.wikipedia.org/wiki/Pell_number
 
 The built-in list-processing functions
-.......................................
+---------------------------------------
 
 You can read the `standard preamble`_ to see all the relevant source code,
 but here's a handy list of built-in list processing functions:
@@ -671,7 +677,7 @@ A word about ``reduce``:
 
 
 Turtle Graphics
-----------------
+~~~~~~~~~~~~~~~~
 
 **Sophie** has Turtle-graphics!
 
@@ -684,7 +690,7 @@ In this early revision of **Sophie**, turtle graphics are available with no grea
 The one genuinely new concept is an ``import:`` section. For now, just follow along.
 
 Case Study: Simple Designs
-............................
+----------------------------
 
 You can display drawings by composing ``drawing`` objects containing a list of ``turtle_step`` items.
 Here's an example turtle-program that generates a couple designs:
@@ -697,7 +703,7 @@ The plan is to add fun and interesting designs to `this program <https://github.
 Useful components (like ``repeat``, above) might move into either the preamble or a standard library module (once those get invented).
 
 All the turtle-y things
-.........................
+-------------------------
 
 To activate Sophie's turtle graphics:
 
@@ -728,7 +734,7 @@ I'm not *currently* supporting filled areas, predefined shapes, multiple turtles
 I might do some of those eventually, if there's demand.
 
 Case Study: Color Spiral
-...........................
+---------------------------
 
 .. image:: color_spiral.png
 
@@ -755,8 +761,138 @@ Exercises:
   What are your favorite designs, and why?
 * Add a design and send it in!
 
+Let's Play a Game!
+~~~~~~~~~~~~~~~~~~~
+
+Sophie can hold an interactive conversation::
+
+    D:\GitHub\sophie>py -m sophie examples\guess_the_number.sg
+    I have chosen a random number from 1 to 100.
+
+    What is your guess? 50
+    Too high. Try a lower number.
+    What is your guess? 25
+    Too low. Try a higher number.
+    What is your guess? 37
+    Too low. Try a higher number.
+    What is your guess? 45
+    You win after 4 guesses!
+
+You can find the code for the game under ``examples/guess_the_number.sg``, but here it is:
+
+.. literalinclude:: ../examples/guess_the_number.sg
+
+Guided Tour of the Game
+------------------------
+
+Preliminaries
+...............
+
+Let's take a guided tour.
+We'll start at the top::
+
+    import:
+        sys."teletype.sg" (done, echo, read, random);
+
+You can think of ``done, echo, read, random`` as four kinds of action a text-based game might take.
+Actually, this might be a good time to have a glance at
+`the teletype module. <https://github.com/kjosib/sophie/blob/main/sophie/sys/teletype.sg>`_
+Mainly it just defines those four words as subtypes of ``action``.
+(It also performs a special kind of import you can learn more about in :doc:`a later chapter <ffi>`.)
+
+The Main Idea
+................
+
+The main program gives an introduction and then begins a game with a random number.
+Here's an excerpt for that part::
+
+    define:
+        EOL = chr(10);
+        intro = ["I have chosen a random number from 1 to 100.", EOL, EOL];
+        game(r) = turn(1) where
+            goal = int(r*100)+1;
+            ...
+        ...
+    begin:
+        echo(intro, random(game));
+
+* The expression ``chr(10)`` refers to the "newline" character.
+* The ``echo`` action prints text, then invokes the subsequent action.
+  The text here is a list of strings. It's a list, rather than single string, for ... reasons.
+* The ``random`` action picks a real number at least zero, but less than one, which gets passed to ``game`` here.
+* The ``goal`` function scales that number up to between 1 and 100 inclusive.
+  Here, the ``int`` function takes a real number and converts it to an integer by dropping the fractional part.
+
+The ``turn`` function is responsible for most of the game.
+It's job is to prompt for a guess and then interpret that guess as either too high, too low, or just right::
+
+        turn(score) = echo(["What is your guess? "], read(guess)) where
+            ...
+
+* The ``read`` action takes one line of input from the player and passes it to, in this case, ``guess``.
+
+Analyzing Input
+................
+
+Evidently, ``guess`` must analyze the input. Before we worry about comparing the guess to the goal,
+there's another important possibility. The player might enter something which is not a number::
+
+            guess(g) = case val(g) as v of
+                this -> consider(int(v.item));
+                nope -> echo(["I didn't grok that number.", EOL], turn(score));
+            esac;
+
+The ``val`` function turns a string into a number. Or rather, it *tries* to do that.
+Not all strings make sense as numbers. So actually, the ``val`` function returns something
+called ``maybe[number]``.
+
+What's ``maybe`` about? Quite simply, ``maybe`` is about things that might or might not have an answer.
+What's the number corresponding to ``"California"``? The answer to that question is ``nope``.
+
+Notice also the ``as v`` in the top of the ``case`` expression. That is the closest thing **Sophie** has
+to assignment. Within the boundaries of the ``case`` expression, ``v`` here means the value of ``val(g)``.
+And that's how we're able to use ``v.item`` on the second line and *for sure* have a number at this point.
+
+.. note::
+    Personally, I consider it a bit wordy to have to say ``v.item`` instead of just ``v``.
+    At some point I plan to change it, but that will take some nontrivial work.
+
+Finally, notice how in the ``nope ->`` section, the result includes a call back to ``turn(score)``.
+This decision says we do not charge the player a guess for having fat-fingered her number.
+
+Evaluating a Guess
+...................
+
+Now let's see what happens if the input actually *is* a number::
+
+            consider(g:number) = case
+                when g > goal then echo(['Too high. Try a lower number.', EOL], turn(score+1));
+                when g < goal then echo(['Too low. Try a higher number.', EOL], turn(score+1));
+                else echo(["You win after ", str(score), " guesses!", EOL], done);
+            esac;
+
+By now, this should be easy reading. Things of particular interest here:
+
+* When ``g < goal`` or ``g > goal``, and in contrast to the *not-a-number* case,
+  the subsequent turn operates with the next higher score.
+* The ``str`` function turns a number into a string.
+* Notice the blank spaces after ``after`` and before ``guesses``.
+  If they were absent, then you might see something like ``You win after4guesses!`` in the output.
+  That would be hard to read. The point is that **Sophie** takes you *exactly* at your word,
+  and does not casually insert spaces between bits of what you ``echo``.
+
+Concluding Remarks
+-------------------
+
+
+In principle, you now have what it takes to make a wide variety of interactive programs.
+In practice, it will take practice!
+
+Also in practice, **Sophie** will benefit from a greater variety of interactive capabilities.
+These new abilities will come in time.
+
 Modular Design of Larger Programs
-----------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 * You may have noticed the definition of ``repeat`` repeated in each of the turtle-graphics case studies.
   How can we get away from repeating ourselves in that manner?
@@ -800,7 +936,7 @@ I'll grant it's not a very imposing result, but it shows that the mechanism work
 You can read more about different ways to use modules in the :doc:`reference`.
 
 All the other bits
-------------------
+~~~~~~~~~~~~~~~~~~
 
 These sections are still on the drawing board...
 
@@ -811,12 +947,12 @@ These sections are still on the drawing board...
 * List-builder notation
 * Starmap-like functors
 * Input from files
-* Input from the console, and other event-driven things
+* Other event-driven things, such as SDL bindings.
 * Ad-hoc polymorphic multimethods (sort of; I have some notions.)
 
 
 Congratulations
------------------
+~~~~~~~~~~~~~~~~~
 If you've gotten this far, you have taken a step into a wider world.
 
 You can reach the author at kjosib@gmail.com.

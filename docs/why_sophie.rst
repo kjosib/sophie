@@ -42,5 +42,6 @@ When you internalize what Sophie offers, most of the others will seem more or le
 
 .. note::
     Just to be clear, Sophie is not finished. You can't yet write the next hit video game in Sophie. Yet.
+    (Unless that next hit happens to be a text adventure.)
     But you can do some foundational things, learn some general skills, and make Sophie better along the way.
 

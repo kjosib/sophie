@@ -1,4 +1,5 @@
 import sys
+import random
 
 NIL : dict
 
@@ -18,11 +19,13 @@ def run_app(force, app):
 		if tag == 'done': return
 		elif tag == 'echo':
 			emit(force, force(app['text']))
-			app = app['next']
+			app = force(app['next'])
 		elif tag == 'read':
-			raise NotImplementedError
+			proc = force(app['next'])
+			app = force(proc.apply([input()]))
 		elif tag == 'random':
-			raise NotImplementedError
+			proc = force(app['next'])
+			app = force(proc.apply([random.random()]))
 
 def emit(force, text):
 	while text is not NIL:
