@@ -185,6 +185,54 @@ which is an error. Otherwise:
 * Repeat the above two-step dance until the resulting type stops changing.
 * Call it a day.
 
+Functions as Type Transformers
+--------------------------------
+
+Sophie's type-evaluator has this concept that user-defined functions do not *have* types,
+and they are not types *in themselves*, but rather they *transform* types in the same manner
+that they transform values.
+This and a matching type-checking algorithm are why we *can indeed* have nice things.
+Behold:
+
+High-Order Functions as Parameters
+....................................
+
+We can pass a high-order function as a parameter to another function,
+and use that first function generically:
+
+.. literalinclude:: ../examples/generic_parameter.sg
+
+This *looks* like the sort of thing that would normally require a dynamic language.
+How's it type-check? It's actually quite straightforward:
+Every reference to a function resolves to a type. If it's a native function,
+then it resolves to whatever type the FFI promised. But if it's a user-defined function,
+then we have special "user-function" types in the type-calculus.
+These types can close over contextual types in the same way nested functions can close over values.
+
+Nothing is concerned with the *generic* type of ``map``.
+It's just that whenever ``m`` gets applied, it has the *UDF-Type* of ``map``,
+which is *implicitly* generic as an *emergent property* of ``map``'s definition.
+
+High-Order Functions as Concrete Data
+.......................................
+
+We can also pass generic functions -- both native and user-defined -- as parameters
+to constructors, and then use those functions according to their indicated manner:
+
+.. literalinclude:: ../zoo/ok/arrows.sg
+
+Now, when it comes time to put a user-defined function into a record-like datum,
+Sophie's type-checker splits the field-type's arrow into argument and result types.
+She feeds the argument into the UDF-type, runs the normal deductions, and then
+binds the result back to the expected result-type. If this works, then great!
+The function *will serve* in that role. Otherwise, it's a type-error.
+
+There is one gotcha: You cannot necessarily play this trick with generic record types.
+You will generally create and refer to a concrete alias to the generic type if you want to store functions as fields.
+By design, the expression type-deduction routines do not expect type-variables in actual-parameters.
+You might get away with it on occasion,
+but only if the function does not use the type-variable in any meaningful way.
+
 
 Resolving Imports
 ~~~~~~~~~~~~~~~~~~~~

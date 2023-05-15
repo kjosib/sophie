@@ -3,7 +3,7 @@
 import:
 
 foreign "sophie.adapters.yarn" where
-	arrow@"identity" : [a] (a)->a;
+	native_id@"identity" : [a] (a)->a;
 end;
 
 
@@ -14,11 +14,11 @@ type:
     two_arrows is (foo:string_arrow, bar:number_arrow);
 
 define:
-    two = two_arrows(arrow, arrow);
+    two = two_arrows(native_id, native_id);
     more = two_arrows(id, id);
 
 begin:
-    two.foo("fred");
-    two.bar(5);
-    more.foo("wilma");
-    more.bar(7);
+    two.foo("fred");   # Prints "fred"
+    two.bar(5);        # Prints "5"
+    more.foo("wilma"); # Prints "wilma"
+    more.bar(7);       # Prints "7"
