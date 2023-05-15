@@ -1,4 +1,4 @@
-# Simple guess-the-number game.
+# Guess-the-number game.
 
 import:
     sys."teletype.sg" (done, echo, read, random);
@@ -10,7 +10,7 @@ define:
         goal = int(r*100)+1;
         turn(score) = echo(["What is your guess? "], read(guess)) where
             guess(g) = case val(g) as v of
-                this -> consider(int(v.item));  # I find `v.item` here verbose and redundant.
+                this -> consider(int(v.item));
                 nope -> echo(["I didn't grok that number.", EOL], turn(score));
             esac;
             consider(g:number) = case
@@ -22,4 +22,4 @@ define:
     end game;
 
 begin:
-    echo(intro, random(game));   # This does not work yet. I'll remove this comment when it does.
+    echo(intro, random(game));

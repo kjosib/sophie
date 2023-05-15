@@ -11,13 +11,7 @@ from . import syntax, primitive, ontology
 
 STATIC_LINK = object()
 
-class Procedure(abc.ABC):
-	""" A run-time object that can be applied with arguments. """
-	@abc.abstractmethod
-	def apply(self, caller_env:dict, args:list[syntax.ValExpr]) -> Any:
-		pass
-
-STRICT_VALUE = Union[int, float, str, Procedure, namedtuple, "Closure", dict]
+STRICT_VALUE = Union[int, float, str, "Procedure", namedtuple, dict]
 
 ABSENT = object()
 class Thunk:
@@ -30,7 +24,7 @@ class Thunk:
 		
 	def force(self) -> STRICT_VALUE:
 		if self._value is ABSENT:
-			self._value = actual_value(evaluate(self._expr, self._dynamic_env))
+			self._value = strict(self._expr, self._dynamic_env)
 			del self._dynamic_env, self._expr
 		return self._value
 	
@@ -41,6 +35,12 @@ class Thunk:
 			return str(self._value)
 
 LAZY_VALUE = Union[STRICT_VALUE, Thunk]
+
+class Procedure(abc.ABC):
+	""" A run-time object that can be applied with arguments. """
+	@abc.abstractmethod
+	def apply(self, args: list[LAZY_VALUE]) -> Any:
+		pass
 
 def actual_value(it:LAZY_VALUE) -> STRICT_VALUE:
 	"""
@@ -83,7 +83,7 @@ def _eval_shortcut_exp(expr:syntax.ShortCutExp, dynamic_env:dict):
 def _eval_call(expr:syntax.Call, dynamic_env:dict):
 	procedure = strict(expr.fn_exp, dynamic_env)
 	assert isinstance(procedure, Procedure)
-	return procedure.apply(dynamic_env, expr.args)
+	return procedure.apply([delay(dynamic_env, a) for a in expr.args])
 
 def _eval_cond(expr:syntax.Cond, dynamic_env:dict):
 	if_part = strict(expr.if_part, dynamic_env)
@@ -101,11 +101,11 @@ def _eval_field_ref(expr:syntax.FieldReference, dynamic_env:dict):
 def _eval_explicit_list(expr:syntax.ExplicitList, dynamic_env:dict):
 	it = NIL
 	for sx in reversed(expr.elts):
-		it = CONS.apply(dynamic_env, [sx, it])
+		it = CONS.apply([evaluate(sx, dynamic_env), it])
 	return it
 
 def _eval_match_expr(expr:syntax.MatchExpr, dynamic_env:dict):
-	dynamic_env[expr.subject] = subject = actual_value(evaluate(expr.subject.expr, dynamic_env))
+	dynamic_env[expr.subject] = subject = strict(expr.subject.expr, dynamic_env)
 	tag = subject[""]
 	try:
 		branch = expr.dispatch[tag]
@@ -176,13 +176,12 @@ class Closure(Procedure):
 	
 	def _name(self): return self._udf.nom.text
 
-	def apply(self, caller_env:dict, args:list[syntax.ValExpr]) -> LAZY_VALUE:
-		if self._arity != len(args):
-			raise TypeError("Procedure %s expected %d args, got %d."%(self._name(), self._arity, len(args)))
+	def apply(self, args: list[LAZY_VALUE]) -> LAZY_VALUE:
+		# Can't have arity mismatch anymore; the type checker catches it.
+		assert self._arity == len(args), "Procedure %s expected %d args, got %d."%(self._name(), self._arity, len(args))
 		inner_env = {STATIC_LINK:self._static_link}
-		for param_name, expr in zip(self._params, args):
-			assert isinstance(expr, syntax.ValExpr), "%s :: %s given %r" % (self._name(), param_name, expr)
-			inner_env[param_name] = delay(caller_env, expr)
+		for param_name, a in zip(self._params, args):
+			inner_env[param_name] = a
 		return evaluate(self._udf.expr, inner_env)
 
 class Primitive(Procedure):
@@ -190,24 +189,23 @@ class Primitive(Procedure):
 	def __init__(self, fn:callable):
 		self._fn = fn
 		
-	def apply(self, caller_env:dict, args:list[syntax.ValExpr]) -> STRICT_VALUE:
-		# Can't have arity mismatch anymore; the type checker catches it. I think.
-		values = [actual_value(evaluate(a, caller_env)) for a in args]
-		return self._fn(*values)
+	def apply(self, args: list[LAZY_VALUE]) -> STRICT_VALUE:
+		# Can't have arity mismatch anymore; the type checker catches it.
+		return self._fn(*(actual_value(a) for a in args))
 
 class Constructor(Procedure):
 	def __init__(self, key:str, fields:list[str]):
 		self.key = key
 		self.fields = fields
 	
-	def apply(self, caller_env: dict, args: list[syntax.ValExpr]) -> Any:
+	def apply(self, args: list[LAZY_VALUE]) -> Any:
 		# TODO: It would be well to handle tagged values as Python pairs.
 		#  This way any value could be tagged, and various case-matching
 		#  things could work more nicely (and completely).
 		assert len(args) == len(self.fields)
 		structure = {"":self.key}
-		for field, expr in zip(self.fields, args):
-			structure[field] = delay(caller_env, expr)
+		for field, arg in zip(self.fields, args):
+			structure[field] = arg
 		return structure
 
 def run_program(static_root, each_module: Sequence[syntax.Module]):
