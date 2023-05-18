@@ -31,17 +31,21 @@ Things on Deck
 
 The next increment will probably focus on one of:
 
-* String-oriented functions (by way of the new FFI) and a 99-bottles-of-beer demo.
-* Simple (nay, even simplistic!) console interaction
-* Better error display.
-* Better error messages, particularly for parse engine.
+* Something practical. Not sure what yet. Maybe PyGame bindings?
+* Better error messages for type-errors. I want something akin to a stack-trace.
+* Better error display. There's bound to be a decent library for this.
+* Stack-trace for domain-errors (e.g. division by zero) at runtime.
+* Better semantics for *tagged-value* variants.
 
 Open Design Problems:
 ---------------------
-* Better error messages. (For parse errors, I have an idea related to sentential forms.)
 * *rest*-parameters
+* Multimethods
 * Partial functions
-* Actor Model? Algebraic Effects? Pluggable Drivers?
+* Strictness analysis
+* Strongly-Typed Concurrency Model. (Actors? Channels? Pub/Sub?)
+* Engaging multiple IO drivers from a single process
+* First-Class Aborts
 
 Other Nice Things to Have
 --------------------------

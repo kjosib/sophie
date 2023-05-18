@@ -48,25 +48,21 @@ and then take notes on how things go.
 Some things are going well:
 
 * Sophie has Turtle-graphics! (See [here](https://github.com/kjosib/sophie/blob/main/examples/turtle.sg) for examples.)
-* The evaluator can run programs and display results, including turtle graphics as mentioned.
-* The new, much more precise type-checker now gives excellent feedback.
-  It is not *quite* finished yet, but it is good enough to turn it on at all times.
+* Sophie is interactive! See [this guessing game](https://github.com/kjosib/sophie/blob/main/examples/guess_the_number.sg) as an example.
+* The new type-checker gives excellent feedback and cannot be fooled. Through abstract interpretation it completely rules out *type* errors.
+  (Domain errors, such as division by zero, are still possible.)
 * The module system got an upgrade: there is now a notion of a system-package and the beginnings of a standard library.
-* The FFI (into Python) got an upgrade: It's now possible to install arbitrary linkages between Sophie and Python.
+* The FFI (into Python): Sophie can call Python; Python can call Sophie; and Python can install I/O drivers into Sophie.
 * Error display is improved in various ways. There is also now an easy way to install helpful messages for parse errors.
   This works; there just aren't many good messages yet.
 
-Certain things are not ready for prime time:
+Certain things are not started yet:
 
-* There is no interactivity yet. I currently lean towards an event-driven model as simplest to get working.
+* Variable-Arity Functions.
+* Ad-hoc polymorphic multi-methods.
 * List comprehension (expressions like `[expr FOR name IN expr]`) are removed from the syntax for now.
-  Something will take its place, but it will take some work.
-  I need to figure out how I want to support variable-arity functions.
-  Until then, we'll need the equivalent of `map2` and `map3` and etc.
-
-For FPA, maybe controlling a bank of elevators would be a good concrete example problem?
-The pipe-dream is an asynchronous and resilient processes network similar to Erlang.
-
+* Asynchrony.
+  The pipe-dream is an asynchronous and resilient processes network similar to Erlang.
 
 ## Why not just use Language X, Y, or Z?
 
