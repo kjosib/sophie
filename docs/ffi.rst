@@ -86,15 +86,77 @@ A foreign-import group consists of:
     with two different signatures. Python's ``math.log`` takes an optional argument for the
     base of the logarithm (defaulting to ``e``), but Sophie functions do not play that game.
 
-Providing Interaction
-~~~~~~~~~~~~~~~~~~~~~~
+Calling Conventions
+~~~~~~~~~~~~~~~~~~~
 
-A foreign import-module can also now supply an initialization function.
-The foreign import-declaration can specify Sophie objects to pass in to said function.
-The result of that function can specify linkages to I/O drivers, like so::
+Initializing a foreign (Python) module
+---------------------------------------
+
+The Basics
+.............
+
+A foreign import-module can supply an initialization function called ``sophie_init``.
+This is how you might write that::
+
+    import:
+    foreign "something.something.something" () where
+        ...
+        ...
+    end;
+
+Note the empty pair of parenthesis after the foreign (Python) module-name.
+If these are present, the **Sophie** runtime will attempt to call an initialization function
+in the ``something.something.something`` module.
+The name of that function is always ``sophie_init``.
+``sophie_init`` will receive, as first argument,
+a forcing function which turns thunks into normal values but returns all other values as-is.
+
+Exporting **Sophie** symbols to the foreign module
+....................................................
+
+The foreign import-declaration can specify Sophie objects to pass in to said function, like so::
 
     import:
     foreign "sophie.adapters.turtle_adapter" (nil) ;
+
+Note the parentheical ``(nil)`` here.
+
+You can supply any comma-separated list of identifiers here.
+These can refer to any name that would be visible to the ``begin:`` section.
+In this case, the ``sophie.adapters.turtle_adapter`` module's ``sophie_init`` function will receive,
+as second and subsequent arguments, a reference to the run-time representation of the corresponding symbols.
+
+.. note::
+    It may be handy to pass in ``nil`` if your Python functions will do much with Sophie lists.
+    ``nil`` is a variant-case which takes no arguments, and therefore it is guaranteed to be a singleton object.
+    Using an ``is`` test on the Python side is probably slightly faster than inspecting ``nil``'s subtype-tag.
+
+
+Sophie calls a foreign function
+---------------------------------
+
+Foreign functions are assumed to have strict (not lazy) semantics directly at the level of their parameters:
+They get passed evaluated values (not thunks) as arguments.
+This is fine for commandeering the pure functions from an existing ecosystem like Python.
+However, if the arguments are record-types, then the fields within likely contain thunks.
+If you need to force those thunks, recall that ``force`` argument to the initializer.
+Maybe stash a reference as a module-global variable.
+
+Python calls back into Sophie code
+-----------------------------------
+
+On the Python side, a **Sophie** function appears as an object with an ``.apply(...)`` method.
+You can call that method with ordinary Python values as arguments, and the Sophie run-time will do the rest.
+What you get back may need ``force``-ing. *Perhaps it ought not. But that's a deep subtlety I have not pondered sufficiently.*
+
+.. caution::
+    Although **Sophie**'s evaluator is re-entrant,
+    nothing stops you from running out of stack space (recursion depth) on the Python side.
+
+Providing Interaction (I/O Drivers)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The result of a Python module's ``sophie_init`` function can specify linkages to I/O drivers.
 
 For each expression in the ``begin:`` section,
 the run-time looks at the type of an object to decide how to interpret its contents.
@@ -116,34 +178,17 @@ a strict-object. Now if that strict-object happens to be a record-like thing,
 then its fields may also be lazy / thunks, and so ``do_turtle_graphics`` is
 responsible to call ``force`` responsibly.
 
-*One last thing:* I've passed Sophie's ``nil`` into the driver's initializer
+*One last thing:* I've passed Sophie's ``nil`` into the turtle driver's initializer
 because I know it will be a singleton object and I can thus use an ``is`` test
-in Python to detect the thing. But more to the point, you can pass in whatever you need.
-If you have *nothing* to pass in, but you still want to register a driver,
-you can *in this one place* use an empty pair of parenthesis::
-
-    import:
-    foreign "something.something.something" () where
-        ...
-        ...
-    end;
+in Python to detect the thing. That may make list-processing loops a hair faster.
 
 Known Problems
 ~~~~~~~~~~~~~~~~~~~~~~~
-
-There's not yet a way for a driver to call a function written in Sophie.
-This item is high on the agenda.
 
 Sophie does not have exceptions. If a foreign function throws one, Sophie will quit unceremoniously.
 Sophie will surely soon get a `result-type similar to Rust's <https://doc.rust-lang.org/std/result/>`_
 along with some handy connectors, but no single strategy is suitable to translate all exceptions from foreign code.
 Binding to an exception-laden API must involve some amount of wrapper-code to deal with the semantic mismatch.
-
-For the moment, foreign functions *other than drivers* are assumed to have strict (not lazy) semantics:
-They get passed evaluated values (not thunks) as arguments.
-This is fine for commandeering the pure functions from an existing ecosystem like Python.
-However, if the arguments are record-types, then the fields within may contain thunks.
-One possible work-around is to make a note of the ``force`` argument to the initializer.
 
 Python's ability to find a Python module depends on its module path, which Sophie code doesn't have any control over.
 Obviously built-in and standard-library modules are no problem, but random extra Python code could get weird.
