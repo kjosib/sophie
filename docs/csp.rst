@@ -14,8 +14,11 @@ Every computer scientist should probably read it.
     :local:
     :depth: 3
 
-Introducing: Channels and Procedural I/O
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Channels and Procedural I/O
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Motivating Example
+-------------------
 
 In the beginning, an I/O operation can just be either a read or a write.
 
@@ -46,10 +49,14 @@ Maybe the next version of *num-guess* looks vaguely like this::
 Here, I'm assuming the existence of some ambient channels called ``keyboard``, ``screen``, and ``random``.
 Probably eventually the *ambiance* will be restricted to the ``begin:`` block, but that's a problem for another day.
 
+Corresponding Syntax and Semantics
+-----------------------------------
+
 We get some new syntax forms. Here's some EBNF::
 
-    procedure -> expression | '{' semicolon_list(command) expression '}'
-    command -> READ name | SEND name expression
+    procedure -> expression | '{' body '}' | '{' body ';' '}'
+    body -> semicolon_list(command) expression
+    command -> READ comma_list(name) | SEND name expression
 
 and in various places in the grammar, *expression* must be replaced by *procedure* instead.
 
@@ -59,20 +66,32 @@ STOP
     The *literal* stopped process. Has type *procedure.*
     Like all **Sophie** keywords, case is not significant.
 
-READ name
-    Reads a value from the given channel, binds the name, and evaluates the right hand side.
-    Waits as long as necessary for such a value to become available.
+READ comma_list(name)
+    Reads a value from each given channel, binds the names, and evaluation proceeds to the right.
+    Waits as long as necessary for all such values to become available.
     Block scope and shadowing apply.
+
+    There is a subtlety here with respect to relativity and physicality:
+    There is no such thing as "simultaneous" at computer speeds.
+    The ordering of events can absolutely depend upon where observers are situated.
+    So a multiple-read instruction is defined to resolve corner-cases on a best-effort basis.
+
+    Remote coordination across the network is some long way off in the future. But when that day comes,
+    we can assume the transport mechanism will be something akin to TCP/IP, so that basic point-to-point
+    ordering and de-duplication and best-effort reliable delivery are solved problems.
+    However, if there are more than two parties to a conversation,
+    they can possibly develop different views of what happened when.
 
 SEND name expression
     Writes the expression to the named channel.
     Waits as long as necessary for a corresponding reader to appear.
-    Then proceeds to the right.
+    Then, evaluation proceeds to the right.
 
 { ... }
     For simplicity and consistency, let's keep deterministic I/O operations inside braces.
     It eliminates visual confusion about the semicolon.
     The result of the procedure-expression is that of the expression it ends with.
+
 
 Other Alternatives
 ---------------------------
@@ -90,6 +109,7 @@ Other Alternatives
   but without them I'd have semicolons meaning different things in what's *visually* the same scope.
   I could go with some other connective after I/O commands, but not many suggest themselves.
 
+* The ``combine`` function above suggests that an anonymous ``loop`` operator might not hurt.
 
 Non-Determinism
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -159,11 +179,65 @@ You can call communication a side-effect, but sometimes it's the proper way to c
 I believe once there's control over the visibility of channels,
 the right things will fall out naturally.
 
+Composing Compound Concurrency
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Motivating Example
+---------------------
+
+This Wichmann-Hill pseudorandom number generator should be sufficient for general playing around::
+
+    define:
+
+        # Wichmann-Hill is built from three similar components,
+        # each a linear congruential generator in its own right:
+
+        LCG(out, a, m, seed) = generate(seed) where
+            generate(s) = { send out s / m; generate(s * a mod m) }
+        end partial;
+
+        # The key idea is to add these three uniform-ish random sources,
+        # and take the result modulo one.
+
+        random(out, seed) does a,b,c [
+            # These are all considered to be done in parallel,
+            # or concurrently at any rate:
+            LCG(a, 171, 30269, seed.a);
+            LCG(b, 172, 30307, seed.b);
+            LCG(c, 170, 30323, seed.c);
+            combine;
+        ] where combine = {
+            read a,b,c;
+            send out (a+b+c) mod 1.0;
+            combine
+        };
+        end random;
+
+`Reference <https://en.wikipedia.org/wiki/Wichmann-Hill>`_
+
+Parallel Syntax and Semantics
+-------------------------------
+
+More EBNF::
+
+    concurrent_procedure -> signature DOES new_channels '[' P_body ']' optional(where_clause)
+    new_channels -> comma_list(formal_parameter)
+    P_body -> semicolon_list(expression)
+
+It's entirely unclear what the return value from a concurrent procedure ought to be.
+
+* Perhaps there's an implicit *join* operation at the end, and perhaps we can capture
+  the results of the subprocesses into local names?
+* Perhaps the result is that of whichever sub-expression finishes first?
+* Perhaps we can distinguish the latter as a ``does`` / ``case`` construction?
+
+
 Open Questions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Where do channels come from in the first place?
     One idea is a new kind of IO command to create new channels.
+    Another is dedicated syntax forms. That's what I have in the current PRNG example.
 
 Where shall we get them from?
     I presume it shall be possible to pass channels around as ordinary parameters to functions.
@@ -192,3 +266,4 @@ Returning a result?
 
 What about joining the results of several processes?
     Scatter/gather behavior is still an open question.
+    There's part of an idea in the section above on the random number generator.
