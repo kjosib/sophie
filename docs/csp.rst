@@ -109,8 +109,6 @@ Other Alternatives
   but without them I'd have semicolons meaning different things in what's *visually* the same scope.
   I could go with some other connective after I/O commands, but not many suggest themselves.
 
-* The ``combine`` function above suggests that an anonymous ``loop`` operator might not hurt.
-
 Non-Determinism
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -215,6 +213,9 @@ This Wichmann-Hill pseudorandom number generator should be sufficient for genera
 
 `Reference <https://en.wikipedia.org/wiki/Wichmann-Hill>`_
 
+For the record, I'm not saying you *should* generate your random numbers this way.
+I'm saying this way illustrates some ideas around composing asynchronous concurrent processes.
+
 Parallel Syntax and Semantics
 -------------------------------
 
@@ -231,6 +232,21 @@ It's entirely unclear what the return value from a concurrent procedure ought to
 * Perhaps the result is that of whichever sub-expression finishes first?
 * Perhaps we can distinguish the latter as a ``does`` / ``case`` construction?
 
+Other Ideas
+------------
+
+This isn't exactly CSP. In CSP, every process has a single label,
+and that label is the only handle with which to interact with the process.
+CSP distinguishes different kinds of messages by something akin to their type.
+It defines what we would recognize today as a pattern matching scheme
+for lightly structured data.
+
+I'm aware of systems in which the output channel(s) from a process are like return-values
+from a function, even to the point of having multiple-returns as compound channels.
+This seems to eliminate the possibility of having a termination-condition and return value
+for such a process. However, perhaps some notation could distinguish these?
+
+The ``combine`` operation seems well-suited to an anonymous ``loop`` operator.
 
 Open Questions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
