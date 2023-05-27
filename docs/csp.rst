@@ -183,7 +183,8 @@ Composing Compound Concurrency
 Motivating Example
 ---------------------
 
-This Wichmann-Hill pseudorandom number generator should be sufficient for general playing around::
+This `Wichmann-Hill pseudorandom number generator <https://en.wikipedia.org/wiki/Wichmann-Hill>`_
+should be sufficient for general playing around::
 
     define:
 
@@ -210,8 +211,6 @@ This Wichmann-Hill pseudorandom number generator should be sufficient for genera
             combine
         };
         end random;
-
-`Reference <https://en.wikipedia.org/wiki/Wichmann-Hill>`_
 
 For the record, I'm not saying you *should* generate your random numbers this way.
 I'm saying this way illustrates some ideas around composing asynchronous concurrent processes.
@@ -248,6 +247,88 @@ for such a process. However, perhaps some notation could distinguish these?
 
 The ``combine`` operation seems well-suited to an anonymous ``loop`` operator.
 
+Discussion
+~~~~~~~~~~~~
+
+Fairness
+------------
+
+In the CSP paper, section 7.6 gives an example program which roughly translates as::
+
+    define:
+        X does c [ Y(c); Z(c); ];
+
+        Y(c, n) = case of
+            read c -> stop;
+            else Y(c, n+1);
+        esac;
+
+        Z(c) = {send c "Colorless Green Ideas Sleep Furiously"; stop}
+
+    begin:
+        X;
+
+Is this process bound to terminate?
+If so, what can we say about the possible execution histories (traces) that it might go through?
+
+.. admonition:: Semantic Digression
+
+    This example introduces non-blocking I/O in the form of an ``else`` clause
+    on what's otherwise a *nondeterministic_choice* expression. That can be seen as
+    syntactic sugar for reading from a process that is always prepared to write,
+    or perhaps vice-versa. Reading what? It doesn't matter. Well, at some point
+    I may desire a concept of *signals* which are channels with no defined payload,
+    but processes can ``read`` or ``write`` on them as a form of synchronization.
+    Meanwhile, the `Canonical Meaningless Sentence <https://www.mit.edu/people/dpolicar/writing/proseDP/text/colorlessIdeas.html>`_ will serve the purpose.
+
+If we imagine ``X`` to be a parallel command with the different branches running on different machines
+connected by a wide-area network, then we must plan for the possibility of a backhoe disrupting the network
+at an inconvenient moment. Or perhaps one machine is struck by a meteor. So in that sense, the best we can do
+is *best-effort* attempt to deliver a message promptly. This is precisely the guarantee that **Sophie**
+should make across machine boundaries. The term *best-effort* is deliberately open to interpretation.
+For practical purposes, it means TCP/IP or whatever supplants it as time and human progress march on.
+
+Even so, this somewhat sidesteps the question: Once a receiving *machine* gets the message,
+there's a question what the *programming language* must do about the fact that a message is available.
+So for the remainder of this topic, we assume **Sophie** runs entirely within the *Good Lord's Machine.*
+
+On this topic Sir Hoare was probably influenced by
+`EWD 416 <https://www.cs.utexas.edu/users/EWD/transcriptions/EWD04xx/EWD416.html>`_
+which please see.
+His conclusion is that a language definition should not specify *fairness*.
+I think he is right, but for the wrong reason. The word "fair" connotes too many different things.
+What's fair to Rome may not be fair to Gaul, or vice versa.
+
+Instead of attempting a precise definition of fairness,
+**Sophie** deals with the matter stochastically. *With probability one,*
+a program like the one above should terminate after *some* finite number of steps.
+This is reasonably well-understood: We do not decree an a-priori bound,
+but "infinity" is a-priori unacceptable.
+
+Precisely defined: When a message *can* be delivered, one of two things *must* happen:
+
+1. The message is *eventually* delivered to a willing reader.
+2. Some enclosing context aborts, thus mooting the question.
+
+Deliberately unspecified is the means by which success is assured. As a practical matter,
+we might imagine some round-robin scheduling system for runnable I/O actions and time slices.
+The precise details are left to the implementer, with the proviso that bias and starvation are sinful.
+Promptness, in other words, is difficult to define formally, but you know it when you see it.
+
+In any case, there is some finite maximum number of messages in-flight at any given time,
+so there is in principle a way to guarantee that no message waits forever.
+The simplest is to propose a system-wide message queue. Since writes block,
+there is no danger of the queue overflowing.
+
+If it were possible to retract undelivered messages, then you could arrange a set of parallel
+writers in a "first-write-wins" arrangement in tandem with a nondeterministic-choice reader,
+and possibly starve one of those conversations.
+
+So instead **Sophie** defines that ``send`` brooks no take-backs:
+Once a message is prepared, it's bound for delivery-or-bust.
+
+
+
 Open Questions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -283,3 +364,5 @@ Returning a result?
 What about joining the results of several processes?
     Scatter/gather behavior is still an open question.
     There's part of an idea in the section above on the random number generator.
+
+
