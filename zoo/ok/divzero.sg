@@ -1,0 +1,13 @@
+# Let's see what happens when you try dividing by zero:
+
+define:
+    reciprocal(x) = 1.0 / x;
+begin:
+    reciprocal(0);
+
+# You should get a stack trace, but in terms of Sophie code files,
+# not in terms of the evaluator's own code.
+
+# I consider it far too much trouble to make division return a maybe-number.
+# We can just all agree that division by zero is anomalous, and not do that.
+# Eventually, this concept should integrate with whatever process-supervision notions Sophie acquires.
