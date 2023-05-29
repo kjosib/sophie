@@ -16,13 +16,16 @@ from boozetools.support.foundation import Visitor
 from .ontology import Symbol, Expr
 from . import syntax, primitive, diagnostics
 from .resolution import DependencyPass
+from .stacking import StackFrame, StackBottom, ActivationRecord
 from .calculus import (
-	ENV, SophieType, TypeVisitor,
+	SophieType, TypeVisitor,
 	OpaqueType, ProductType, ArrowType, TypeVariable,
 	RecordType, SumType, SubType, TaggedRecord, EnumType,
 	UDFType,
 	BOTTOM, ERROR,
 )
+
+ENV = StackFrame[SophieType]
 
 class ArityError(Exception):
 	pass
@@ -268,15 +271,13 @@ class DeductionEngine(Visitor):
 		self._ffi = {}
 		self._memo = {}
 		self._recursion = {}
-		self._source_path = {}
 		self._deps_pass = DependencyPass()
 	
-	def visit_Module(self, module:syntax.Module, source_path):
+	def visit_Module(self, module:syntax.Module):
 		self._deps_pass.visit(module)
 		for td in module.types: self.visit(td)
 		for fi in module.foreign: self.visit(fi)
-		for fn in module.all_functions: self._source_path[fn] = source_path
-		env = ENV(source_path, None, (), ())
+		env = StackBottom(module.path)
 		for expr in module.main:
 			result = self.visit(expr, env)
 			self._report.info(result)
@@ -324,14 +325,16 @@ class DeductionEngine(Visitor):
 		fn = fn_type.fn
 		arity = len(fn.params)
 		if arity != len(arg_types): raise ArityError
-		inner = ENV(self._source_path[fn], fn_type.static_env, fn.params, arg_types)
+		inner = ActivationRecord(fn, fn_type.static_env, arg_types)
 		return self.exec_UDF(fn, inner)
 		
-	def exec_UDF(self, fn:syntax.UserDefinedFunction, env:ENV):
+	def exec_UDF(self, fn:syntax.UserDefinedFunction, env:StackFrame[SophieType]):
 		# The part where memoization must happen.
 		memo_symbols = self._deps_pass.depends[fn]
-		source_depth = fn.static_depth + bool(fn.params)  # By construction, this is the depth of the given env, above.
-		memo_types = tuple(_chase(source_depth, p, env).bindings[p].number for p in memo_symbols)
+		memo_types = tuple(
+			env.chase(p).bindings[p].number
+			for p in memo_symbols
+		)
 		memo_key = fn, memo_types
 		if memo_key in self._memo:
 			return self._memo[memo_key]
@@ -350,7 +353,7 @@ class DeductionEngine(Visitor):
 					prior = self._memo[memo_key]
 					self._memo[memo_key] = self.visit(fn.expr, env)
 				if prior is BOTTOM:
-					self._report.ill_founded_function(env.source_path, fn)
+					self._report.ill_founded_function(env.path(), fn)
 					
 		return self._memo[memo_key]
 	
@@ -363,14 +366,14 @@ class DeductionEngine(Visitor):
 			assert isinstance(fn_type.arg, ProductType)  # Maybe not forever, but now.
 			arity = len(fn_type.arg.fields)
 			if arity != len(args):
-				self._report.wrong_arity(env.source_path, arity, args)
+				self._report.wrong_arity(env.path(), arity, args)
 				return ERROR
 			
 			binder = Binder(self)
 			for expr, need, got in zip(args, fn_type.arg.fields, arg_types):
 				binder.bind(need, got)
 				if not binder.ok:
-					self._report.bad_type(env.source_path, expr, need, got)
+					self._report.bad_type(env.path(), expr, need, got)
 					return ERROR
 
 			# 2. Return the arrow's result-type rewritten using the bindings thus found.
@@ -380,7 +383,7 @@ class DeductionEngine(Visitor):
 			try:
 				return self.apply_UDF(fn_type, arg_types)
 			except ArityError:
-				self._report.wrong_arity(env.source_path, len(fn_type.fn.params), args)
+				self._report.wrong_arity(env.path(), len(fn_type.fn.params), args)
 				return ERROR
 			
 		else:
@@ -407,7 +410,7 @@ class DeductionEngine(Visitor):
 		if isinstance(target, syntax.FFI_Alias):
 			return self._ffi[target]
 		
-		static_env = _chase(lu.source_depth, target, env)
+		static_env = env.chase(target)
 		if isinstance(target, syntax.UserDefinedFunction):
 			if target.params:
 				return UDFType(target, static_env).exemplar()
@@ -425,7 +428,7 @@ class DeductionEngine(Visitor):
 		for e in el.elts:
 			union_find.unify_with(self.visit(e, env))
 			if union_find.died:
-				self._report.type_mismatch(env.source_path, el.elts[0], e)
+				self._report.type_mismatch(env.path(), el.elts[0], e)
 				return ERROR
 		element_type = union_find.result()
 		return SumType(primitive.LIST, (element_type,))
@@ -434,12 +437,12 @@ class DeductionEngine(Visitor):
 		if_part_type = self.visit(cond.if_part, env)
 		if if_part_type is ERROR: return ERROR
 		if if_part_type != primitive.literal_flag:
-			self._report.bad_type(env.source_path, cond.if_part, primitive.literal_flag, if_part_type)
+			self._report.bad_type(env.path(), cond.if_part, primitive.literal_flag, if_part_type)
 			return ERROR
 		union_find = UnionFinder(self.visit(cond.then_part, env))
 		union_find.unify_with(self.visit(cond.else_part, env))
 		if union_find.died:
-			self._report.type_mismatch(env.source_path, cond.then_part, cond.else_part)
+			self._report.type_mismatch(env.path(), cond.then_part, cond.else_part)
 			return ERROR
 		return union_find.result()
 	
@@ -450,7 +453,7 @@ class DeductionEngine(Visitor):
 				env.bindings[mx.subject] = _hypothesis(alt.pattern.dfn, type_args)
 				union_find.unify_with(self.visit(alt.sub_expr, env))
 				if union_find.died:
-					self._report.type_mismatch(env.source_path, mx.alternatives[0].sub_expr, alt.sub_expr)
+					self._report.type_mismatch(env.path(), mx.alternatives[0].sub_expr, alt.sub_expr)
 					return ERROR
 			return union_find.result()
 
@@ -466,7 +469,7 @@ class DeductionEngine(Visitor):
 			env.bindings[mx.subject] = subject_type
 			return self.visit(branch, env)
 		else:
-			self._report.bad_type(env.source_path, mx.subject.expr, mx.variant, subject_type)
+			self._report.bad_type(env.path(), mx.subject.expr, mx.variant, subject_type)
 			return ERROR
 
 	def visit_FieldReference(self, fr:syntax.FieldReference, env:ENV) -> SophieType:
@@ -484,12 +487,12 @@ class DeductionEngine(Visitor):
 			# Complaint has already been issued.
 			return lhs_type
 		else:
-			self._report.type_has_no_fields(env.source_path, fr, lhs_type)
+			self._report.type_has_no_fields(env.path(), fr, lhs_type)
 			return ERROR
 		try:
 			field_spec = spec.field_space[fr.field_name.text]
 		except KeyError:
-			self._report.record_lacks_field(env.source_path, fr, lhs_type)
+			self._report.record_lacks_field(env.path(), fr, lhs_type)
 			return ERROR
 		assert isinstance(field_spec, syntax.FormalParameter), field_spec
 		return ManifestBuilder(parameters, lhs_type.type_args).visit(field_spec.type_expr)
@@ -502,7 +505,3 @@ def _hypothesis(st:Symbol, type_args:Sequence[SophieType]) -> SubType:
 	if isinstance(body, syntax.RecordSpec):
 		return TaggedRecord(st, type_args)
 
-def _chase(source_depth:int, target:Symbol, env:ENV) -> ENV:
-	for _ in range(source_depth - target.static_depth):
-		env = env.static_link
-	return env

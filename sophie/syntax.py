@@ -172,6 +172,7 @@ def _bookend(head: Nom, coda: Nom):
 		raise MismatchedBookendsError(head.head(), coda.head())
 
 class UserDefinedFunction(Function):
+	source_path: Path
 	namespace: NS
 	sub_fns: dict[str:"UserDefinedFunction"]  # for simple evaluator
 	where: Sequence["UserDefinedFunction"]

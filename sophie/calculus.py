@@ -31,7 +31,9 @@ I can reuse the one from booze-tools.
 """
 from typing import Iterable
 from boozetools.support.foundation import EquivalenceClassifier
-from sophie import syntax, ontology
+from . import syntax
+from .ontology import Symbol
+from .stacking import StackFrame
 
 _type_numbering_subsystem = EquivalenceClassifier()
 
@@ -47,8 +49,6 @@ class SophieType:
 	def __eq__(self, other: "SophieType"): return type(self) is type(other) and self._key == other._key
 	def exemplar(self) -> "SophieType": return _type_numbering_subsystem.exemplars[self.number]
 	def __str__(self) -> str: return self.visit(Render())
-
-ENV = ontology.ActivationRecord[SophieType]
 
 class TypeVariable(SophieType):
 	"""Did I say value-object? Not for type variables! These have identity."""
@@ -95,7 +95,7 @@ class EnumType(SubType):
 		self.st = st
 		super().__init__(st)
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_tag_enum(self)
-	def family(self) -> ontology.Symbol: return self.st.variant
+	def family(self) -> Symbol: return self.st.variant
 
 class TaggedRecord(SubType):
 	def __init__(self, st: syntax.SubTypeSpec, type_args: Iterable[SophieType]):
@@ -106,7 +106,7 @@ class TaggedRecord(SubType):
 		assert len(self.type_args) == len(st.variant.type_params)
 		super().__init__(st, *(a.number for a in self.type_args))
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_tag_record(self)
-	def family(self) -> ontology.Symbol: return self.st.variant
+	def family(self) -> Symbol: return self.st.variant
 
 
 class ProductType(SophieType):
@@ -123,11 +123,9 @@ class ArrowType(SophieType):
 
 class UDFType(SophieType):
 	fn: syntax.UserDefinedFunction
-	static_env: ENV
+	static_env: StackFrame[SophieType]
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_udf(self)
-	def __init__(self, fn:syntax.UserDefinedFunction, static_env:ENV):
-		assert isinstance(fn, syntax.UserDefinedFunction)
-		assert isinstance(static_env, ontology.ActivationRecord)
+	def __init__(self, fn:syntax.UserDefinedFunction, static_env:StackFrame[SophieType]):
 		self.fn = fn
 		self.static_env = static_env
 		# NB: The uniqueness notion here is excessive, but there's a plan to deal with that.

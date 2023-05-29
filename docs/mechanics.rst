@@ -18,8 +18,8 @@ detected and reported, it may not necessarily be obvious how that type error com
 
 Here's the plan:
 
-1. The type-checker is using ``ontology.ActivationRecord`` for nice structured things.
-   The evaluator should use it too, instead of playing weird games with dictionary keys.
+1. [DONE] The type-checker was first to use ``class ActivationRecord`` for nice structured things.
+   The evaluator now uses it too, instead of playing weird games with special dictionary keys.
    It might consume a hair more CPU, but that's the least of my worries.
 2. The ``ActivationRecord`` class must gain the power to generate a detailed stack trace.
    Probably each trace element should indicate the call site and also the parameters to the

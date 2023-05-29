@@ -118,7 +118,7 @@ class Loader:
 		
 		resolution.build_match_dispatch_tables(module)  # Cannot fail, for checks have been done earlier.
 		
-		self._deductionEngine.visit(module, self._construction_stack[-1])
+		self._deductionEngine.visit(module)
 		if self._report.sick(): return "type_check"
 	
 	def _root_for_import(self, base:Path, im:ImportModule):
