@@ -262,6 +262,7 @@ class WordResolver(_TopDown):
 		for d in module.foreign:
 			self.visit(d)
 		for fn in module.all_functions:
+			fn.source_path = module.path
 			self.visit_UserDefinedFunction(fn)
 		for expr in module.main:
 			self.visit(expr, module.globals)

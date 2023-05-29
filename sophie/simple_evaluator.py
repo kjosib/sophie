@@ -4,19 +4,22 @@ No longer quite the simplest, most straight-forward possible implementation.
 
 """
 import sys
-from typing import Any, Union, Sequence
+from typing import Any, Union, Sequence, Optional
 from collections import namedtuple, deque
 import abc
 from . import syntax, primitive, ontology
+from .stacking import StackFrame, StackBottom, ActivationRecord
 
-STATIC_LINK = object()
+FAKE_SOURCE_PATH = "FAKE_SOURCE_PATH" # until fixed.
 
 STRICT_VALUE = Union[int, float, str, "Procedure", namedtuple, dict]
+LAZY_VALUE = Union[STRICT_VALUE, "Thunk"]
+ENV = StackFrame[LAZY_VALUE]
 
 ABSENT = object()
 class Thunk:
 	""" A kind of not-yet-value which can be forced. """
-	def __init__(self, dynamic_env:dict, expr: syntax.ValExpr):
+	def __init__(self, dynamic_env:ENV, expr: syntax.ValExpr):
 		assert isinstance(expr, syntax.ValExpr), type(expr)
 		self._dynamic_env = dynamic_env
 		self._expr = expr
@@ -34,7 +37,6 @@ class Thunk:
 		else:
 			return str(self._value)
 
-LAZY_VALUE = Union[STRICT_VALUE, Thunk]
 
 class Procedure(abc.ABC):
 	""" A run-time object that can be applied with arguments. """
@@ -51,46 +53,38 @@ def actual_value(it:LAZY_VALUE) -> STRICT_VALUE:
 		it = it.force()
 	return it
 
-def strict(expr:syntax.ValExpr, dynamic_env:dict):
+def strict(expr:syntax.ValExpr, dynamic_env:ENV):
 	return actual_value(evaluate(expr, dynamic_env))
 
-def _eval_literal(expr:syntax.Literal, dynamic_env:dict):
+def _eval_literal(expr:syntax.Literal, dynamic_env:ENV):
 	return expr.value
 
-def _eval_lookup(expr:syntax.Lookup, dynamic_env:dict):
+def _eval_lookup(expr:syntax.Lookup, dynamic_env:ENV):
 	dfn = expr.ref.dfn
-	target_depth = dfn.static_depth
-	if target_depth == 0:
-		return lookup(dfn, SOPHIE_GLOBALS)
-	else:
-		sp = dynamic_env
-		for _ in range(target_depth, expr.source_depth):
-			# i.e. (source_depth - target_depth).times do {...}
-			sp = sp[STATIC_LINK]
-	return lookup(dfn, sp)
+	return lookup(dfn, dynamic_env.chase(dfn))
 
-def _eval_bin_exp(expr:syntax.BinExp, dynamic_env:dict):
+
+def _eval_bin_exp(expr:syntax.BinExp, dynamic_env:ENV):
 	return OPS[expr.glyph](strict(expr.lhs, dynamic_env), strict(expr.rhs, dynamic_env))
 
-def _eval_unary_exp(expr:syntax.UnaryExp, dynamic_env:dict):
+def _eval_unary_exp(expr:syntax.UnaryExp, dynamic_env:ENV):
 	return OPS[expr.glyph](strict(expr.arg, dynamic_env))
 
-def _eval_shortcut_exp(expr:syntax.ShortCutExp, dynamic_env:dict):
+def _eval_shortcut_exp(expr:syntax.ShortCutExp, dynamic_env:ENV):
 	lhs = strict(expr.lhs, dynamic_env)
 	assert isinstance(lhs, bool)
 	return lhs if lhs == OPS[expr.glyph] else strict(expr.rhs, dynamic_env)
 
-def _eval_call(expr:syntax.Call, dynamic_env:dict):
+def _eval_call(expr:syntax.Call, dynamic_env:ENV):
 	procedure = strict(expr.fn_exp, dynamic_env)
-	assert isinstance(procedure, Procedure)
 	return procedure.apply([delay(dynamic_env, a) for a in expr.args])
 
-def _eval_cond(expr:syntax.Cond, dynamic_env:dict):
+def _eval_cond(expr:syntax.Cond, dynamic_env:ENV):
 	if_part = strict(expr.if_part, dynamic_env)
 	sequel = expr.then_part if if_part else expr.else_part
 	return delay(dynamic_env, sequel)
 
-def _eval_field_ref(expr:syntax.FieldReference, dynamic_env:dict):
+def _eval_field_ref(expr:syntax.FieldReference, dynamic_env:ENV):
 	lhs = strict(expr.lhs, dynamic_env)
 	key = expr.field_name.text
 	if isinstance(lhs, dict):
@@ -98,14 +92,14 @@ def _eval_field_ref(expr:syntax.FieldReference, dynamic_env:dict):
 	else:
 		return getattr(lhs, key)
 
-def _eval_explicit_list(expr:syntax.ExplicitList, dynamic_env:dict):
+def _eval_explicit_list(expr:syntax.ExplicitList, dynamic_env:ENV):
 	it = NIL
 	for sx in reversed(expr.elts):
 		it = CONS.apply([evaluate(sx, dynamic_env), it])
 	return it
 
-def _eval_match_expr(expr:syntax.MatchExpr, dynamic_env:dict):
-	dynamic_env[expr.subject] = subject = strict(expr.subject.expr, dynamic_env)
+def _eval_match_expr(expr:syntax.MatchExpr, dynamic_env:ENV):
+	dynamic_env.bindings[expr.subject] = subject = strict(expr.subject.expr, dynamic_env)
 	tag = subject[""]
 	try:
 		branch = expr.dispatch[tag]
@@ -115,73 +109,51 @@ def _eval_match_expr(expr:syntax.MatchExpr, dynamic_env:dict):
 			raise RuntimeError("Confused by tag %r; should not be possible now that type-checking works."%tag)
 	return delay(dynamic_env, branch)
 
-def _lookup_udf(udf: syntax.UserDefinedFunction, env: dict):
-	# I guess this is where memoization comes from.
-	assert type(udf) is syntax.UserDefinedFunction, type(udf)
-	try: return env[udf]
+def _snap_type_alias(alias:syntax.TypeAlias, env:ENV):
+	assert isinstance(alias.body, syntax.TypeCall)  # resolution.check_constructors guarantees this.
+	return lookup(alias.body.ref.dfn, env)
+
+def _snap_udf(udf:syntax.UserDefinedFunction, env:ENV):
+	return Closure(env, udf) if udf.params else delay(env, udf.expr)
+
+SNAP : dict[type, callable] = {
+	syntax.TypeAlias: _snap_type_alias,
+	syntax.UserDefinedFunction:_snap_udf,
+}
+
+def lookup(dfn:ontology.Symbol, env:ENV):
+	try: return env.bindings[dfn]
 	except KeyError:
-		env[udf] = it = Closure(env, udf) if udf.params else delay(env, udf.expr)
+		env.bindings[dfn] = it = SNAP[type(dfn)](dfn, env)
 		return it
-
-def _lookup_by_name(sym, env:dict):
-	return env[sym.nom.text]
-
-def _lookup_type_alias(sym:syntax.TypeAlias, env:dict):
-	tc : syntax.TypeCall = sym.body  # Guaranteed by resolution.check_constructors
-	it = env[sym] = lookup(tc.ref.dfn, env)  # Snap the pointers along the way
-	return it
-
-def _lookup_all_else(dfn, env:dict):
-	return env[dfn]
 
 EVALUABLE = Union[syntax.ValExpr, syntax.Reference]
 
-def evaluate(expr:EVALUABLE, dynamic_env:dict) -> LAZY_VALUE:
+def evaluate(expr:EVALUABLE, dynamic_env:ENV) -> LAZY_VALUE:
+	assert isinstance(dynamic_env, StackFrame), type(dynamic_env)
 	try: fn = EVALUATE[type(expr)]
 	except KeyError: raise NotImplementedError(type(expr), expr)
 	else: return fn(expr, dynamic_env)
 
-LOOKUP : dict[type, callable] = {
-	syntax.UserDefinedFunction: _lookup_udf,
-	syntax.FormalParameter: _lookup_by_name,
-	syntax.Subject: _lookup_all_else,
-	syntax.Record: _lookup_all_else,
-	syntax.SubTypeSpec: _lookup_all_else,
-	syntax.FFI_Alias: _lookup_all_else,
-	syntax.TypeAlias: _lookup_type_alias,
-}
-
-def lookup(dfn:ontology.Symbol, env:dict) -> LAZY_VALUE:
-	try: fn = LOOKUP[type(dfn)]
-	except KeyError: raise NotImplementedError(type(dfn), dfn)
-	else: return fn(dfn, env)
-
-def delay(dynamic_env:dict, item) -> LAZY_VALUE:
+def delay(dynamic_env:ENV, item:syntax.ValExpr) -> LAZY_VALUE:
 	# For two kinds of expression, there is no profit to delay:
 	if isinstance(item, syntax.Literal): return item.value
 	if isinstance(item, syntax.Lookup): return _eval_lookup(item, dynamic_env)
 	# In less trivial cases, make a thunk and pass that instead.
-	if isinstance(item, syntax.ValExpr): return Thunk(dynamic_env, item)
-	# Some internals already have the data and it's no use making a (new) thunk.
-	return item
+	assert isinstance(item, syntax.ValExpr)
+	return Thunk(dynamic_env, item)
 
 class Closure(Procedure):
 	""" The run-time manifestation of a sub-function: a callable value tied to its natal environment. """
 
-	def __init__(self, static_link:dict, udf:syntax.UserDefinedFunction):
-		self._udf = udf
+	def __init__(self, static_link:ENV, udf:syntax.UserDefinedFunction):
 		self._static_link = static_link
-		self._params = [p.nom.text for p in udf.params]
-		self._arity = len(self._params)
+		self._udf = udf
 	
 	def _name(self): return self._udf.nom.text
 
 	def apply(self, args: list[LAZY_VALUE]) -> LAZY_VALUE:
-		# Can't have arity mismatch anymore; the type checker catches it.
-		assert self._arity == len(args), "Procedure %s expected %d args, got %d."%(self._name(), self._arity, len(args))
-		inner_env = {STATIC_LINK:self._static_link}
-		for param_name, a in zip(self._params, args):
-			inner_env[param_name] = a
+		inner_env = ActivationRecord(self._udf, self._static_link, args)
 		return evaluate(self._udf.expr, inner_env)
 
 class Primitive(Procedure):
@@ -190,7 +162,6 @@ class Primitive(Procedure):
 		self._fn = fn
 		
 	def apply(self, args: list[LAZY_VALUE]) -> STRICT_VALUE:
-		# Can't have arity mismatch anymore; the type checker catches it.
 		return self._fn(*(actual_value(a) for a in args))
 
 class Constructor(Procedure):
@@ -210,18 +181,20 @@ class Constructor(Procedure):
 
 def run_program(static_root, each_module: Sequence[syntax.Module]):
 	drivers = {}
-	_prepare_root_environment(static_root)
+	env = StackBottom(None)
+	_prepare_root_environment(env, static_root)
 	result = None  # Pacify the IDE
 	for module in each_module:
-		_prepare_global_scope(SOPHIE_GLOBALS, module.globals.local.items())
+		env.current_path = module.path
+		_prepare_global_scope(env, module.globals.local.items())
 		for d in module.foreign:
 			if d.linkage is not None:
 				py_module = sys.modules[d.source.value]
-				linkage = [SOPHIE_GLOBALS[ref.dfn] for ref in d.linkage]
+				linkage = [env.bindings[ref.dfn] for ref in d.linkage]
 				drivers.update(py_module.sophie_init(actual_value, *linkage))
 				
 		for expr in module.main:
-			result = strict(expr, SOPHIE_GLOBALS)
+			result = strict(expr, env)
 			if isinstance(result, dict):
 				tag = result.get("")
 				if tag in drivers:
@@ -234,38 +207,34 @@ def run_program(static_root, each_module: Sequence[syntax.Module]):
 				print(result)
 	return result
 
-SOPHIE_GLOBALS = {}
 NIL:dict
 CONS:Constructor
 
-def _prepare_root_environment(static_root):
+def _prepare_root_environment(env:StackBottom, static_root):
 	global NIL, CONS
-	SOPHIE_GLOBALS.clear()
-	_prepare_global_scope(SOPHIE_GLOBALS, primitive.root_namespace.local.items())
-	_prepare_global_scope(SOPHIE_GLOBALS, static_root.local.items())
+	_prepare_global_scope(env, primitive.root_namespace.local.items())
+	_prepare_global_scope(env, static_root.local.items())
 	if 'nil' in static_root:
-		NIL = SOPHIE_GLOBALS[static_root['nil']]
-		CONS = SOPHIE_GLOBALS[static_root['cons']]
+		NIL = env.bindings[static_root['nil']]
+		CONS = env.bindings[static_root['cons']]
 	else:
 		NIL, CONS = None, None
 
-def _prepare_global_scope(env:dict, items):
+def _prepare_global_scope(env:StackBottom, items):
 	for key, dfn in items:
 		if isinstance(dfn, syntax.Record):
-			env[dfn] = Constructor(key, dfn.spec.field_names())
+			env.bindings[dfn] = Constructor(key, dfn.spec.field_names())
 		elif isinstance(dfn, (syntax.SubTypeSpec, syntax.TypeAlias)):
 			if isinstance(dfn.body, (syntax.ArrowSpec, syntax.TypeCall)):
 				pass
 			elif isinstance(dfn.body, syntax.RecordSpec):
-				env[dfn] = Constructor(key, dfn.body.field_names())
+				env.bindings[dfn] = Constructor(key, dfn.body.field_names())
 			elif dfn.body is None:
-				env[dfn] = {"": key}
+				env.bindings[dfn] = {"": key}
 			else:
 				raise ValueError("Tagged scalars (%r) are not implemented."%key)
-		elif isinstance(dfn, syntax.UserDefinedFunction):
-			env[dfn] = _lookup_udf(dfn, env)
 		elif isinstance(dfn, ontology.NativeFunction):
-			env[dfn] = _native_object(dfn)
+			env.bindings[dfn] = _native_object(dfn)
 		elif type(dfn) in _ignore_these:
 			pass
 		else:
@@ -279,6 +248,7 @@ def _native_object(dfn:ontology.NativeFunction):
 
 _ignore_these = {
 	# type(None),
+	syntax.UserDefinedFunction,  # Gets built on-demand.
 	syntax.ArrowSpec,
 	syntax.TypeCall,
 	syntax.Variant,
