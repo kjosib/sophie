@@ -67,7 +67,7 @@ System Integration
 
 Early on, Sophie had this feature that whatever type of object you construct in a ``begin:`` block
 would get routed to a suitable interpretation of that type. But there were only a couple such interpreters.
-one of them would print your data. The other would draw turtle graphics.
+One of them would print your data. The other would draw turtle graphics.
 
 Now it's possible to add drivers, at least from native modules. But I think it should also be possible
 to register a Sophie-language driver for a data type. The concept is that there's an implicit call to this driver
