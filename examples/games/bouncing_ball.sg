@@ -1,0 +1,45 @@
+# This is some practice to figure out some issues around making a game.
+# The goal is to make a ball bounce around on the screen.
+
+# It's not quite finished yet, but it's encouraging to see how
+# easy it has been to reason through parts of the program.
+
+type:
+	linear is (p:number, v:number);
+	twoD[T] is (x:T, y:T);
+	point is twoD[number];
+	flight is twoD[linear];
+	station is pair[flight, sound];
+	wall is (flight)->station;
+	sound is flag;
+
+define:
+	move(L:linear) = linear(L.p+L.v, L.v);
+	fly(f:flight) = flight(move(f.x), move(f.y));
+
+	size = point(280, 160);
+
+	# A list of functions, all expected to be compatible.
+	court:list[wall] = [top, left, right, bottom] where
+		top(f) = station(f, no) if f.y.p >= 0 else station(flight(f.x, reflect(f.y, 0)), yes);
+		left(f) = station(f, no) if f.x.p >= 0 else station(flight(reflect(f.x, 0), f.y), yes);
+		right(f) = station(f, no) if f.x.p < size.x else station(flight(reflect(f.x, size.x), f.y), yes);
+		bottom(f) = station(f, no) if f.y.p < size.y else station(flight(f.x, reflect(f.y, size.y)), yes);
+		reflect(L:linear, p:number) = linear(p-L.p, 0-L.v);
+	end court;
+
+	bounce(old:station, w:wall) = station(new.fst, combine) where
+		new = w(old.fst);
+		combine = old.snd or new.snd;
+	end bounce; # Die-hard functional programmers will recognize the similarity to a monadic bind operator.
+
+	apply_walls(old:station, walls:list[wall]):station = case walls of
+		nil -> old;
+		cons -> apply_walls(bounce(old, walls.head), walls.tail);
+	esac;
+
+	advance_ball(f:flight) = apply_walls(fly(f), court);
+
+begin:
+    "This thing is still under construction. Sorry.";
+    # court;  # This triggers a TBD in the type checker.
