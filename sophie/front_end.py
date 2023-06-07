@@ -78,7 +78,7 @@ def parse_text(text:str, path:Path, report:Report) -> Union[syntax.Module, Issue
 	except ParseError as ex:
 		stack_symbols, lookahead, where = ex.args
 		hint = _best_hint(stack_symbols, lookahead)
-		description = "Sophie is confused by this %r here.\n%s"%(lookahead, hint)
+		description = "This %r confused Sophie.\n%s"%(lookahead, hint)
 		report.error("Parsing", [where], description)
 
 ##########################
@@ -94,16 +94,19 @@ _advice_tree = {t:{} for t in _parse_table['terminals']}
 _advice_tree[ETC] = {}
 
 def _hint(path, text):
+	def dig(where, what):
+		if what not in where: where[what] = {}
+		return where[what]
 	symbols = path.split()
-	node = _advice_tree[symbols.pop()]
+	node = dig(_advice_tree, symbols.pop())
 	for symbol in reversed(symbols):
+		if symbol == DOT:
+			continue
 		if symbol == ETC:
 			node[ETC] = True
 		else:
 			assert symbol in _vocabulary, symbol
-			if symbol not in node:
-				node[symbol] = {}
-			node = node[symbol]
+			node = dig(node, symbol)
 	assert '' not in node, path
 	node[''] = text
 
@@ -124,17 +127,20 @@ def _best_hint(stack_symbols, lookahead):
 		for n in nodes:
 			if '' in n: best = n['']
 	if best:
-		return "Here's my best hint:\n\t"+best
+		return "Here's my best guess:\n\t"+best
 	else:
 		return "Guru Meditation:\n\t"+" ".join(stack_symbols + [DOT, lookahead])
 
 # I suppose I could read the hints from a data file on demand.
 # But for now, I'll just hard-code some.
 
-_hint("TYPE : ??? name square_list(name) IS OPAQUE", "Opaque types cannot be made generic.")
-_hint("( ??? expr ;", "I suspect a missing ')' closing parentheses.")
-_hint("CASE WHEN ??? :", "CASE WHEN needs THEN")
-_hint("CASE semicolon_list(when_clause) ELSE expr ; ???", "CASE expression is missing ESAC")
+_hint("TYPE : ??? name square_list(name) IS ● OPAQUE", "Opaque types cannot be made generic.")
+_hint("( ??? expr ● ;", "I suspect a missing ')' closing parentheses.")
+_hint("CASE WHEN ??? ● :", "CASE WHEN needs THEN")
+_hint("CASE semicolon_list(when_clause) ELSE expr ; ● ???", "CASE expression is missing ESAC")
+_hint("annotation = expr ● name", "Probably missing a semicolon after the previous definition.")
+_hint("BEGIN : semicolon_list(expr) expr ● <END>", "You need a semicolon after that last expression.")
+_hint("expr ● \"", "Seems to be missing some sort of operator before the string that starts here.")
 
 assert _best_hint("export_section import_section TYPE : name square_list(name) IS".split(), 'OPAQUE')
 

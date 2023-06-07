@@ -84,6 +84,10 @@ class Rewriter(TypeVisitor):
 		return self._gamma.get(v, BOTTOM)
 	def on_sum(self, s:SumType):
 		return SumType(s.variant, [a.visit(self) for a in s.type_args])
+	def on_arrow(self, a: ArrowType):
+		return ArrowType(a.arg.visit(self), a.res.visit(self))
+	def on_product(self, p: ProductType):
+		return ProductType([f.visit(self) for f in p.fields])
 
 class Binder(Visitor):
 	"""
