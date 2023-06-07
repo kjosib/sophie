@@ -65,7 +65,7 @@ Super-Fancy Calculator
 
 Here's a small program showing how math (and comments) in Sophie appears:
 
-.. literalinclude:: ../examples/simple_calculations.sg
+.. literalinclude:: ../examples/tutorial/simple_calculations.sg
 
 You can't miss the explanatory text on each line.
 Sophie sees the ``#`` mark and concludes that the remainder of that line is a comment.
@@ -109,14 +109,14 @@ So it's time to talk about how to make and use them.
 
 The usual standard explanation would begin something like this:
 
-.. literalinclude:: ../examples/define_functions.sg
+.. literalinclude:: ../examples/tutorial/define_functions.sg
 
 We have here a simple Sophie program that defines three functions, called ``double``, ``square``, and ``area_of_rectangle``.
 It also defines a constant, called ``five``, which conveniently enough refers to the number ``5``.
 
 If you're curious (and I hope you are) you can run it like::
 
-	D:\GitHub\sophie>py -m sophie examples\define_functions.sg
+	D:\GitHub\sophie>py -m sophie examples\tutorial\define_functions.sg
 	10
 	25
 	50
@@ -202,8 +202,8 @@ Checking Programs Without Running Them
 You can ask Sophie to check your program without running it, using the ``-c`` option.
 In that case, Sophie will list the inferred types of all the functions::
 
-	D:\GitHub\sophie>py -m sophie examples\define_functions.sg -c
-	Loading D:\GitHub\sophie\examples\define_functions.sg
+	D:\GitHub\sophie>py -m sophie examples\tutorial\define_functions.sg -c
+	Loading D:\GitHub\sophie\examples\tutorial\define_functions.sg
 	2 >> double : (number) -> number
 	2 >> square : (number) -> number
 	2 >> area_of_rectangle : (number, number) -> number
@@ -266,7 +266,7 @@ More Fun with Functions
 You can do quite a bit with functions.
 Consider this example:
 
-.. literalinclude:: ../examples/Newton.sg
+.. literalinclude:: ../examples/mathematics/Newton.sg
 
 This program illustrates Isaac Newton's method for figuring square-roots.
 The method achieves excellent accuracy after just a few steps if you start with a decent guess.
@@ -310,7 +310,7 @@ Case Study: Age Classifier
 ---------------------------
 Here's an example of a not-always-totally-respectful age-classifier:
 
-.. literalinclude:: ../examples/case_when.sg
+.. literalinclude:: ../examples/tutorial/case_when.sg
 
 The ``case`` - ``when`` - ``then`` - ``else`` - ``esac`` structure
 represents a multi-way decision.
@@ -360,7 +360,7 @@ To get a better answer for larger numbers, one approach we could take is to iter
 We could do this:
 
 
-.. literalinclude:: ../examples/Newton_2.sg
+.. literalinclude:: ../examples/mathematics/Newton_2.sg
 
 ..
 
@@ -378,7 +378,7 @@ Feed a big enough number into the ``root(...)`` function and it stops too soon.
 It would be nice if we could let Sophie figure out when to stop.
 Perhaps we come up with a function like this:
 
-.. literalinclude:: ../examples/Newton_3.sg
+.. literalinclude:: ../examples/mathematics/Newton_3.sg
 
 Success! But ... What just happened? There's a lot going on in this case-study.
 
@@ -588,7 +588,7 @@ What I'd like to do instead is define the infinite list of Fibonacci numbers,
 and then have a convenient way to get a prefix of that list.
 Here's one way to do it:
 
-.. literalinclude:: ../examples/Fibonacci.sg
+.. literalinclude:: ../examples/mathematics/Fibonacci.sg
 
 Discussion:
 
@@ -695,11 +695,11 @@ Case Study: Simple Designs
 You can display drawings by composing ``drawing`` objects containing a list of ``turtle_step`` items.
 Here's an example turtle-program that generates a couple designs:
 
-.. literalinclude:: ../examples/simple_designs.sg
+.. literalinclude:: ../examples/turtle/simple_designs.sg
 
 At this point, you can begin to make your own designs. Try it out; it's fun!
 
-The plan is to add fun and interesting designs to `this program <https://github.com/kjosib/sophie/blob/main/examples/turtle.sg>`_.
+The plan is to add fun and interesting designs to `this program <https://github.com/kjosib/sophie/blob/main/examples/turtle/turtle.sg>`_.
 Useful components (like ``repeat``, above) might move into either the preamble or a standard library module (once those get invented).
 
 All the turtle-y things
@@ -740,7 +740,7 @@ Case Study: Color Spiral
 
 That's a pretty picture. Let's see the code for it:
 
-.. literalinclude:: ../examples/color_spiral.sg
+.. literalinclude:: ../examples/turtle/color_spiral.sg
 
 At this point, interpreting the code is mostly left as an exercise for the reader.
 Here are a couple of comments:
@@ -757,7 +757,7 @@ Exercises:
   What comment would you make for each function,
   and who is your target audience for that comment?
 * Invent a design of your own, and make it happen.
-* Poke around in `turtle.sg <https://github.com/kjosib/sophie/blob/main/examples/turtle.sg>`_.
+* Poke around in `turtle.sg <https://github.com/kjosib/sophie/blob/main/examples/turtle/turtle.sg>`_.
   What are your favorite designs, and why?
 * Add a design and send it in!
 
@@ -766,7 +766,7 @@ Let's Play a Game!
 
 Sophie can hold an interactive conversation::
 
-    D:\GitHub\sophie>py -m sophie examples\guess_the_number.sg
+    D:\GitHub\sophie>py -m sophie examples\games\guess_the_number.sg
     I have chosen a random number from 1 to 100.
 
     What is your guess? 50
@@ -778,9 +778,9 @@ Sophie can hold an interactive conversation::
     What is your guess? 45
     You win after 4 guesses!
 
-You can find the code for the game under ``examples/guess_the_number.sg``, but here it is:
+You can find the code for the game under ``examples/games/guess_the_number.sg``, but here it is:
 
-.. literalinclude:: ../examples/guess_the_number.sg
+.. literalinclude:: ../examples/games/guess_the_number.sg
 
 Guided Tour of the Game
 ------------------------
@@ -905,11 +905,11 @@ Sophie supports both of these ideas with a shared-module system.
 
 Consider a file called ``library.sg``:
 
-.. literalinclude:: ../examples/library.sg
+.. literalinclude:: ../examples/tutorial/library.sg
 
 And consider also another file called ``patron.sg``, which uses the library:
 
-.. literalinclude:: ../examples/patron.sg
+.. literalinclude:: ../examples/tutorial/patron.sg
 
 What's new here, then?
 
@@ -929,7 +929,7 @@ What's new here, then?
 
 You can run this program as follows::
 
-	D:\GitHub\sophie>py -m sophie examples\patron.sg
+	D:\GitHub\sophie>py -m sophie examples\tutorial\patron.sg
 	Gulliver's Travels
 
 I'll grant it's not a very imposing result, but it shows that the mechanism works -- at least to some degree.

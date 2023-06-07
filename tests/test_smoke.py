@@ -21,32 +21,32 @@ class ExampleSmokeTests(unittest.TestCase):
 	
 	def test_alias(self):
 		""" The result of running a program is the value of its last expression. """
-		self.assertEqual(7, _good(examples, "alias").run())
+		self.assertEqual(7, _good(examples, "tutorial/alias").run())
 	
-	def test_graphical_examples_compile(self):
+	def test_turtle_examples_compile(self):
 		for name in ["turtle", "color_spiral", "simple_designs"]:
 			with self.subTest(name):
-				_good(examples, name)
+				_good(examples, "turtle/"+name)
 
-	def test_interactive_examples_compile(self):
-		for name in ["guess_the_number"]:
+	def test_game_examples_compile(self):
+		for name in ["guess_the_number", "99 bottles"]:
 			with self.subTest(name):
-				_good(examples, name)
+				_good(examples, "games/"+name)
 
 	def test_other_examples(self):
 		for name in [
 			"hello_world",
-			"patron",
-			"simple_calculations",
-			"explicit_list_construction",
-			"Newton",
-			"Newton_2",
-			"Newton_3",
-			"case_when",
-			"some_arithmetic",
-			"Fibonacci",
-			"primes",
-			"generic_parameter",
+			"tutorial/patron",
+			"tutorial/simple_calculations",
+			"tutorial/explicit_list_construction",
+			"mathematics/Newton",
+			"mathematics/Newton_2",
+			"mathematics/Newton_3",
+			"tutorial/case_when",
+			"tutorial/some_arithmetic",
+			"mathematics/Fibonacci",
+			"mathematics/primes",
+			"tutorial/generic_parameter",
 		]:
 			with self.subTest(name):
 				_good(examples, name).run()
