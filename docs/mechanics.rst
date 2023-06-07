@@ -226,7 +226,7 @@ High-Order Functions as Parameters
 We can pass a high-order function as a parameter to another function,
 and use that first function generically:
 
-.. literalinclude:: ../examples/generic_parameter.sg
+.. literalinclude:: ../examples/tutorial/generic_parameter.sg
 
 This *looks* like the sort of thing that would normally require a dynamic language.
 How's it type-check? It's actually quite straightforward:
