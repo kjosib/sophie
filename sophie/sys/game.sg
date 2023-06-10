@@ -1,4 +1,4 @@
-# Types and functions useful for making interactive games. Oh, and a driver.
+# Types and functions useful for making 2-D interactive games. Oh, and a driver.
 #
 # Eventually.
 #
@@ -10,10 +10,23 @@ import:
 type:
     screen is (background:color);
     color is (red:number, green:number, blue:number);
+    rect is (x:number, y:number);
+    polar is (magnitude:number, angle:number);  # Angle in radians, presumably.
 
 define:
 
+    # A color is apparently an RGB triple of values in the range 0..255.
+    # Things outside this range are prone to toss an exception.
     black = color(0,0,0);
     white = color(255,255,255);
-    # Things outside this range are prone to toss an exception.
+
+    # Simple 2-D vector math and trigonometry:
+    add_rect(a:rect, b:rect) = rect(a.x+b+x, a.y+b.y);
+    subtract_rect(a:rect, b:rect) = rect(a.x-b+x, a.y-b.y);
+    scale_rect(scalar:number, r:rect) = rect(scalar*r.x, scalar*r.y);
+    unit_vector(angle:number) = rect(cos(angle), sin(angle));
+    as_rect(p:polar) = scale_rect(p.magnitude, unit_vector(p.angle));
+    as_polar(r:rect) = polar(magnitude_of(r), angle_of(r));
+    magnitude_of(r:rect) = sqrt(r.x*r.x + r.y*r.y);
+    angle_of(r:rect) = atan2(r.y, r.x);
 
