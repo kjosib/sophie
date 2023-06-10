@@ -12,14 +12,14 @@ foreign "math" where
 
 	acos, acosh, asin, asinh, atan, atanh,
 	ceil, cos, cosh, degrees, erf, erfc, exp, expm1,
-	fabs, factorial, floor, gamma, gcd,
+	fabs, factorial, floor, gamma,
 	isqrt, lcm, lgamma, log, log10, log1p, log2,
 	modf, radians, sin, sinh, sqrt,
 	tan, tanh, trunc, ulp : (number) -> number;
 
 	isfinite, isinf, isnan : (number) -> flag;
 
-	atan2, comb, copysign, dist, fmod, ldexp, log_base@"log",
+	atan2, comb, copysign, dist, fmod, gcd, ldexp, log_base@"log",
 	nextafter, perm, pow, remainder : (number, number) -> number;
 
 end;
