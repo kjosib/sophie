@@ -1,0 +1,19 @@
+# Types and functions useful for making interactive games. Oh, and a driver.
+#
+# Eventually.
+#
+# For now, it's just a spike.
+
+import:
+    foreign "sophie.adapters.game_adapter"(nil);
+
+type:
+    screen is (background:color);
+    color is (red:number, green:number, blue:number);
+
+define:
+
+    black = color(0,0,0);
+    white = color(255,255,255);
+    # Things outside this range are prone to toss an exception.
+

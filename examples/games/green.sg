@@ -1,0 +1,10 @@
+# Just a trivial green window.
+# Also, the beginnings of a science lab for getting some game bindings working sensibly.
+# This code will change soon enough.
+
+import:
+    sys."game.sg" (screen, color);
+
+begin:
+    screen(color(0,255,0));
+

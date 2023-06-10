@@ -262,6 +262,21 @@ class UnionFinder(Visitor):
 				type_args = tuple(BOTTOM for _ in this.st.variant.type_params)
 				return SumType(this.st.variant, type_args)
 
+	def visit_UDFType(self, this:UDFType, that: SophieType):
+		if isinstance(that, UDFType):
+			if len(this.fn.params) == len(that.fn.params):
+				# In principle, we take the intersection of the parameters to the union of the results.
+				# In practice, that means some sort of "try both" logic,
+				# and it's entirely too complicated for a five-minute hack session.
+				raise NotImplementedError("To do.")
+			else:
+				return None  # Non-matching arity is a definite error.
+		elif isinstance(that, ArrowType):
+			# If trying to unify with arrow-type, then the arrow-type itself may be a suitable unifier.
+			# Try the arrow-type as a binder, and if it works, then it's a win.
+			raise NotImplementedError("To do.")
+		else:
+			return None  # Not a function.
 	
 	@staticmethod
 	def visit__Error(this: ERROR, that: SophieType):
