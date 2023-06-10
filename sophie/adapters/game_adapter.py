@@ -6,12 +6,6 @@ Eventually.
 For the moment, it's just a spike.
 """
 import sys, pygame
-pygame.init()
-
-size = width, height = 800, 600
-display = pygame.display.set_mode(size)
-
-clock = pygame.time.Clock()
 
 NIL : dict
 
@@ -23,6 +17,12 @@ def sophie_init(force, nil):
 	}
 
 def run_game(force, screen):
+	pygame.init()
+	_size = force(screen['size'])
+	size = width, height = force(_size['x']), force(_size['y'])
+	display = pygame.display.set_mode(size)
+	
+	clock = pygame.time.Clock()
 	while True:
 		for event in pygame.event.get():
 			# Give Sophie code a chance to update the model based on an event.
