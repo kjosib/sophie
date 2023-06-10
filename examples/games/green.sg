@@ -3,8 +3,11 @@
 # This code will change soon enough.
 
 import:
-    sys."game.sg" (screen, color);
+    sys."game.sg" as game (screen, rect, color);
+
+define:
+    scale = 5;
 
 begin:
-    screen(color(0,255,0));
+    screen(scale_rect@game(scale, rect(280, 160)), color(0,255,0));
 

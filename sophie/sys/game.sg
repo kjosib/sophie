@@ -8,7 +8,7 @@ import:
     foreign "sophie.adapters.game_adapter"(nil);
 
 type:
-    screen is (background:color);
+    screen is (size:rect, background:color);
     color is (red:number, green:number, blue:number);
     rect is (x:number, y:number);
     polar is (magnitude:number, angle:number);  # Angle in radians, presumably.
@@ -21,8 +21,8 @@ define:
     white = color(255,255,255);
 
     # Simple 2-D vector math and trigonometry:
-    add_rect(a:rect, b:rect) = rect(a.x+b+x, a.y+b.y);
-    subtract_rect(a:rect, b:rect) = rect(a.x-b+x, a.y-b.y);
+    add_rect(a:rect, b:rect) = rect(a.x+b.x, a.y+b.y);
+    subtract_rect(a:rect, b:rect) = rect(a.x-b.x, a.y-b.y);
     scale_rect(scalar:number, r:rect) = rect(scalar*r.x, scalar*r.y);
     unit_vector(angle:number) = rect(cos(angle), sin(angle));
     as_rect(p:polar) = scale_rect(p.magnitude, unit_vector(p.angle));
