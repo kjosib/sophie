@@ -23,11 +23,12 @@ Quick primer on reading the grammar:
 start -> module_definition
        | module_definition END '.'
 
-module_definition -> export_section import_section typedef_section define_section main_section :Module
+module_definition -> export_section import_section typedef_section assume_section define_section main_section :Module
 
 export_section  -> EXPORT ':' comma_list(name) ';'             | :empty
 import_section  -> IMPORT ':' semicolon_list(import_directive) | :empty
 typedef_section -> TYPE ':' semicolon_list(type_declaration)   | :empty
+assume_section  -> ASSUME ':' semicolon_list(assumption)       | :empty
 define_section  -> DEFINE ':' semicolon_list(function)         | :empty
 main_section    -> BEGIN ':' semicolon_list(expr)              | :empty
 ```
@@ -94,10 +95,27 @@ arg_type -> generic(arg_type) | arrow_of(arg_type)
 I suppose it bears mention that all Sophie functions are implicitly generic
 to whatever extent the body-expression can support.
 
+**Parameter Type Assumptions:**
+
+This may feel a bit like BASIC's `dim` statement, but it's entirely optional.
+The concept is to apply consistent type constraints to specific parameter-names across all functions in a module.
+This supports the *don't repeat yourself* principle as applied to type-constraints in function signatures.
+Mathematicians have been doing something similar in their books and papers for centuries,
+so it's probably not a terrible idea.
+```
+assumption  ->  comma_list(name) ':' arg_type   :Assumption
+```
+If there's a conflict between the global assumption and the annotation at a particular function,
+then the per-function annotation wins. And if there's neither, then the parameter is constrained
+only by how you use it.
+
+*Note 1: Everything just said depends on the type constraints actually working. They will, soon enough.*
+
+*Note 2: One could imagine warning about unconstrained parameters, or even making it a stricture for large projects.*
+
+-----
 
 **The Expression Grammar:**
-
-
 
 ```
 expr -> integer | real | short_string | list_expr | case_expr | match_expr

@@ -4,6 +4,9 @@
 # It's not quite finished yet, but it's encouraging to see how
 # easy it has been to reason through parts of the program.
 
+import:
+    sys."game" as game;
+
 type:
 	linear is (p:number, v:number);
 	twoD[T] is (x:T, y:T);

@@ -331,9 +331,10 @@ and to read the contents of a file given a path.
 Sophie now supports a rudimentary notion of "package". You can do something like::
 
     import:
-        sys."turtle.sg" as t;
+        sys."turtle" as t;
 
 The ``sys.`` here means to look in the package called ``sys`` for the file ``"turtle.sg"``.
+(The ``.sg`` extension is implied.)
 This provides a natural way to tie into both a "standard-library" notion and more general configuration-management.
 Something somewhere must map package symbols back to filesystem paths.
 Then we can again rely on the *absolute-path* thing.

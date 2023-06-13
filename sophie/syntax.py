@@ -167,6 +167,10 @@ class SubTypeSpec(Symbol):
 	def key(self): return self.nom.key()
 	def __repr__(self): return "<:%s:%s>"%(self.nom.text, self.body)
 
+class Assumption(NamedTuple):
+	names: list[Nom]
+	type_expr: SimpleType
+
 def _bookend(head: Nom, coda: Nom):
 	if head.text != coda.text:
 		raise MismatchedBookendsError(head.head(), coda.head())
@@ -401,7 +405,7 @@ class Module:
 	all_functions: list[UserDefinedFunction]  # WordDefiner pass creates this.
 	all_match_expressions: list[MatchExpr]  # WordResolver pass creates this.
 	
-	def __init__(self, exports:list, imports:list[ImportDirective], types:list[TypeDeclaration], functions:list[UserDefinedFunction], main:list):
+	def __init__(self, exports:list, imports:list[ImportDirective], types:list[TypeDeclaration], assumption:list[Assumption], functions:list[UserDefinedFunction], main:list):
 		self.exports = exports
 		self.imports = [i for i in imports if isinstance(i, ImportModule)]
 		self.foreign = [i for i in imports if isinstance(i, ImportForeign)]

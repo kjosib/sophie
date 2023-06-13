@@ -792,7 +792,7 @@ Let's take a guided tour.
 We'll start at the top::
 
     import:
-        sys."teletype.sg" (done, echo, read, random);
+        sys."teletype" (done, echo, read, random);
 
 You can think of ``done, echo, read, random`` as four kinds of action a text-based game might take.
 Actually, this might be a good time to have a glance at
@@ -918,7 +918,7 @@ What's new here, then?
   In this case, it uses the ``nice_book`` function from the shared library.
 
   * Use an ``import:`` section if you want to do this. It must come first, before any ``type:`` or ``define:`` section.
-  * The phrase ``"library.sg" as lib;`` means that words from file *library.sg* will be available with the suffix ``@lib``.
+  * The phrase ``"library" as lib;`` means that words from file *library.sg* will be available with the suffix ``@lib``.
     For example, we can say ``nice_book@lib``.
   * You can import as many modules as you like, but they must all use distinct ``@`` suffixes.
   * You can import modules that import other modules.

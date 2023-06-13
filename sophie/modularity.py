@@ -135,8 +135,8 @@ class Loader:
 		base = module.path.parent
 		for im in module.imports:
 			assert isinstance(im, ImportModule)
-			root = self._root_for_import(base, im)
-			try: im.module = self.need_module(root / im.relative_path.value)
+			import_path = self._root_for_import(base, im) / (im.relative_path.value + ".sg")
+			try: im.module = self.need_module(import_path)
 			except _CircularDependencyError as cde:
 				cycle_paths = map(str, cde.args[0])
 				cycle_text = "\n".join(["Confused by a circular dependency:", *cycle_paths])

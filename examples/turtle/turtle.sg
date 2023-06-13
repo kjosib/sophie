@@ -7,7 +7,7 @@
 #   2. How you'd like your name to appear in the credits for inclusion of your work.
 
 import:
-    sys."turtle.sg" (drawing, color, forward, left, right, pensize, penup, pendown, goto);
+    sys."turtle" (drawing, color, forward, left, right, pensize, penup, pendown, goto);
 
 type:
     hilbert is case:

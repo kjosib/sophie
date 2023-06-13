@@ -1,7 +1,7 @@
 # 99 bottles of ... soda ... on the wall. Yeah. Definitely soda. We'll keep it safe for the whole family here.
 
 import:
-    sys."teletype.sg" (done, echo);
+    sys."teletype" (done, echo);
 
 define:
     bottles(n) = case

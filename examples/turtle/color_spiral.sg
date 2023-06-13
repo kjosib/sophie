@@ -1,5 +1,5 @@
 import:
-    sys."turtle.sg" (drawing, color, forward, left, pensize);
+    sys."turtle" (drawing, color, forward, left, pensize);
 
 define:
     rainbow = ["red", "#DDDD00", "light green", "cyan", "#0000FF", "#FF00FF"];
