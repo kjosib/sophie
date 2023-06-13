@@ -1,7 +1,7 @@
 # Guess-the-number game.
 
 import:
-    sys."teletype.sg" (done, echo, read, random);
+    sys."teletype" (done, echo, read, random);
 
 define:
     EOL = chr(10);

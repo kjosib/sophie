@@ -13,6 +13,11 @@ type:
     rect is (x:number, y:number);
     polar is (magnitude:number, angle:number);  # Angle in radians, presumably.
 
+assume:
+    r, r1, r2 : rect;
+    scalar, angle: number;
+    p, p1, p2 : polar;
+
 define:
 
     # A color is apparently an RGB triple of values in the range 0..255.
@@ -21,12 +26,15 @@ define:
     white = color(255,255,255);
 
     # Simple 2-D vector math and trigonometry:
-    add_rect(a:rect, b:rect) = rect(a.x+b.x, a.y+b.y);
-    subtract_rect(a:rect, b:rect) = rect(a.x-b.x, a.y-b.y);
-    scale_rect(scalar:number, r:rect) = rect(scalar*r.x, scalar*r.y);
-    unit_vector(angle:number) = rect(cos(angle), sin(angle));
-    as_rect(p:polar) = scale_rect(p.magnitude, unit_vector(p.angle));
-    as_polar(r:rect) = polar(magnitude_of(r), angle_of(r));
-    magnitude_of(r:rect) = sqrt(r.x*r.x + r.y*r.y);
-    angle_of(r:rect) = atan2(r.y, r.x);
+    add_rect(r1, r2) = rect(r1.x+r2.x, r1.y+r2.y);
+    subtract_rect(r1, r2) = rect(r1.x-r2.x, r1.y-r2.y);
+    scale_rect(scalar, r) = rect(scalar*r.x, scalar*r.y);
+    unit_vector(angle) = rect(cos(angle), sin(angle));
+    as_rect(p) = scale_rect(p.magnitude, unit_vector(p.angle));
+    as_polar(r) = polar(magnitude_of(r), angle_of(r));
+    magnitude_of(r) = sqrt(r.x*r.x + r.y*r.y);
+    angle_of(r) = atan2(r.y, r.x);
+    norm(r) = scale_rect(1/magnitude_of(r), r);
+    dot(r1, r2) = r1.x*r2.x + r1.y*r2.y;
+
 

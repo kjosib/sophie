@@ -2,7 +2,7 @@
 # The idea is to import a function from some other module and use it.
 
 import:
-"library.sg" as lib;
+"library" as lib;
 
 begin:
 nice_book@lib;  # Returns "Gulliver's Travels" because library.sg says so.

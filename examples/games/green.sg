@@ -3,7 +3,7 @@
 # This code will change soon enough.
 
 import:
-    sys."game.sg" as game (screen, rect, color);
+    sys."game" as game (screen, rect, color);
 
 define:
     scale = 5;

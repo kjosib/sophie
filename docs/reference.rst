@@ -114,7 +114,7 @@ And suppose further that you wish to call ``tabby`` from some other module.
 Then, you can first import the module, perhaps assigning it the (local) module-identifier ``cat``::
 
     import:
-    "path/to/feline.sg" as cat;  # Assume this cat-module defines a function called "tabby";
+    "path/to/feline" as cat;  # Assume this cat-module defines a function called "tabby";
 
 Now ``cat`` shows up as a named-namespace from which you can draw qualified-names.
 You can refer to the aforementioned ``tabby`` function as follows::
@@ -138,7 +138,7 @@ Importing Specific Symbols
 You can import specific words from a module::
 
     import:
-        "path/to/cat/in/hat.sg" (thing_one, thing_two);
+        "path/to/cat/in/hat" (thing_one, thing_two);
     define:
         big_mess = thing_one + thing_two;
 
@@ -159,7 +159,7 @@ Some of Column A, Some of Column B
 You can combine the above techniques::
 
     import:
-        "path/to/cat/in/hat.sg" as cat (thing_one, thing_two);
+        "path/to/cat/in/hat" as cat (thing_one, thing_two);
     define:
         even_bigger_mess = thing_one + thing_two + worried_goldfish@cat;
 
@@ -174,8 +174,8 @@ Importing with Local Renaming
 You can import specific symbols with alternative local names::
 
     import:
-        "path/to/famous/people.sg" (Lincoln as President);
-        "path/to/Nebraska/cities.sg" (Lincoln as Capitol);
+        "path/to/famous/people" (Lincoln as President);
+        "path/to/Nebraska/cities" (Lincoln as Capitol);
 
 This style of import can also deal with the problem of homonyms, but use this with care.
 It's probably OK for a short, self-contained program,
@@ -189,7 +189,7 @@ Sophie's package system is still in its infancy. For now, there is only one paca
 You can import a module *from a package* by specifying the package's *symbol* before the import path::
 
     import:
-        sys."turtle.sg" (drawing, forward, reverse, left, right);
+        sys."turtle" (drawing, forward, reverse, left, right);
 
 .. note:: This is only the second version of the modularity system. In time, it may get a few more features.
 

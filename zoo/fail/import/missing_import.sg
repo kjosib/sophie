@@ -2,6 +2,6 @@
 
 import:
 
-"file that does not exist.sg" as fail;
+"module that does not exist" as fail;
 
 end.
