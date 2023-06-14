@@ -35,6 +35,8 @@ from . import syntax
 from .ontology import Symbol
 from .stacking import StackFrame
 
+TYPE_ENV = StackFrame["SophieType"]
+
 _type_numbering_subsystem = EquivalenceClassifier()
 
 class SophieType:

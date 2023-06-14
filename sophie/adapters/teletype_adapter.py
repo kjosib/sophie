@@ -13,7 +13,7 @@ def sophie_init(force, nil):
 		'random':run_app,
 	}
 
-def run_app(force, app):
+def run_app(force, env, app):
 	while True:
 		tag = app[""]
 		if tag == 'done': return
@@ -22,10 +22,10 @@ def run_app(force, app):
 			app = force(app['next'])
 		elif tag == 'read':
 			proc = force(app['next'])
-			app = force(proc.apply([input()]))
+			app = force(proc.apply(env, [input()]))
 		elif tag == 'random':
 			proc = force(app['next'])
-			app = force(proc.apply([random.random()]))
+			app = force(proc.apply(env, [random.random()]))
 
 def emit(force, text):
 	while text is not NIL:

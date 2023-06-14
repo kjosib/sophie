@@ -16,7 +16,7 @@ def sophie_init(force, nil):
 		'screen': run_game,
 	}
 
-def run_game(force, screen):
+def run_game(force, env, screen):
 	pygame.init()
 	_size = force(screen['size'])
 	size = width, height = force(_size['x']), force(_size['y'])

@@ -1,9 +1,12 @@
 import sys
+from collections import defaultdict
 from typing import Sequence, Optional
 from pathlib import Path
 from boozetools.support.failureprone import SourceText, Issue, Evidence, Severity
 from .ontology import Expr
 from .syntax import FieldReference, UserDefinedFunction
+from .calculus import TYPE_ENV
+from .stacking import ActivationRecord
 
 class Report:
 	""" Might this end up participating in a result-monad? """
@@ -49,9 +52,6 @@ class Report:
 	
 	def complain_to_console(self):
 		""" Emit all the issues to the console. """
-		# Assuming an early-exit policy, so the issues aren't tied to files. Yet.
-		# Type conflicts could reasonably have messages that incorporate facts from different modules,
-		# but cross that bridge upon arrival.
 		for i in self._issues:
 			i.emit(_fetch)
 			
@@ -80,18 +80,25 @@ class Report:
 		issue = Issue("Checking Types", Severity.ERROR, pattern % (arity, len(args)), evidence)
 		self._issues.append(issue)
 
-	def bad_type(self, path: Path, expr: Expr, need, got):
-		evidence = {path: [Evidence(expr.head(),"This expression has type %s."%got)]}
-		issue = Issue("Checking Types", Severity.ERROR, "Needed %s; got something else." % need, evidence)
+	def bad_type(self, env:TYPE_ENV, expr: Expr, need, got):
+		evidence : dict[Path,list] = defaultdict(list)
+		evidence[env.path()].append(Evidence(expr.head(),"This has type '%s' but '%s' was expected."%(got, need)))
+		while isinstance(env, ActivationRecord):
+			bindings = ', '.join("%s:%s"%(p.nom.text, t) for p,t in env.bindings.items())
+			evidence[env.path()].append(Evidence(env.udf.head(), "Called with "+bindings))
+			env = env.dynamic_link
+			if hasattr(env, "pc"):
+				evidence[env.path()].append(Evidence(env.pc.head(), "Called from here"))
+		issue = Issue("Checking Types", Severity.ERROR, "Needed %s; got %s." % (need, got), evidence)
 		self._issues.append(issue)
 	
 	def type_has_no_fields(self, path: Path, fr:FieldReference, lhs_type):
-		evidence = {path: [Evidence(fr.lhs.head(),"This expression has type %s."%lhs_type)]}
+		evidence = {path: [Evidence(fr.lhs.head(),"This has type %s."%lhs_type)]}
 		issue = Issue("Checking Types", Severity.ERROR, "This type has no fields; in particular not %s."%fr.field_name.text, evidence)
 		self._issues.append(issue)
 		
 	def record_lacks_field(self, path: Path, fr:FieldReference, lhs_type):
-		evidence = {path: [Evidence(fr.lhs.head(),"This expression has type %s."%lhs_type)]}
+		evidence = {path: [Evidence(fr.lhs.head(),"This has type %s."%lhs_type)]}
 		issue = Issue("Checking Types", Severity.ERROR, "This type has no field called %s."%fr.field_name.text, evidence)
 		self._issues.append(issue)
 	
