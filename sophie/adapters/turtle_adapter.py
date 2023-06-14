@@ -5,7 +5,7 @@ def sophie_init(force, nil):
 	NIL = force(nil)
 	return {'drawing':do_turtle_graphics}
 
-def do_turtle_graphics(force, drawing):
+def do_turtle_graphics(force, env, drawing):
 	import turtle, tkinter
 	root = tkinter.Tk()
 	root.focus_force()

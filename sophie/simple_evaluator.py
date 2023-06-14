@@ -41,7 +41,7 @@ class Thunk:
 class Procedure(abc.ABC):
 	""" A run-time object that can be applied with arguments. """
 	@abc.abstractmethod
-	def apply(self, args: list[LAZY_VALUE]) -> Any:
+	def apply(self, dynamic_env:ENV, args: list[LAZY_VALUE]) -> Any:
 		pass
 
 def actual_value(it:LAZY_VALUE) -> STRICT_VALUE:
@@ -77,7 +77,7 @@ def _eval_shortcut_exp(expr:syntax.ShortCutExp, dynamic_env:ENV):
 
 def _eval_call(expr:syntax.Call, dynamic_env:ENV):
 	procedure = strict(expr.fn_exp, dynamic_env)
-	return procedure.apply([delay(dynamic_env, a) for a in expr.args])
+	return procedure.apply(dynamic_env, [delay(dynamic_env, a) for a in expr.args])
 
 def _eval_cond(expr:syntax.Cond, dynamic_env:ENV):
 	if_part = strict(expr.if_part, dynamic_env)
@@ -95,7 +95,7 @@ def _eval_field_ref(expr:syntax.FieldReference, dynamic_env:ENV):
 def _eval_explicit_list(expr:syntax.ExplicitList, dynamic_env:ENV):
 	it = NIL
 	for sx in reversed(expr.elts):
-		it = CONS.apply([evaluate(sx, dynamic_env), it])
+		it = CONS.apply(dynamic_env, [evaluate(sx, dynamic_env), it])
 	return it
 
 def _eval_match_expr(expr:syntax.MatchExpr, dynamic_env:ENV):
@@ -152,8 +152,8 @@ class Closure(Procedure):
 	
 	def _name(self): return self._udf.nom.text
 
-	def apply(self, args: list[LAZY_VALUE]) -> LAZY_VALUE:
-		inner_env = ActivationRecord(self._udf, self._static_link, args)
+	def apply(self, dynamic_env:ENV, args: list[LAZY_VALUE]) -> LAZY_VALUE:
+		inner_env = ActivationRecord(self._udf, dynamic_env, self._static_link, args)
 		return evaluate(self._udf.expr, inner_env)
 
 class Primitive(Procedure):
@@ -161,7 +161,7 @@ class Primitive(Procedure):
 	def __init__(self, fn:callable):
 		self._fn = fn
 		
-	def apply(self, args: list[LAZY_VALUE]) -> STRICT_VALUE:
+	def apply(self, dynamic_env:ENV, args: list[LAZY_VALUE]) -> STRICT_VALUE:
 		return self._fn(*(actual_value(a) for a in args))
 
 class Constructor(Procedure):
@@ -169,7 +169,7 @@ class Constructor(Procedure):
 		self.key = key
 		self.fields = fields
 	
-	def apply(self, args: list[LAZY_VALUE]) -> Any:
+	def apply(self, dynamic_env:ENV, args: list[LAZY_VALUE]) -> Any:
 		# TODO: It would be well to handle tagged values as Python pairs.
 		#  This way any value could be tagged, and various case-matching
 		#  things could work more nicely (and completely).
@@ -194,11 +194,12 @@ def run_program(static_root, each_module: Sequence[syntax.Module]):
 				drivers.update(py_module.sophie_init(actual_value, *linkage))
 				
 		for expr in module.main:
+			env.pc = expr
 			result = strict(expr, env)
 			if isinstance(result, dict):
 				tag = result.get("")
 				if tag in drivers:
-					drivers[tag](actual_value, result)
+					drivers[tag](actual_value, env, result)
 					continue
 				dethunk(result)
 				if tag == 'cons':

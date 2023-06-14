@@ -167,11 +167,14 @@ Try this bit of nonsense:
 When you try to run this nonsense::
 
     D:\GitHub\sophie>py -m sophie zoo\fail\type_check\num_plus_string.sg
-    Loading D:\GitHub\sophie\zoo\fail\type_check\num_plus_string.sg
-    Error while Checking Types: Needed number; got something else.
+    Error while Checking Types: Needed number; got string.
     Excerpt from D:\GitHub\sophie\zoo\fail\type_check\num_plus_string.sg :
-         4 :begin: 1 + "one"; end.
-                       ^^^^^ This expression has type string.
+         5 :    add(a,b) = a + b;
+                               ^ This has type 'string' but 'number' was expected.
+         5 :    add(a,b) = a + b;
+                ^^^ Called with a:number, b:string
+         8 :    add(1, "one");
+                ^^^ Called from here
 
 Sophie worked out this addition of a number to text doesn't make any sense,
 and so gave us fair notice that something is not right about how we're using that ``+`` sign.
@@ -181,8 +184,9 @@ Sophie carries this same checking through any depth of functions and data struct
 This turns out to be a big help as your programs gets big:
 It's easy to forget some relevant detail, but Sophie will remind you.
 
-Admittedly, these particular messages are not exactly God's gift to aspiring programmers,
-but I've tried to make them informative, and in time Sophie will get better in this regard.
+These particular messages may not be beautiful,
+but I've tried to make them clear and informative.
+In time Sophie will get better in this regard.
 
 * Exercise:
     Try introducing some deliberate type-errors into the ``define_functions.sg`` example,

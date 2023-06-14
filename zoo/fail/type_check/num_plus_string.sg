@@ -1,4 +1,8 @@
 # You can't add numbers to strings directly.
 # So let's show that with the type checker.
 
-begin: 1 + "one"; end.
+define:
+    add(a,b) = a + b;
+
+begin:
+    add(1, "one");

@@ -1,13 +1,14 @@
 from typing import TypeVar, Generic, Optional
 from pathlib import Path
 from .ontology import Symbol
-from .syntax import UserDefinedFunction
+from .syntax import UserDefinedFunction, ValExpr
 
 T = TypeVar("T")
 
 class StackFrame(Generic[T]):
 	depth : int
 	bindings : dict[Symbol, T]
+	pc : ValExpr
 	def path(self) -> Path:
 		raise NotImplementedError(type(self))
 	def chase(self, target:Symbol) -> "StackFrame[T]":
@@ -24,8 +25,9 @@ class StackBottom(StackFrame):
 		return self
 
 class ActivationRecord(StackFrame):
-	def __init__(self, udf:UserDefinedFunction, static_link:StackFrame[T], arguments):
+	def __init__(self, udf:UserDefinedFunction, dynamic_link:StackFrame[T], static_link:StackFrame[T], arguments):
 		self.udf = udf
+		self.dynamic_link = dynamic_link
 		self.static_link = static_link
 		self.depth = static_link.depth + 1
 		self.bindings = dict(zip(udf.params, arguments))
