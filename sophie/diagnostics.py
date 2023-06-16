@@ -4,7 +4,7 @@ from typing import Sequence, Optional, NamedTuple, Any, Union
 from pathlib import Path
 from boozetools.support.failureprone import SourceText, Issue, Evidence, Severity, illustration
 from .ontology import Expr
-from .syntax import FieldReference, UserDefinedFunction
+from .syntax import FieldReference, UserDefinedFunction, ValExpr
 from .calculus import TYPE_ENV
 from .stacking import ActivationRecord
 
@@ -70,20 +70,21 @@ class Report:
 	# Methods specific to report type-checking issues.
 	# Now this begins to look like something proper.
 	
-	def type_mismatch(self, env:TYPE_ENV, *args:Expr):
+	def type_mismatch(self, env:TYPE_ENV, *args:ValExpr):
 		intro = "Types for these expressions need to match, but they do not."
 		path = env.path()
 		problem = [Annotation(path, e.head(), "") for e in args]
 		self._issues.append(Pic(intro, problem))
 		self._issues.append(Pic("Here's how that happens:", trace_stack(env)))
 	
-	def wrong_arity(self, path:Path, arity:int, args:Sequence[Expr]):
-		evidence = {path: [Evidence(a.head(), "") for a in args]}
-		pattern = "The called function wants %d arguments, but got %d instead."
-		issue = Issue("Checking Types", Severity.ERROR, pattern % (arity, len(args)), evidence)
-		self._issues.append(issue)
+	def wrong_arity(self, env:TYPE_ENV, site:ValExpr, arity:int, args:Sequence[ValExpr]):
+		plural = '' if arity == 1 else 's'
+		pattern = "This function takes %d argument%s, but got %d instead."
+		intro = pattern % (arity, plural, len(args))
+		problem = [Annotation(env.path(), site.head(), "Here")]
+		self._issues.append(Pic(intro, problem+trace_stack(env)))
 
-	def bad_type(self, env:TYPE_ENV, expr: Expr, need, got):
+	def bad_type(self, env:TYPE_ENV, expr:ValExpr, need, got):
 		intro = "Type-checking found a problem. Here's how it happens:"
 		complaint = "This %s needs to be %s."%(got, need)
 		problem = [Annotation(env.path(), expr.head(), complaint)]

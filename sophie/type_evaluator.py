@@ -13,7 +13,8 @@ The tricky bit is (mutually) recursive functions.
 """
 from typing import Iterable, Sequence
 from boozetools.support.foundation import Visitor
-from .ontology import Symbol, Expr
+from .ontology import Symbol
+from .syntax import ValExpr
 from . import syntax, primitive, diagnostics
 from .resolution import DependencyPass
 from .stacking import StackBottom, ActivationRecord
@@ -377,7 +378,7 @@ class DeductionEngine(Visitor):
 					
 		return self._memo[memo_key]
 	
-	def _call_site(self, site: syntax.ValExpr, fn_type, args:Sequence[Expr], env:TYPE_ENV) -> SophieType:
+	def _call_site(self, site: syntax.ValExpr, fn_type, args:Sequence[ValExpr], env:TYPE_ENV) -> SophieType:
 		arg_types = [self.visit(a, env) for a in args]
 		if any(t is ERROR for t in arg_types):
 			return ERROR
@@ -388,7 +389,7 @@ class DeductionEngine(Visitor):
 			assert isinstance(fn_type.arg, ProductType)  # Maybe not forever, but now.
 			arity = len(fn_type.arg.fields)
 			if arity != len(args):
-				self._report.wrong_arity(env.path(), arity, args)
+				self._report.wrong_arity(env, site, arity, args)
 				return ERROR
 			
 			binder = Binder(self, env)
@@ -405,7 +406,7 @@ class DeductionEngine(Visitor):
 			try:
 				return self.apply_UDF(fn_type, arg_types, env)
 			except ArityError:
-				self._report.wrong_arity(env.path(), len(fn_type.fn.params), args)
+				self._report.wrong_arity(env, site, len(fn_type.fn.params), args)
 				return ERROR
 			
 		else:
