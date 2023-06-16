@@ -450,7 +450,7 @@ class DeductionEngine(Visitor):
 		for e in el.elts:
 			union_find.unify_with(self.visit(e, env))
 			if union_find.died:
-				self._report.type_mismatch(env.path(), el.elts[0], e)
+				self._report.type_mismatch(env, el.elts[0], e)
 				return ERROR
 		element_type = union_find.result()
 		return SumType(primitive.LIST, (element_type,))
@@ -464,7 +464,7 @@ class DeductionEngine(Visitor):
 		union_find = UnionFinder(self.visit(cond.then_part, env))
 		union_find.unify_with(self.visit(cond.else_part, env))
 		if union_find.died:
-			self._report.type_mismatch(env.path(), cond.then_part, cond.else_part)
+			self._report.type_mismatch(env, cond.then_part, cond.else_part)
 			return ERROR
 		return union_find.result()
 	
@@ -475,7 +475,7 @@ class DeductionEngine(Visitor):
 				env.bindings[mx.subject] = _hypothesis(alt.pattern.dfn, type_args)
 				union_find.unify_with(self.visit(alt.sub_expr, env))
 				if union_find.died:
-					self._report.type_mismatch(env.path(), mx.alternatives[0].sub_expr, alt.sub_expr)
+					self._report.type_mismatch(env, mx.alternatives[0].sub_expr, alt.sub_expr)
 					return ERROR
 			return union_find.result()
 

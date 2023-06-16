@@ -1,8 +1,8 @@
 import sys
 from collections import defaultdict
-from typing import Sequence, Optional
+from typing import Sequence, Optional, NamedTuple, Any, Union
 from pathlib import Path
-from boozetools.support.failureprone import SourceText, Issue, Evidence, Severity
+from boozetools.support.failureprone import SourceText, Issue, Evidence, Severity, illustration
 from .ontology import Expr
 from .syntax import FieldReference, UserDefinedFunction
 from .calculus import TYPE_ENV
@@ -15,7 +15,7 @@ class Report:
 	
 	def __init__(self, verbose:bool):
 		self._verbose = verbose
-		self._issues = []
+		self._issues : list[Union[Issue, "Pic"]] = []
 		self._path = None
 	
 	def ok(self): return not self._issues
@@ -53,7 +53,8 @@ class Report:
 	def complain_to_console(self):
 		""" Emit all the issues to the console. """
 		for i in self._issues:
-			i.emit(_fetch)
+			print("  -"*20, file=sys.stderr)
+			print(i.as_text(_fetch), file=sys.stderr)
 			
 	def assert_no_issues(self):
 		""" Does what it says on the tin """
@@ -69,10 +70,12 @@ class Report:
 	# Methods specific to report type-checking issues.
 	# Now this begins to look like something proper.
 	
-	def type_mismatch(self, path:Path, *args:Expr):
-		evidence = {path: [Evidence(e.head(),"") for e in args]}
-		issue = Issue("Checking Types", Severity.ERROR, "These don't have compatible types.", evidence)
-		self._issues.append(issue)
+	def type_mismatch(self, env:TYPE_ENV, *args:Expr):
+		intro = "Types for these expressions need to match, but they do not."
+		path = env.path()
+		problem = [Annotation(path, e.head(), "") for e in args]
+		self._issues.append(Pic(intro, problem))
+		self._issues.append(Pic("Here's how that happens:", trace_stack(env)))
 	
 	def wrong_arity(self, path:Path, arity:int, args:Sequence[Expr]):
 		evidence = {path: [Evidence(a.head(), "") for a in args]}
@@ -81,16 +84,10 @@ class Report:
 		self._issues.append(issue)
 
 	def bad_type(self, env:TYPE_ENV, expr: Expr, need, got):
-		evidence : dict[Path,list] = defaultdict(list)
-		evidence[env.path()].append(Evidence(expr.head(),"This has type '%s' but '%s' was expected."%(got, need)))
-		while isinstance(env, ActivationRecord):
-			bindings = ', '.join("%s:%s"%(p.nom.text, t) for p,t in env.bindings.items())
-			evidence[env.path()].append(Evidence(env.udf.head(), "Called with "+bindings))
-			env = env.dynamic_link
-			if hasattr(env, "pc"):
-				evidence[env.path()].append(Evidence(env.pc.head(), "Called from here"))
-		issue = Issue("Checking Types", Severity.ERROR, "Needed %s; got %s." % (need, got), evidence)
-		self._issues.append(issue)
+		intro = "Type-checking found a problem. Here's how it happens:"
+		complaint = "This %s needs to be %s."%(got, need)
+		problem = [Annotation(env.path(), expr.head(), complaint)]
+		self._issues.append(Pic(intro, problem+trace_stack(env)))
 	
 	def type_has_no_fields(self, path: Path, fr:FieldReference, lhs_type):
 		evidence = {path: [Evidence(fr.lhs.head(),"This has type %s."%lhs_type)]}
@@ -106,8 +103,43 @@ class Report:
 		evidence = {path: [Evidence(udf.head(), "here")]}
 		issue = Issue("Checking Types", Severity.ERROR, "This function's definition turned up circular, as in a=a.", evidence)
 		self._issues.append(issue)
-			
-def _fetch(path):
+
+
+class Annotation(NamedTuple):
+	path: Path
+	slice: slice
+	caption: str
+	
+def illustrate(source, the_slice, caption):
+	row, col = source.find_row_col(the_slice.start)
+	single_line = source.line_of_text(row)
+	width = the_slice.stop - the_slice.start
+	return illustration(single_line, col, width, prefix='% 6d :' % row, caption=caption)
+
+def trace_stack(env:TYPE_ENV) -> list[Annotation]:
+	trace = []
+	while isinstance(env, ActivationRecord):
+		bindings = ', '.join("%s:%s" % (p.nom.text, t) for p, t in env.bindings.items())
+		trace.append(Annotation(env.path(), env.udf.head(), "Called with " + bindings))
+		env = env.dynamic_link
+		if hasattr(env, "pc"):
+			trace.append(Annotation(env.path(), env.pc.head(), "Called from here"))
+	return trace
+
+class Pic:
+	def __init__(self, intro:str, trace:list[Annotation]):
+		source, path = ..., ...
+		self.lines = [intro, ""]
+		for ann in trace:
+			if ann.path != path:
+				path = ann.path
+				self.lines.append(str(path))
+				source = _fetch(path)
+			self.lines.append(illustrate(source, ann.slice, ann.caption))
+	def as_text(self, fetch):
+		return '\n'.join(self.lines)
+		
+def _fetch(path) -> SourceText:
 	if path is None:
 		return SourceText("")
 	with open(path) as fh:
