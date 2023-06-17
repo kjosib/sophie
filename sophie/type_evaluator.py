@@ -194,10 +194,9 @@ class UnionFinder(Visitor):
 	def unify_with(self, that):
 		if self._prototype is not ERROR:
 			union = self.do(self._prototype, that)
-			if union is ERROR and that is not ERROR:
-				print("Failed to unify:")
-				print(self._prototype)
-				print(that)
+			# TODO: Put the specific mismatch on report.
+			# 	if union is ERROR and that is not ERROR:
+			#		mumble.failed_to_unify(self._prototype, that)
 			self._prototype = union
 	
 	def parallel(self, these:Sequence[SophieType], those:Sequence[SophieType]):
@@ -374,7 +373,7 @@ class DeductionEngine(Visitor):
 					prior = self._memo[memo_key]
 					self._memo[memo_key] = self.visit(fn.expr, env)
 				if prior is BOTTOM:
-					self._report.ill_founded_function(env.path(), fn)
+					self._report.ill_founded_function(env, fn)
 					
 		return self._memo[memo_key]
 	
@@ -510,7 +509,7 @@ class DeductionEngine(Visitor):
 			# Complaint has already been issued.
 			return lhs_type
 		else:
-			self._report.type_has_no_fields(env.path(), fr, lhs_type)
+			self._report.type_has_no_fields(env, fr, lhs_type)
 			return ERROR
 		try:
 			field_spec = spec.field_space[fr.field_name.text]
