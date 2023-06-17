@@ -76,10 +76,9 @@ def parse_text(text:str, path:Path, report:Report) -> Union[syntax.Module, Issue
 	except syntax.MismatchedBookendsError as ex:
 		report.error("Checking Bookends", ex.args, "These names don't line up. Has part of a function been lost?")
 	except ParseError as ex:
-		stack_symbols, lookahead, where = ex.args
+		stack_symbols, lookahead, span = ex.args
 		hint = _best_hint(stack_symbols, lookahead)
-		description = "This %r confused Sophie.\n%s"%(lookahead, hint)
-		report.error("Parsing", [where], description)
+		report.generic_parse_error(path, lookahead, span, hint)
 
 ##########################
 #
@@ -141,6 +140,8 @@ _hint("CASE semicolon_list(when_clause) ELSE expr ; ● ???", "CASE expression i
 _hint("annotation = expr ● name", "Probably missing a semicolon after the previous definition.")
 _hint("BEGIN : semicolon_list(expr) expr ● <END>", "You need a semicolon after that last expression.")
 _hint("expr ● \"", "Seems to be missing some sort of operator before the string that starts here.")
+_hint("TYPE : ??? name ● =", "A type-name IS something, but a function = something.")
+_hint("TYPE : ??? name type_parameters ● =", "A type-name IS something, but a function = something.")
 
 assert _best_hint("export_section import_section TYPE : name square_list(name) IS".split(), 'OPAQUE')
 

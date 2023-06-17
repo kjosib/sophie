@@ -1,0 +1,11 @@
+# Trigger the "record_lacks_field" error message.
+
+type:
+    foo is (apple:number, banana:string);
+
+define:
+    read_peach(x) = x.peach;
+
+begin:
+    read_peach(foo(42, "Happy"));
+
