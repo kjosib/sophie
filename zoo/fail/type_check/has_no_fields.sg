@@ -1,0 +1,8 @@
+# Try to take a field from a type that has no fields.
+
+define:
+    add(a,b) = a + b;
+    examine(x) = x.yankee;
+begin:
+    examine(1);
+    examine(add);

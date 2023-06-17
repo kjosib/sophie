@@ -90,20 +90,22 @@ class Report:
 		problem = [Annotation(env.path(), expr.head(), complaint)]
 		self._issues.append(Pic(intro, problem+trace_stack(env)))
 	
-	def type_has_no_fields(self, path: Path, fr:FieldReference, lhs_type):
-		evidence = {path: [Evidence(fr.lhs.head(),"This has type %s."%lhs_type)]}
-		issue = Issue("Checking Types", Severity.ERROR, "This type has no fields; in particular not %s."%fr.field_name.text, evidence)
-		self._issues.append(issue)
+	def type_has_no_fields(self, env:TYPE_ENV, fr:FieldReference, lhs_type):
+		field = fr.field_name.text
+		intro = "Type-checking found an unsuitable source for field '%s' access."%field
+		complaint = "%s has no fields; in particular not '%s'."%(lhs_type, field)
+		problem = [Annotation(env.path(), fr.lhs.head(), complaint)]
+		self._issues.append(Pic(intro, problem+trace_stack(env)))
 		
 	def record_lacks_field(self, path: Path, fr:FieldReference, lhs_type):
 		evidence = {path: [Evidence(fr.lhs.head(),"This has type %s."%lhs_type)]}
 		issue = Issue("Checking Types", Severity.ERROR, "This type has no field called %s."%fr.field_name.text, evidence)
 		self._issues.append(issue)
 	
-	def ill_founded_function(self, path: Path, udf:UserDefinedFunction):
-		evidence = {path: [Evidence(udf.head(), "here")]}
-		issue = Issue("Checking Types", Severity.ERROR, "This function's definition turned up circular, as in a=a.", evidence)
-		self._issues.append(issue)
+	def ill_founded_function(self, env:TYPE_ENV, udf:UserDefinedFunction):
+		intro = "This function's definition turned up circular, as in a=a."
+		problem = [Annotation(udf.source_path, udf.head(), "This one.")]
+		self._issues.append(Pic(intro, problem+trace_stack(env)))
 
 
 class Annotation(NamedTuple):
