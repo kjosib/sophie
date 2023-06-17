@@ -1,11 +1,10 @@
 import sys
-from collections import defaultdict
-from typing import Sequence, Optional, NamedTuple, Any, Union
+from typing import Sequence, Optional, NamedTuple, Union
 from pathlib import Path
 from boozetools.support.failureprone import SourceText, Issue, Evidence, Severity, illustration
 from .ontology import Expr
 from .syntax import FieldReference, UserDefinedFunction, ValExpr
-from .calculus import TYPE_ENV
+from .calculus import TYPE_ENV, SophieType, RecordType, TaggedRecord
 from .stacking import ActivationRecord
 
 class Report:
@@ -66,6 +65,12 @@ class Report:
 	def file_error(self, path:Path, msg:str):
 		issue = Issue("trying to read a file", Severity.ERROR, msg, {})
 		self._issues.append(issue)
+		
+	def generic_parse_error(self, path:Path, lookahead, span:slice, hint:str):
+		intro = "Sophie got confused by %s."%lookahead
+		problem = [Annotation(path, span, "Sophie got confused here")]
+		self._issues.append(Pic(intro, problem))
+		self._issues.append(Pic(hint, []))
 
 	# Methods specific to report type-checking issues.
 	# Now this begins to look like something proper.
@@ -97,10 +102,12 @@ class Report:
 		problem = [Annotation(env.path(), fr.lhs.head(), complaint)]
 		self._issues.append(Pic(intro, problem+trace_stack(env)))
 		
-	def record_lacks_field(self, path: Path, fr:FieldReference, lhs_type):
-		evidence = {path: [Evidence(fr.lhs.head(),"This has type %s."%lhs_type)]}
-		issue = Issue("Checking Types", Severity.ERROR, "This type has no field called %s."%fr.field_name.text, evidence)
-		self._issues.append(issue)
+	def record_lacks_field(self, env:TYPE_ENV, fr:FieldReference, lhs_type:SophieType):
+		field = fr.field_name.text
+		intro = "Type-checking found an unsuitable source for field '%s' access."%field
+		complaint = "Type '%s' has fields, but not one called '%s'."%(lhs_type, field)
+		problem = [Annotation(env.path(), fr.lhs.head(), complaint)]
+		self._issues.append(Pic(intro, problem+trace_stack(env)))
 	
 	def ill_founded_function(self, env:TYPE_ENV, udf:UserDefinedFunction):
 		intro = "This function's definition turned up circular, as in a=a."

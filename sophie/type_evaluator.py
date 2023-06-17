@@ -514,7 +514,7 @@ class DeductionEngine(Visitor):
 		try:
 			field_spec = spec.field_space[fr.field_name.text]
 		except KeyError:
-			self._report.record_lacks_field(env.path(), fr, lhs_type)
+			self._report.record_lacks_field(env, fr, lhs_type)
 			return ERROR
 		assert isinstance(field_spec, syntax.FormalParameter), field_spec
 		return ManifestBuilder(parameters, lhs_type.type_args).visit(field_spec.type_expr)

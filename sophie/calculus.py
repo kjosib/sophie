@@ -176,7 +176,10 @@ class Render(TypeVisitor):
 	def on_opaque(self, o: OpaqueType):
 		return o.symbol.nom.text
 	def _generic(self, params:tuple[SophieType]):
-		return "[%s]"%(",".join(t.visit(self) for t in params))
+		if params:
+			return "[%s]"%(",".join(t.visit(self) for t in params))
+		else:
+			return ""
 	def on_record(self, r: RecordType):
 		return r.symbol.nom.text+self._generic(r.type_args)
 	def on_sum(self, s: SumType):

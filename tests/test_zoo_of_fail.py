@@ -98,6 +98,7 @@ class ZooOfFail(unittest.TestCase):
 			"circular_function_mutually",
 			"circular_function_trivially",
 			"has_no_fields",
+			"lacks_field",
 			"mismatched_case_when",
 			"num_plus_string",
 			"omega",
