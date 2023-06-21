@@ -7,6 +7,21 @@ This chapter is a stream-of-consciousness about uncertain design questions.
     :local:
     :depth: 2
 
+All the other bits
+~~~~~~~~~~~~~~~~~~
+
+These sections are still on the drawing board...
+
+* Various Enhancements to Module / Package system
+    * Explicit export lists
+    * Launch configurations
+* Partial functions
+* List-builder notation
+* Starmap-like functors
+* Input from files
+* Other event-driven things, such as SDL bindings.
+* Ad-hoc polymorphic multimethods (sort of; I have some notions.)
+
 Package System
 ~~~~~~~~~~~~~~~~~~
 

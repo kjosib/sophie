@@ -21,11 +21,11 @@ Here's the plan:
 1. [DONE] The type-checker was first to use ``class ActivationRecord`` for nice structured things.
    The evaluator now uses it too, instead of playing weird games with special dictionary keys.
    It might consume a hair more CPU, but that's the least of my worries.
-2. The ``ActivationRecord`` class must gain the power to generate a detailed stack trace.
+2. [SORT OF DONE] The ``ActivationRecord`` class must gain the power to generate a detailed stack trace.
    Probably each trace element should indicate the call site and also the parameters to the
    function that contained that call site.
    In particular, closure-calls merit special attention, as they should also note relevant captures.
-3. All the places in the type checker that note an error must generate a stack trace.
+3. [DONE] All the places in the type checker that note an error must generate a stack trace.
    I believe this will prove to be a most enlightening productivity aid for confused programmers.
 4. The evaluator can wrap ``try``/``except`` around native-method calls,
    and thus generate a stack trace at appropriate times.
@@ -67,12 +67,14 @@ The specific code is ``_hint`` and ``_best_hint`` in ``front_end.py``.
     Right now, there are only four hint-patterns.
     Kind of underwhelming I know, but the machinery works and is tested.
 
+* **Observation:** It's theoretically possible to tell the complete set of valid next tokens.
+  That might be a nice gesture. But it also might be information-overload.
+
 Scan Errors
 ------------
 
 The answer to a blocked scan is to present the next character as a token
 and let the parse-error machinery deal with it.
-
 
 Representing an AST Efficiently
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -226,7 +228,7 @@ High-Order Functions as Parameters
 We can pass a high-order function as a parameter to another function,
 and use that first function generically:
 
-.. literalinclude:: ../examples/tutorial/generic_parameter.sg
+.. literalinclude:: ../../examples/tutorial/generic_parameter.sg
 
 This *looks* like the sort of thing that would normally require a dynamic language.
 How's it type-check? It's actually quite straightforward:
@@ -245,7 +247,7 @@ High-Order Functions as Concrete Data
 We can also pass generic functions -- both native and user-defined -- as parameters
 to constructors, and then use those functions according to their indicated manner:
 
-.. literalinclude:: ../zoo/ok/arrows.sg
+.. literalinclude:: ../../zoo/ok/arrows.sg
 
 Now, when it comes time to put a user-defined function into a record-like datum,
 Sophie's type-checker splits the field-type's arrow into argument and result types.

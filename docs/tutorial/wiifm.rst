@@ -10,9 +10,6 @@ Most currently-popular first programming languages have quite a lot in common:
 * Confusing early design mistakes leave traps and zaps for newcomers and experts alike.
   They can't be fixed out of concern for backwards-compatibility.
   (JavaScript in particular is infamous for this.)
-* They work by changing internal state from one step to the next,
-  which puts the focus on *how it works* at the expense of *what it does*.
-  (That forces you to consider time and sequence when you try to understand some code.)
 * They're object-oriented, meaning ... something beyond the scope of this chapter,
   but it sure won't help you in the early stages of learning to program.
 * They make only the most cursory review of your code before carrying out your instructions,

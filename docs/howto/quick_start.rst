@@ -83,9 +83,9 @@ Sooner or later this will get even easier.
     Documentation: https://sophie.readthedocs.io/en/latest/
            GitHub: https://github.com/kjosib/sophie
 
-7. Dive into :doc:`learn`.
+7. Dive into :doc:`../tutorial/index`.
 
-   The :doc:`tutorial <learn>` covers things from the ground up.
+   The :doc:`tutorial <../tutorial/index>` covers things from the ground up.
    It's written with no assumptions that you know how to program.
    If you do already know some other language,
    be prepared to unlearn some of what you have learned.
