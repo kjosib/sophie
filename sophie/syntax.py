@@ -31,9 +31,9 @@ class TypeParameter(Symbol):
 class TypeDeclaration(Symbol):
 	static_depth = 0
 	param_space: NS   # Will address the type parameters. Word-definer fills this.
-	type_params: tuple[TypeParameter]
+	type_params: tuple[TypeParameter, ...]
 	
-	def __init__(self, nom: Nom, type_params:Sequence[TypeParameter]):
+	def __init__(self, nom: Nom, type_params:tuple[TypeParameter, ...]):
 		super().__init__(nom)
 		self.type_params = type_params
 
@@ -122,21 +122,21 @@ class Opaque(TypeDeclaration):
 
 class TypeAlias(TypeDeclaration):
 	body: SimpleType
-	def __init__(self, nom: Nom, param_names:list[Nom], body:SimpleType):
-		super().__init__(nom, param_names)
+	def __init__(self, nom: Nom, type_params:tuple[TypeParameter, ...], body:SimpleType):
+		super().__init__(nom, type_params)
 		self.body = body
 	def has_value_domain(self) -> bool: return self.body.can_construct()
 
 class Record(TypeDeclaration):
-	def __init__(self, nom: Nom, param_names:list[Nom], spec:RecordSpec):
-		super().__init__(nom, param_names)
+	def __init__(self, nom: Nom, type_params:tuple[TypeParameter, ...], spec:RecordSpec):
+		super().__init__(nom, type_params)
 		self.spec = spec
 	def has_value_domain(self) -> bool: return True
 
 class Variant(TypeDeclaration):
 	sub_space: NS  # WordDefiner pass fills this in.
-	def __init__(self, nom: Nom, param_names:list[Nom], spec:VariantSpec):
-		super().__init__(nom, param_names)
+	def __init__(self, nom: Nom, type_params:tuple[TypeParameter, ...], spec:VariantSpec):
+		super().__init__(nom, type_params)
 		self.subtypes = spec.subtypes
 		for s in spec.subtypes: s.variant = self
 	def has_value_domain(self) -> bool: return False
@@ -149,8 +149,8 @@ _spec_to_decl = {
 }
 
 def concrete_type(nom: Nom, body): return generic_type(nom, (), body)
-def generic_type(nom: Nom, param_names: Sequence[Nom], body):
-	return _spec_to_decl[body.__class__](nom, param_names, body)
+def generic_type(nom: Nom, type_params:tuple[TypeParameter, ...], body):
+	return _spec_to_decl[body.__class__](nom, type_params, body)
 
 class SubTypeSpec(Symbol):
 	body: Optional[Union[RecordSpec, TypeCall, ArrowSpec]]
@@ -232,6 +232,12 @@ class FieldReference(ValExpr):
 	def __init__(self, lhs: ValExpr, field_name: Nom): self.lhs, self.field_name = lhs, field_name
 	def __str__(self): return "(%s.%s)" % (self.lhs, self.field_name.text)
 	def head(self) -> slice: return self.field_name.head()
+
+class MessageRef(ValExpr):
+	def __init__(self, receiver: ValExpr, message_name: Nom):
+		self.receiver, self.message_name = receiver, message_name
+	def __str__(self): return "(%s.%s)" % (self.receiver, self.message_name.text)
+	def head(self) -> slice: return self.message_name.head()
 
 class BinExp(ValExpr):
 	def __init__(self, glyph: str, lhs: ValExpr, o:slice, rhs: ValExpr):
@@ -342,7 +348,6 @@ def simple_subject(nom:Nom):
 
 class MatchExpr(ValExpr):
 	subject:Subject  # Symbol in scope within alternative expressions; contains the value of interest
-	hint: Optional[Reference]
 	alternatives: list[Alternative]
 	otherwise: Optional[ValExpr]
 	
@@ -351,9 +356,8 @@ class MatchExpr(ValExpr):
 	variant:Variant  # check_match_expression infers this from the patterns
 	dispatch: dict[Optional[str]:ValExpr]
 	
-	def __init__(self, subject:Subject, hint:Optional[Reference], alternatives: list[Alternative], otherwise: Optional[ValExpr]):
+	def __init__(self, subject:Subject, alternatives: list[Alternative], otherwise: Optional[ValExpr]):
 		self.subject = subject
-		self.hint = hint
 		self.alternatives, self.otherwise = alternatives, otherwise
 	
 	def head(self) -> slice:

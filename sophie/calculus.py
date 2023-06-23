@@ -110,7 +110,6 @@ class TaggedRecord(SubType):
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_tag_record(self)
 	def family(self) -> Symbol: return self.st.variant
 
-
 class ProductType(SophieType):
 	def __init__(self, fields: Iterable[SophieType]):
 		self.fields = tuple(p.exemplar() for p in fields)
@@ -137,6 +136,12 @@ class UDFType(SophieType):
 		#       Only DeductionEngine.visit_Lookup creates these, so it could provide the capture.
 		super().__init__(object())
 	def __repr__(self): return "[UDFType:%s]"%self.fn.nom.text
+
+class MethodType(SophieType):
+	pass
+
+class MessageType(SophieType):
+	pass
 
 class _Bottom(SophieType):
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_bottom()

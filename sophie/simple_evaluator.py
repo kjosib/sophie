@@ -109,6 +109,9 @@ def _eval_match_expr(expr:syntax.MatchExpr, dynamic_env:ENV):
 			raise RuntimeError("Confused by tag %r; should not be possible now that type-checking works."%tag)
 	return delay(dynamic_env, branch)
 
+def _eval_MessageRef(expr:syntax.MessageRef, dynamic_env:ENV):
+	return BoundMethod()  # TODO
+
 def _snap_type_alias(alias:syntax.TypeAlias, env:ENV):
 	assert isinstance(alias.body, syntax.TypeCall)  # resolution.check_constructors guarantees this.
 	return lookup(alias.body.ref.dfn, env)
@@ -179,6 +182,11 @@ class Constructor(Procedure):
 			structure[field] = arg
 		return structure
 
+class BoundMethod(Procedure):
+	# TODO
+	def apply(self, dynamic_env: ENV, args: list[LAZY_VALUE]) -> Any:
+		pass  # TODO
+	
 def run_program(static_root, each_module: Sequence[syntax.Module]):
 	drivers = {}
 	env = StackBottom(None)
