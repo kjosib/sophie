@@ -38,6 +38,10 @@ class _TopDown(Visitor):
 		# word-agnostic until we know the type of expr.lhs.
 		self.visit(expr.lhs, env)
 	
+	def visit_MessageRef(self, expr: syntax.MessageRef, env):
+		# word-agnostic until we know the type of expr.receiver.
+		self.visit(expr.receiver, env)
+	
 	def visit_Call(self, expr: syntax.Call, env):
 		self.visit(expr.fn_exp, env)
 		for a in expr.args:
@@ -97,6 +101,7 @@ class WordDefiner(_TopDown):
 	def _define_type_params(self, item:Union[syntax.TypeDeclaration, syntax.FFI_Group]):
 		ps = item.param_space = self.globals.new_child(place=item)
 		for p in item.type_params:
+			assert isinstance(p, syntax.TypeParameter), type(p)
 			self._install(ps, p)
 
 	def visit_Opaque(self, o:syntax.Opaque):
@@ -198,8 +203,6 @@ class WordDefiner(_TopDown):
 		except KeyError: self.missing_foreign.append(sym)
 		else: self._install(self.globals, sym)
 
-
-
 class StaticDepthPass(_TopDown):
 	# Assign static depth to the definitions of all parameters and functions.
 	# This pass cannot fail.
@@ -232,7 +235,6 @@ class StaticDepthPass(_TopDown):
 	def visit_Lookup(self, l:syntax.Lookup, depth:int):
 		assert not hasattr(l, "source_depth")
 		l.source_depth = depth
-
 
 class WordResolver(_TopDown):
 	"""
@@ -342,7 +344,6 @@ class Bogon(syntax.Symbol):
 	
 	def has_value_domain(self) -> bool:
 		return False
-	
 
 class AliasChecker(Visitor):
 	"""

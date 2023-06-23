@@ -23,6 +23,7 @@ from .calculus import (
 	SophieType, TypeVisitor,
 	OpaqueType, ProductType, ArrowType, TypeVariable,
 	RecordType, SumType, SubType, TaggedRecord, EnumType,
+	MethodType, MessageType,
 	UDFType,
 	BOTTOM, ERROR,
 )
@@ -408,6 +409,9 @@ class DeductionEngine(Visitor):
 				self._report.wrong_arity(env, site, len(fn_type.fn.params), args)
 				return ERROR
 			
+		elif isinstance(fn_type, MethodType):
+			return MessageType()  # TODO
+			
 		else:
 			raise NotImplementedError(type(fn_type))
 	
@@ -518,6 +522,10 @@ class DeductionEngine(Visitor):
 			return ERROR
 		assert isinstance(field_spec, syntax.FormalParameter), field_spec
 		return ManifestBuilder(parameters, lhs_type.type_args).visit(field_spec.type_expr)
+
+	def visit_MessageRef(self, mr:syntax.MessageRef, env:TYPE_ENV) -> SophieType:
+		lhs_type = self.visit(mr.receiver, env)
+		return MethodType()  # TODO
 
 def _hypothesis(st:Symbol, type_args:Sequence[SophieType]) -> SubType:
 	assert isinstance(st, syntax.SubTypeSpec)

@@ -50,17 +50,17 @@ reference -> name     :PlainReference
 ```
 type_declaration -> name IS OPAQUE                        :Opaque
                   | name IS type_body                     :concrete_type
-                  | name type_parameters IS type_body   :generic_type
+                  | name type_parameters IS type_body     :generic_type
 
 type_parameters -> square_list(name)   :type_parameters
 
 type_body -> simple_type | record_spec | variant_spec
 simple_type -> generic(simple_type) | arrow_of(simple_type)
 
-record_spec  -> round_list(field)                             :RecordSpec
+record_spec  -> round_list(field_dfn)                             :RecordSpec
 variant_spec -> CASE ':' semicolon_list(subtype) ESAC         :VariantSpec
 
-field -> name ':' simple_type   :FormalParameter
+field_dfn -> name ':' simple_type   :FormalParameter
 
 subtype  -> name record_spec    :SubTypeSpec
           | name simple_type    :SubTypeSpec
@@ -142,7 +142,7 @@ expr -> integer | real | short_string | list_expr | case_expr | match_expr
 | .NOT .expr  :LogicalNot
 
 | reference :Lookup
-| expr '(' comma_list(expr) ')' :Call
+| expr round_list(expr) :Call
 | expr list_expr :call_upon_list
 
 | .YES   :truth
@@ -156,14 +156,27 @@ else_clause -> ELSE expr ';'
 ```
 For a while, that was all. But then Sophie got type-matching based on variant-types:
 ```
-match_expr -> CASE subject optional(type_hint) OF semicolon_list(alternative) optional(else_clause) ESAC  :MatchExpr
+match_expr -> CASE subject OF semicolon_list(alternative) optional(else_clause) ESAC  :MatchExpr
 subject -> name     :simple_subject
   | expr AS name    :Subject
-type_hint -> ':' reference
 alternative -> pattern '->' expr optional(where_clause) :Alternative
 pattern -> reference
 ```
 Experience may later suggest expanding the `pattern` grammar, but this will do for now.
+
+-----
+
+
+**Actor-Oriented Bits**
+
+This is going to come together in very small bites.
+For this increment, I'm adding only one new production rule:
+
+```
+expr -> expr ':' name     :MessageRef
+```
+
+
 
 -----
 
@@ -210,6 +223,8 @@ round_list(x) -> '(' comma_list(x) ')'
 %left '<' '<=' '==' '!=' '>=' '>'
 %left NOT
 %left AND OR
+
+%nonassoc  ':'
 
 %right '->' IF ELSE
 ```
