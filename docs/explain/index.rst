@@ -11,5 +11,5 @@ You've found the index of explanatory pages.
     goals
     future
     mechanics
-
+    foreign
 

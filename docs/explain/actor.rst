@@ -159,7 +159,7 @@ and a couple additions::
 
     code -> function | method | class
     expr -> MY '.' name       :self_field
-    expr -> expr ':' name     :message
+    expr -> expr ':' name     :Message
     expr -> do-block
 
 This is probably near-minimal for interesting applications.
