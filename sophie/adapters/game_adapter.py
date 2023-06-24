@@ -6,17 +6,14 @@ Eventually.
 For the moment, it's just a spike.
 """
 import sys, pygame
+from ..runtime import force
 
-NIL : dict
-
-def sophie_init(force, nil):
-	global NIL
-	NIL = force(nil)
+def sophie_init():
 	return {
 		'screen': run_game,
 	}
 
-def run_game(force, env, screen):
+def run_game(env, screen):
 	pygame.init()
 	_size = force(screen['size'])
 	size = width, height = force(_size['x']), force(_size['y'])

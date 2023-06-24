@@ -2,11 +2,9 @@
 
 define:
     EOL = chr(10);
-    console = yes;  # Temporary hack; the word "console" needs a definition.
 
 begin:
 	console:echo [
         "All the world's a stage,", EOL,
         "And all the men and women merely Players.", EOL,
     ];
-

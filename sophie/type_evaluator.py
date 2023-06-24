@@ -13,7 +13,7 @@ The tricky bit is (mutually) recursive functions.
 """
 from typing import Iterable, Sequence
 from boozetools.support.foundation import Visitor
-from .ontology import Symbol
+from .ontology import Symbol, Actor
 from .syntax import ValExpr
 from . import syntax, primitive, diagnostics
 from .resolution import DependencyPass
@@ -24,7 +24,7 @@ from .calculus import (
 	OpaqueType, ProductType, ArrowType, TypeVariable,
 	RecordType, SumType, SubType, TaggedRecord, EnumType,
 	MethodType, MessageType,
-	UDFType,
+	UDFType, ActorType,
 	BOTTOM, ERROR,
 )
 
@@ -434,7 +434,10 @@ class DeductionEngine(Visitor):
 		if isinstance(target, (syntax.TypeDeclaration, syntax.SubTypeSpec)):
 			return self._constructors[target]  # Must succeed because of resolution.check_constructors
 		if isinstance(target, syntax.FFI_Alias):
-			return self._ffi[target]
+			if isinstance(target.val, Actor):
+				return ActorType()
+			else:
+				return self._ffi[target]
 		
 		static_env = env.chase(target)
 		if isinstance(target, syntax.UserDefinedFunction):
@@ -524,7 +527,12 @@ class DeductionEngine(Visitor):
 		return ManifestBuilder(parameters, lhs_type.type_args).visit(field_spec.type_expr)
 
 	def visit_MessageRef(self, mr:syntax.MessageRef, env:TYPE_ENV) -> SophieType:
-		lhs_type = self.visit(mr.receiver, env)
+		receiver_type = self.visit(mr.receiver, env)
+		if receiver_type is ERROR: return ERROR
+		if not isinstance(receiver_type, ActorType):
+			need = "to receive message '%s' but it is not an actor" % mr.message_name.text
+			self._report.bad_type(env, mr.receiver, need, receiver_type)
+			return ERROR
 		return MethodType()  # TODO
 
 def _hypothesis(st:Symbol, type_args:Sequence[SophieType]) -> SubType:

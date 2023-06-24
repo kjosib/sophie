@@ -5,7 +5,7 @@
 # For now, it's just a spike.
 
 import:
-    foreign "sophie.adapters.game_adapter"(nil);
+    foreign "sophie.adapters.game_adapter"();
 
 type:
     screen is (size:rect, background:color);

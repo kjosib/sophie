@@ -3,7 +3,7 @@
 # This moved out of the standard preamble to prove it could be done.
 
 import:
-foreign "sophie.adapters.turtle_adapter" (nil) ;
+foreign "sophie.adapters.turtle_adapter"();
 
 type:
 

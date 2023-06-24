@@ -4,7 +4,9 @@ By the time this pass is finished, every name points to its symbol table entry,
 from which we can find the kind, type, and definition.
 """
 from importlib import import_module
+from traceback import TracebackException
 from typing import Union
+from inspect import signature
 from boozetools.support.foundation import Visitor, strongly_connected_components_hashable
 from boozetools.support.symtab import NoSuchSymbol, SymbolAlreadyExists
 from . import syntax, diagnostics
@@ -68,8 +70,9 @@ class WordDefiner(_TopDown):
 	globals : NS
 	
 	def __init__(self, module:syntax.Module, outer:NS, report):
+		self._report = report
 		self._on_error = report.on_error("Defining words")
-		self.redef, self.missing_foreign, self.broken_foreign = [], [], []
+		self.redef, self._missing_foreign_symbols = [], []
 		self.globals = module.globals = outer.new_child(module)
 		self.all_match_expressions = module.all_match_expressions = []
 		self.all_functions = module.all_functions = []
@@ -78,10 +81,8 @@ class WordDefiner(_TopDown):
 		for td in module.types: self.visit(td)
 		for d in module.foreign: self.visit_ImportForeign(d)
 		
-		if self.missing_foreign:
-			self._on_error(self.missing_foreign, "Some foreign code could not be found.")
-		if self.broken_foreign:
-			self._on_error(self.broken_foreign, "Attempting to import this module threw an exception.")
+		if self._missing_foreign_symbols:
+			self._on_error(self._missing_foreign_symbols, "Some foreign symbols could not be found.")
 			
 		for fn in module.outer_functions:  # Can't iterate all-functions yet; must build it first.
 			self.visit(fn, module.globals)
@@ -189,9 +190,20 @@ class WordDefiner(_TopDown):
 	
 	def visit_ImportForeign(self, d:syntax.ImportForeign):
 		try: py_module = import_module(d.source.value)
-		except ModuleNotFoundError: self.missing_foreign.append(d.source)
-		except ImportError: self.broken_foreign.append(d.source)
+		except ModuleNotFoundError:
+			self._report.missing_foreign(d.source)
+		except ImportError as ex:
+			tbx = TracebackException.from_exception(ex)
+			self._report.broken_foreign(d.source, tbx)
 		else:
+			if d.linkage is not None:
+				if not hasattr(py_module, "sophie_init"):
+					self._report.missing_linkage(d.source)
+					return
+				arity = len(signature(py_module.sophie_init).parameters)
+				if arity != len(d.linkage):
+					self._report.wrong_linkage_arity(d, arity)
+					return
 			for group in d.groups:
 				self._define_type_params(group)
 				for sym in group.symbols:
@@ -200,7 +212,7 @@ class WordDefiner(_TopDown):
 	def visit_FFI_Alias(self, sym:syntax.FFI_Alias, env:NS, py_module):
 		key = sym.nom.text if sym.alias is None else sym.alias.value
 		try: sym.val = getattr(py_module, key)
-		except KeyError: self.missing_foreign.append(sym)
+		except AttributeError: self._missing_foreign_symbols.append(sym)
 		else: self._install(self.globals, sym)
 
 class StaticDepthPass(_TopDown):

@@ -54,17 +54,15 @@ class SophieParser(TypicalApplication):
 
 sophie_parser = SophieParser(_tables)
 
-def parse_file(path:Path, report:Report):
-	"""Read file given by name; pass contents to next phase."""
+def read_file(path:Path, report:Report, source):
+	"""Read file given by name; return contents."""
 	try:
 		with open(path, "r") as fh:
-			text = fh.read()
+			return fh.read()
 	except FileNotFoundError:
-		report.file_error(path, "I see no file called " + str(path))
+		report.no_such_file(path, source)
 	except OSError:
-		report.file_error(path, "Something went pear-shaped while trying to read " + str(path))
-	else:
-		return parse_text(text, path, report)
+		report.broken_file(path, source)
 
 def parse_text(text:str, path:Path, report:Report) -> Union[syntax.Module, Issue]:
 	""" Submit text to parser; submit the resulting tree to subsequent pass """

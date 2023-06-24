@@ -3,7 +3,7 @@
 # The module installs a driver that interprets `action` subtypes sensibly.
 
 import:
-    foreign "sophie.adapters.teletype_adapter"(nil);
+    foreign "sophie.adapters.teletype_adapter"();
 
 type:
     action is case:

@@ -6,9 +6,9 @@ The present state of affairs is loosey-goosey with parent-directory access.
 from pathlib import Path
 from typing import Optional
 from .diagnostics import Report
-from .front_end import parse_file
+from .front_end import read_file, parse_text
 from .syntax import Module, ImportModule
-from . import resolution
+from . import resolution, primitive, runtime, ontology, syntax
 from .type_evaluator import DeductionEngine
 
 class SophieImportError(Exception):
@@ -24,6 +24,13 @@ PACKAGE_ROOT = {
 	"sys" : Path(__file__).parent/"sys",
 }
 
+# Hack the console object into the root namespace before its lack causes a problem
+console_nom = ontology.Nom('console', None)
+console_symbol = syntax.FFI_Symbol(console_nom)
+console_symbol.val = runtime.console
+primitive.root_namespace['console'] = console_symbol
+# Now back to our show
+
 class Loader:
 	def __init__(self, report: Report, experimental:bool= False):
 		self._report = report
@@ -35,28 +42,30 @@ class Loader:
 		self._deductionEngine = DeductionEngine(report)
 		self._preamble = self._load_preamble()
 	
-	def need_module(self, path:Path) -> Optional[Module]:
+	def need_module(self, path:Path, source) -> Optional[Module]:
 		""" This function may raise an exception on failure. """
 		abs_path = path.resolve()
 		if abs_path not in self._loaded_modules:
-			self._loaded_modules[abs_path] = self._cache_miss(abs_path)
+			self._loaded_modules[abs_path] = self._cache_miss(abs_path, source)
 		return self._loaded_modules[abs_path]
 	
-	def _cache_miss(self, abs_path):
+	def _cache_miss(self, abs_path, source):
 		if abs_path in self._construction_stack:
 			depth = self._construction_stack.index(abs_path)
 			cycle = self._construction_stack[depth:]
 			raise _CircularDependencyError(cycle)
 		else:
-			self._enter(abs_path)
 			self._report.info("Loading", abs_path)
-			module = parse_file(abs_path, self._report)
-			if module:
-				self._interpret_the_import_directives(module)
-				self._prepare_module(module, self._preamble.globals)
-				self.module_sequence.append(module)
-			self._exit()
-			return module
+			text = read_file(abs_path, self._report, source)
+			if text is not None:
+				self._enter(abs_path)
+				module = parse_text(text, abs_path, self._report)
+				if module:
+					self._interpret_the_import_directives(module)
+					self._prepare_module(module, self._preamble.globals)
+					self.module_sequence.append(module)
+				self._exit()
+				return module
 	
 	def _enter(self, abs_path):
 		self._construction_stack.append(abs_path)
@@ -70,21 +79,21 @@ class Loader:
 			self._report.set_path(None)
 		
 	def load_program(self, base_path:Path, module_path:str):
-		module = self.need_module(base_path / module_path)
+		module = self.need_module(base_path / module_path, None)
 		if module and not module.main and self._report.ok():
 			self._on_error([], str(module_path)+" has no `begin:` section and thus is not a main program.")
 		return self._report.ok()
 	
 	def run(self):
-		from .simple_evaluator import run_program
+		from .executive import run_program
 		return run_program(self._preamble.globals, self.module_sequence)
 	
 	def _load_preamble(self):
-		from pathlib import Path
-		from . import primitive
 		preamble_path = PACKAGE_ROOT["sys"]/"preamble.sg"
+		text = read_file(preamble_path, self._report, None)
+		self._report.assert_no_issues()
 		self._enter(preamble_path)
-		module = parse_file(preamble_path, self._report)
+		module = parse_text(text, preamble_path, self._report)
 		self._prepare_module(module, primitive.root_namespace)
 		self._report.assert_no_issues()
 		primitive.LIST = module.globals['list']
@@ -136,7 +145,7 @@ class Loader:
 		for im in module.imports:
 			assert isinstance(im, ImportModule)
 			import_path = self._root_for_import(base, im) / (im.relative_path.value + ".sg")
-			try: im.module = self.need_module(import_path)
+			try: im.module = self.need_module(import_path, im.relative_path)
 			except _CircularDependencyError as cde:
 				cycle_paths = map(str, cde.args[0])
 				cycle_text = "\n".join(["Confused by a circular dependency:", *cycle_paths])
