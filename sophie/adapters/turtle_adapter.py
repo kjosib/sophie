@@ -1,11 +1,9 @@
-NIL : dict
+from ..runtime import force, iterate_list
 
-def sophie_init(force, nil):
-	global NIL
-	NIL = force(nil)
+def sophie_init():
 	return {'drawing':do_turtle_graphics}
 
-def do_turtle_graphics(force, env, drawing):
+def do_turtle_graphics(env, drawing):
 	import turtle, tkinter
 	root = tkinter.Tk()
 	root.focus_force()
@@ -19,12 +17,9 @@ def do_turtle_graphics(force, env, drawing):
 	t.screen.delay(0)
 	t.setheading(90)
 	stepCount = 0
-	steps = force(drawing["steps"])
-	while steps is not NIL:
+	for step in iterate_list(drawing["steps"]):
 		stepCount += 1
-		s = force(steps['head'])
-		steps = force(steps['tail'])
-		args = dict(s)  # Make a copy because of (deliberate) aliasing.
+		args = dict(step)  # Make a copy because of (deliberate) aliasing.
 		tag = args.pop("")
 		fn = getattr(t, tag)
 		fn(*map(force, args.values()))  # Insertion-order is assured.

@@ -1,0 +1,254 @@
+from typing import Any, Union, Sequence
+from collections import deque
+from . import syntax, primitive, ontology
+from .stacking import StackFrame, ActivationRecord
+
+STRICT_VALUE = Union[int, float, str, "Procedure", dict, ontology.Actor, "BoundMethod", "Message"]
+LAZY_VALUE = Union[STRICT_VALUE, "Thunk"]
+ENV = StackFrame[LAZY_VALUE]
+
+ABSENT = object()
+class Thunk:
+	""" A kind of not-yet-value which can be forced. """
+	def __init__(self, dynamic_env:ENV, expr: syntax.ValExpr):
+		assert isinstance(expr, syntax.ValExpr), type(expr)
+		self._dynamic_env = dynamic_env
+		self._expr = expr
+		self._value = ABSENT
+		
+	def force(self) -> STRICT_VALUE:
+		if self._value is ABSENT:
+			self._value = _strict(self._expr, self._dynamic_env)
+			assert not isinstance(self._value, syntax.ValExpr), type(self._expr)
+			del self._dynamic_env, self._expr
+		return self._value
+	
+	def __str__(self):
+		if self._value is ABSENT:
+			return "<Thunk: %s>"%self._expr
+		else:
+			return str(self._value)
+	
+class Procedure:
+	""" A run-time object that can be applied with arguments. """
+	def apply(self, dynamic_env: ENV, args: Sequence[LAZY_VALUE]) -> Any:
+		# It must be a LAZY_VALUE and not a syntax.ValExpr
+		# lest various internal things fail to work,
+		# which things to not tie back to specific syntax objects.
+		# For example, explicit lists.
+		raise NotImplementedError
+	
+
+def force(it:LAZY_VALUE) -> STRICT_VALUE:
+	"""
+	While this will not return a thunk as such,
+	it may return a structure which contains thunks.
+	"""
+	while isinstance(it, Thunk):
+		it = it.force()
+	return it
+
+def _strict(expr:syntax.ValExpr, dynamic_env:ENV):
+	return force(evaluate(expr, dynamic_env))
+
+def _eval_literal(expr:syntax.Literal, dynamic_env:ENV):
+	return expr.value
+
+def _eval_lookup(expr:syntax.Lookup, dynamic_env:ENV):
+	dfn = expr.ref.dfn
+	return lookup(dfn, dynamic_env.chase(dfn))
+
+def _eval_bin_exp(expr:syntax.BinExp, dynamic_env:ENV):
+	return OPS[expr.glyph](_strict(expr.lhs, dynamic_env), _strict(expr.rhs, dynamic_env))
+
+def _eval_unary_exp(expr:syntax.UnaryExp, dynamic_env:ENV):
+	return OPS[expr.glyph](_strict(expr.arg, dynamic_env))
+
+def _eval_shortcut_exp(expr:syntax.ShortCutExp, dynamic_env:ENV):
+	lhs = _strict(expr.lhs, dynamic_env)
+	assert isinstance(lhs, bool)
+	return lhs if lhs == OPS[expr.glyph] else _strict(expr.rhs, dynamic_env)
+
+def _eval_call(expr:syntax.Call, dynamic_env:ENV):
+	procedure = _strict(expr.fn_exp, dynamic_env)
+	thunks = tuple(delay(dynamic_env, a) for a in expr.args)
+	return procedure.apply(dynamic_env, thunks)
+
+def _eval_cond(expr:syntax.Cond, dynamic_env:ENV):
+	if_part = _strict(expr.if_part, dynamic_env)
+	sequel = expr.then_part if if_part else expr.else_part
+	return delay(dynamic_env, sequel)
+
+def _eval_field_ref(expr:syntax.FieldReference, dynamic_env:ENV):
+	lhs = _strict(expr.lhs, dynamic_env)
+	key = expr.field_name.text
+	if isinstance(lhs, dict):
+		return lhs[key]
+	else:
+		return getattr(lhs, key)
+
+def _eval_explicit_list(expr:syntax.ExplicitList, dynamic_env:ENV):
+	tail = NIL
+	for sx in reversed(expr.elts):
+		head = delay(dynamic_env, sx)
+		tail = CONS.apply(dynamic_env, (head, tail))
+	return tail
+
+def _eval_match_expr(expr:syntax.MatchExpr, dynamic_env:ENV):
+	dynamic_env.bindings[expr.subject] = subject = _strict(expr.subject.expr, dynamic_env)
+	tag = subject[""]
+	try:
+		branch = expr.dispatch[tag]
+	except KeyError:
+		branch = expr.otherwise
+		if branch is None:
+			raise RuntimeError("Confused by tag %r; should not be possible now that type-checking works."%tag)
+	return delay(dynamic_env, branch)
+
+def _eval_MessageRef(expr:syntax.MessageRef, dynamic_env:ENV):
+	receiver = _strict(expr.receiver, dynamic_env)
+	return BoundMethod(receiver, expr.message_name.text)
+
+def _snap_type_alias(alias:syntax.TypeAlias, env:ENV):
+	assert isinstance(alias.body, syntax.TypeCall)  # resolution.check_constructors guarantees this.
+	return lookup(alias.body.ref.dfn, env)
+
+def _snap_udf(udf:syntax.UserDefinedFunction, env:ENV):
+	return Closure(env, udf) if udf.params else delay(env, udf.expr)
+
+SNAP : dict[type, callable] = {
+	syntax.TypeAlias: _snap_type_alias,
+	syntax.UserDefinedFunction:_snap_udf,
+}
+
+def lookup(dfn:ontology.Symbol, env:ENV):
+	try: return env.bindings[dfn]
+	except KeyError:
+		env.bindings[dfn] = it = SNAP[type(dfn)](dfn, env)
+		return it
+
+EVALUABLE = Union[syntax.ValExpr, syntax.Reference]
+
+def evaluate(expr:EVALUABLE, dynamic_env:ENV) -> LAZY_VALUE:
+	assert isinstance(dynamic_env, StackFrame), type(dynamic_env)
+	try: fn = EVALUATE[type(expr)]
+	except KeyError: raise NotImplementedError(type(expr), expr)
+	else: return fn(expr, dynamic_env)
+
+def delay(dynamic_env:ENV, item:syntax.ValExpr) -> LAZY_VALUE:
+	# For two kinds of expression, there is no profit to delay:
+	if isinstance(item, syntax.Literal): return item.value
+	if isinstance(item, syntax.Lookup): return _eval_lookup(item, dynamic_env)
+	# In less trivial cases, make a thunk and pass that instead.
+	return Thunk(dynamic_env, item)
+
+class ProxyActor(ontology.Actor):
+	""" Wrap Python objects in one of these to use them as actors. """
+	def __init__(self, principal):
+		self._principal = principal
+	def perform(self, message_name: str, args: Sequence):
+		method = getattr(self._principal, message_name)
+		return method(*args)
+
+class Closure(Procedure):
+	""" The run-time manifestation of a sub-function: a callable value tied to its natal environment. """
+
+	def __init__(self, static_link:ENV, udf:syntax.UserDefinedFunction):
+		self._static_link = static_link
+		self._udf = udf
+	
+	def _name(self): return self._udf.nom.text
+
+	def apply(self, dynamic_env:ENV, args: Sequence[LAZY_VALUE]) -> LAZY_VALUE:
+		inner_env = ActivationRecord(self._udf, dynamic_env, self._static_link, args)
+		return evaluate(self._udf.expr, inner_env)
+
+class Primitive(Procedure):
+	""" All parameters to primitive procedures are strict. Also a kind of value, like a closure. """
+	def __init__(self, fn: callable):
+		self._fn = fn
+	
+	def apply(self, dynamic_env: ENV, args: Sequence[LAZY_VALUE]) -> STRICT_VALUE:
+		return self._fn(*(force(a) for a in args))
+
+class Constructor(Procedure):
+	def __init__(self, key:str, fields:list[str]):
+		self.key = key
+		self.fields = fields
+	
+	def apply(self, dynamic_env: ENV, args: Sequence[LAZY_VALUE]) -> Any:
+		# TODO: It would be well to handle tagged values as Python pairs.
+		#  This way any value could be tagged, and various case-matching
+		#  things could work more nicely (and completely).
+		assert len(args) == len(self.fields)
+		structure = {"": self.key}
+		for field, arg in zip(self.fields, args):
+			assert not isinstance(arg, syntax.ValExpr)
+			structure[field] = arg
+		return structure
+
+class BoundMethod(Procedure):
+	def __init__(self, receiver, message_name: str):
+		self._receiver, self._message_name = receiver, message_name
+	def apply(self, dynamic_env: ENV, args: Sequence[LAZY_VALUE]) -> Any:
+		return self.as_message(*(force(a) for a in args))
+	def as_message(self, *actuals:STRICT_VALUE):
+		return Message(self._receiver, self._message_name, actuals)
+	def enqueue(self):
+		self.as_message().enqueue()
+
+class Message:
+	def __init__(self, receiver, message_name:str, args: Sequence[STRICT_VALUE]):
+		self._receiver, self._message_name, self._args = receiver, message_name, args
+	def enqueue(self):
+		THE_QUEUE.append(self)
+	def deliver(self):
+		self._receiver.perform(self._message_name, self._args)
+		
+	
+THE_QUEUE:deque[Message] = deque()
+
+def drain_queue():
+	while THE_QUEUE:
+		THE_QUEUE.popleft().deliver()
+
+EVALUATE = {}
+for _k, _v in list(globals().items()):
+	if _k.startswith("_eval_"):
+		_t = _v.__annotations__["expr"]
+		assert isinstance(_t, type), (_k, _t)
+		EVALUATE[_t] = _v
+OPS = {glyph:op for glyph, (op, typ) in primitive.ops.items()}
+
+NIL:dict = None # Gets replaced at runtime.
+CONS:Constructor
+
+def iterate_list(lst:LAZY_VALUE):
+	lst = force(lst)
+	while lst is not NIL:
+		yield force(lst['head'])
+		lst = force(lst['tail'])
+
+import sys
+import random
+
+class Console:
+	@staticmethod
+	def echo(text):
+		for fragment in iterate_list(text):
+			sys.stdout.write(fragment)
+		sys.stdout.flush()
+	
+	@staticmethod
+	def read(target: BoundMethod):
+		assert isinstance(target, BoundMethod), type(target)
+		target.as_message(input()).enqueue()
+	
+	@staticmethod
+	def random(target: BoundMethod):
+		assert isinstance(target, BoundMethod), type(target)
+		target.as_message(random.random()).enqueue()
+
+console = ProxyActor(Console())
+
+

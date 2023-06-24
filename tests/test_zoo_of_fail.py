@@ -2,8 +2,8 @@ from pathlib import Path
 import unittest
 from unittest import mock
 
-from sophie.front_end import parse_file
-from sophie import syntax, diagnostics, modularity, resolution
+from sophie.front_end import read_file, parse_text
+from sophie import syntax, diagnostics, modularity
 
 REPORT = diagnostics.Report(verbose=True)
 
@@ -15,9 +15,11 @@ def _parse(path):
 	REPORT.reset()
 	assert path.exists(), path
 	REPORT.set_path(path)
-	REPORT.complain_to_console = mock.Mock()
 	with mock.patch("boozetools.macroparse.runtime.print", lambda *x, file=None: None):
-		sut = parse_file(path, REPORT)
+		text = read_file(path, REPORT, None)
+		REPORT.assert_no_issues()
+		REPORT.complain_to_console = mock.Mock()
+		sut = parse_text(text, path, REPORT)
 		assert 0 == REPORT.complain_to_console.call_count
 	if sut is None:
 		assert REPORT.sick()
@@ -117,7 +119,7 @@ class ZooOfFail(unittest.TestCase):
 				report = diagnostics.Report(verbose=False)
 				loader = modularity.Loader(report)
 				# When
-				module = loader.need_module(zoo_fail/"import"/ (basename + ".sg"))
+				module = loader.need_module(zoo_fail/"import"/ (basename + ".sg"), None)
 				# Then
 				assert type(module) is syntax.Module
 				assert report.sick()

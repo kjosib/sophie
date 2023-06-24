@@ -143,6 +143,9 @@ class MethodType(SophieType):
 class MessageType(SophieType):
 	pass
 
+class ActorType(SophieType):
+	pass
+
 class _Bottom(SophieType):
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_bottom()
 

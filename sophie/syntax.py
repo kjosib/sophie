@@ -9,8 +9,8 @@ from typing import Optional, Any, Sequence, NamedTuple, Union
 from boozetools.parsing.interface import SemanticError
 from boozetools.support.symtab import NameSpace
 from .ontology import (
-	Nom, Symbol, NativeFunction, NS, Reference,
-	Expr, Function,
+	Nom, Symbol, NS, Reference,
+	Expr, Term,
 )
 
 class MismatchedBookendsError(SemanticError):
@@ -175,7 +175,7 @@ def _bookend(head: Nom, coda: Nom):
 	if head.text != coda.text:
 		raise MismatchedBookendsError(head.head(), coda.head())
 
-class UserDefinedFunction(Function):
+class UserDefinedFunction(Term):
 	source_path: Path
 	namespace: NS
 	sub_fns: dict[str:"UserDefinedFunction"]  # for simple evaluator
@@ -375,7 +375,11 @@ class ImportModule(Symbol):
 		self.relative_path = relative_path
 		self.vocab = vocab or ()
 
-class FFI_Alias(NativeFunction):
+class FFI_Alias(Term):
+	""" Built-in and foreign (Python) function symbols. """
+	static_depth = 0
+	val:Any  # Fill in during WordDefiner pass
+	
 	def __init__(self, nom:Nom, alias:Optional[Literal]):
 		super().__init__(nom)
 		self.nom = nom

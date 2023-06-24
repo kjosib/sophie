@@ -1,8 +1,5 @@
 # 99 bottles of ... soda ... on the wall. Yeah. Definitely soda. We'll keep it safe for the whole family here.
 
-import:
-    sys."teletype" (done, echo);
-
 define:
     bottles(n) = case
         when n < 1 then cat(verse("no"), coda);
@@ -24,4 +21,4 @@ define:
     EOL = chr(10);  # I might consider adding string-escapes soon?
 
 begin:
-    echo(cons(EOL, bottles(5)), done);  # Increase 5 to 99 for the full experience.
+    console:echo(cons(EOL, bottles(5)));  # Increase 5 to 99 for the full experience.

@@ -1,11 +1,10 @@
 import sys
 import random
+from ..runtime import iterate_list, force
 
 NIL : dict
 
-def sophie_init(force, nil):
-	global NIL
-	NIL = force(nil)
+def sophie_init():
 	return {
 		'done':run_app,
 		'echo':run_app,
@@ -13,12 +12,14 @@ def sophie_init(force, nil):
 		'random':run_app,
 	}
 
-def run_app(force, env, app):
+def run_app(env, app):
 	while True:
 		tag = app[""]
 		if tag == 'done': return
 		elif tag == 'echo':
-			emit(force, force(app['text']))
+			for fragment in iterate_list(app['text']):
+				sys.stdout.write(fragment)
+			sys.stdout.flush()
 			app = force(app['next'])
 		elif tag == 'read':
 			proc = force(app['next'])
@@ -26,10 +27,5 @@ def run_app(force, env, app):
 		elif tag == 'random':
 			proc = force(app['next'])
 			app = force(proc.apply(env, [random.random()]))
-
-def emit(force, text):
-	while text is not NIL:
-		sys.stdout.write(force(text['head']))
-		text = force(text['tail'])
-	sys.stdout.flush()
+	
 	

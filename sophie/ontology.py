@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Sequence
 from boozetools.support.symtab import NameSpace
 
 class Nom:
@@ -29,13 +29,8 @@ class Symbol:
 
 NS = NameSpace[Symbol]
 
-class Function(Symbol):
+class Term(Symbol):
 	def has_value_domain(self): return True
-
-class NativeFunction(Function):
-	""" Built-in and foreign (Python) function symbols. """
-	static_depth = 0
-	val:Any  # Fill in during WordDefiner pass
 
 class Expr:
 	def head(self) -> slice:
@@ -46,4 +41,12 @@ class Reference(Expr):
 	nom:Nom
 	dfn:Symbol   # Should happen during WordResolver pass.
 	def __init__(self, nom:Nom): self.nom = nom
+
+class Actor:
+	""" Interface for the run-time conception of an Actor. """
+	# This might not be the right place for this long-term,
+	# but in the short run it will serve.
+	def perform(self, message_name:str, args:tuple):
+		raise NotImplementedError(type(self))
+
 
