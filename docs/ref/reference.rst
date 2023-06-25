@@ -20,7 +20,8 @@ Sophie is not exactly *block-structured:* module files have sections dedicated t
 * Exports
 * Imports
 * Type definitions
-* Function definitions
+* Type assumptions
+* Function and Class definitions
 * "Main-Program" Behavior
 
 Every section is optional, but if it appears, it must appear in exactly that order.
