@@ -21,6 +21,19 @@ Sooner or later this will get even easier.
    and press ``enter``. You'll see a load of gibberish fly past.
    Assuming you're not behind a restrictive firewall, the right things should have happened.
 
+.. admonition:: Got a Mac? Your mileage my vary
+
+    Like most people, my daily driver is a windows machine.
+    So that's how these directions are written.
+    But working on a Macintosh is a little different.
+    If you just saw ``-bash: py: command not found``
+    then you will probably need to spell out the word ``python``
+    instead of use the abbreviation ``py``.
+    (At least, that's what my mac requires of me.)
+    And also don't forget the path separators are different.
+    You'll use the forward slash ``/`` instead of the backslash ``\``.
+    Keep those in mind, and you should be able to follow along.
+
 3. Download the code for Sophie.
 
    Option One: Get a current snap-shot
