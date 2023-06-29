@@ -8,13 +8,13 @@ define:
 EOL = chr(10);
 intro = ["I have chosen a random number from 1 to 100.", EOL, EOL];
 
-to start(r) is              # Defining a global method. There is no 'self' or 'my' in a global method.
+to start(r) is              # Defining a global method. There is no 'self' or 'my'.
     new game(goal):turn     # This can be either a single command or a braced-block.
 where                       # Methods may have local functions nested in a static scope.
     goal = int(r*100)+1;    # Consistent with syntax for outer functions,
 end start;                  # the method name is repeated at the end of a where-block.
 
-game(goal) = actor      # function `game` returns an actor-class.
+actor game(goal) is     # Parameters (e.g. goal) are to be immutable.
     my score := 0;      # One or more mutations circumscribe the initial mutable state.
 where                   # All interesting actors must have methods. They live under the 'where' keyword.
     to take_turn is do          # We can use a do-block as a sequential command.
