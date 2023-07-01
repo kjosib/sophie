@@ -4,19 +4,24 @@ Packaging script for PyPI.
 import os, setuptools
 from pathlib import Path
 
-_grammar_source = Path(__file__).parent / "sophie" / "Sophie.md"
-if _grammar_source.exists():
+try:
 	from boozetools.macroparse.runtime import make_tables
-	make_tables(_grammar_source)
+except ImportError:
+	pass
+else:
+	make_tables(Path(__file__).parent / "sophie" / "Sophie.md")
 
 setuptools.setup(
 	name='sophie-lang',
 	author='Ian Kjos',
 	author_email='kjosib@gmail.com',
-	version='0.0.0',
+	version='0.0.1',
 	packages=['sophie', "sophie.adapters", ],
 	package_data={
 		'sophie': ["Sophie.automaton"]+["sys/"+f for f in os.listdir("sophie/sys")],
+	},
+	entry_points={
+		'console_scripts': ["sophie = sophie.cmdline:main"],
 	},
 	license='MIT',
 	description='A call-by-need strong-inferred-type language named for French mathematician Sophie Germain',
