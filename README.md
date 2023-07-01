@@ -23,15 +23,6 @@ It may seem a small thing, but algebra-style parentheses are much more clear to 
 I think that's also true for most of the world's programmers.
 Things are better when the notation does not interfere with understanding.
 
-## Install/Run
-
-1. `pip install --upgrade booze-tools`
-2. Clone or download the repository.
-3. `py -m sophie examples/turtle.sg`
-
-Yes, it's implemented atop Python. For now. That's a key enabler, actually.
-Python pays the bills right now. C'est la vie.
-
 ## How do I Learn Sophie?
 
 1. [Read the docs](https://sophie.readthedocs.io)
