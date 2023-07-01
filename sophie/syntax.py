@@ -178,13 +178,13 @@ def _bookend(head: Nom, coda: Nom):
 class UserDefinedFunction(Term):
 	source_path: Path
 	namespace: NS
-	sub_fns: dict[str:"UserDefinedFunction"]  # for simple evaluator
+	params: Sequence[FormalParameter]
 	where: Sequence["UserDefinedFunction"]
-	
 	def has_value_domain(self): return True
+	def head(self) -> slice: return self.nom.head()
 	def __repr__(self):
 		p = ", ".join(map(str, self.params))
-		return "{fn:%s(%s)|%s}"%(self.nom.text, p, getattr(self, "static_depth", "?"))
+		return "{fn:%s(%s)}" % (self.nom.text, p)
 	def __init__(
 			self,
 			nom: Nom,
@@ -202,8 +202,7 @@ class UserDefinedFunction(Term):
 			self.where = where.sub_fns
 		else:
 			self.where = ()
-	
-	def head(self) -> slice: return self.nom.head()
+
 
 class WhereClause(NamedTuple):
 	sub_fns: Sequence[UserDefinedFunction]
@@ -233,11 +232,11 @@ class FieldReference(ValExpr):
 	def __str__(self): return "(%s.%s)" % (self.lhs, self.field_name.text)
 	def head(self) -> slice: return self.field_name.head()
 
-class MessageRef(ValExpr):
-	def __init__(self, receiver: ValExpr, message_name: Nom):
-		self.receiver, self.message_name = receiver, message_name
-	def __str__(self): return "(%s.%s)" % (self.receiver, self.message_name.text)
-	def head(self) -> slice: return self.message_name.head()
+class BoundMethod(ValExpr):
+	def __init__(self, receiver: ValExpr, method_name: Nom):
+		self.receiver, self.method_name = receiver, method_name
+	def __str__(self): return "(%s.%s)" % (self.receiver, self.method_name.text)
+	def head(self) -> slice: return self.method_name.head()
 
 class BinExp(ValExpr):
 	def __init__(self, glyph: str, lhs: ValExpr, o:slice, rhs: ValExpr):
@@ -363,6 +362,10 @@ class MatchExpr(ValExpr):
 	def head(self) -> slice:
 		return self.subject.head()
 
+class DoBlock(ValExpr):
+	def __init__(self, steps:list[ValExpr]):
+		self.steps = steps
+
 class ImportSymbol(NamedTuple):
 	yonder : Nom
 	hither : Optional[Nom]
@@ -410,8 +413,6 @@ class Module:
 	module_imports: NS  # Modules imported with an "as" clause.
 	wildcard_imports: NS  # Names imported with a wildcard. Sits underneath globals.
 	globals: NS  # WordDefiner pass creates this.
-	all_functions: list[UserDefinedFunction]  # WordDefiner pass creates this.
-	all_match_expressions: list[MatchExpr]  # WordResolver pass creates this.
 	
 	def __init__(self, exports:list, imports:list[ImportDirective], types:list[TypeDeclaration], assumption:list[Assumption], functions:list[UserDefinedFunction], main:list):
 		self.exports = exports

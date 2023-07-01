@@ -7,7 +7,7 @@ Let's Play a Game!
 
 Sophie can hold an interactive conversation::
 
-    D:\GitHub\sophie>py -m sophie examples\games\guess_the_number.sg
+    D:\GitHub\sophie>sophie examples\games\guess_the_number.sg
     I have chosen a random number from 1 to 100.
 
     What is your guess? 50

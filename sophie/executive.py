@@ -4,29 +4,31 @@ This is the overall control for the run-time.
 """
 import sys
 from collections import deque
-from typing import  Sequence
+from typing import Sequence
 from . import syntax, primitive, runtime, ontology
-from .stacking import StackBottom
-from .runtime import force, _strict, BoundMethod, Message, drain_queue, Constructor, Primitive, Thunk
+from .stacking import StackFrame, RootFrame, ModuleFrame
+from .runtime import (
+	force, _strict, Constructor, Primitive, Thunk,
+	drain_queue, Step
+)
 
 def run_program(static_root, each_module: Sequence[syntax.Module]):
 	drivers = {}
-	env = StackBottom(None)
-	_prepare_root_environment(env, static_root)
+	root = _dynamic_root(static_root)
 	result = None
 	for module in each_module:
-		env.current_path = module.path
-		_prepare_global_scope(env, module.globals.local.items())
+		env = ModuleFrame(root, module.path)
+		_prepare(env, module.globals)
 		for d in module.foreign:
 			if d.linkage is not None:
 				py_module = sys.modules[d.source.value]
-				linkage = [env.bindings[ref.dfn] for ref in d.linkage]
+				linkage = [env.fetch(ref.dfn) for ref in d.linkage]
 				drivers.update(py_module.sophie_init(*linkage))
 		for expr in module.main:
 			env.pc = expr
 			result = _strict(expr, env)
-			if isinstance(result, (BoundMethod, Message)):
-				result.enqueue()
+			if isinstance(result, Step):
+				result.run()
 				drain_queue()
 				continue
 			if isinstance(result, dict):
@@ -39,33 +41,39 @@ def run_program(static_root, each_module: Sequence[syntax.Module]):
 					result = decons(result)
 			if result is not None:
 				print(result)
+		# This kludge makes QualifiedReference work,
+		# at least until a proper linkage model takes over.
+		root._bindings.update(env._bindings)
 	return result
 
-
-def _prepare_root_environment(env:StackBottom, static_root):
-	_prepare_global_scope(env, primitive.root_namespace.local.items())
-	_prepare_global_scope(env, static_root.local.items())
+def _dynamic_root(static_root) -> RootFrame:
+	root = RootFrame()
+	_prepare(root, primitive.root_namespace)
+	_prepare(root, static_root)
 	if 'nil' in static_root:
-		runtime.NIL = env.bindings[static_root['nil']]
-		runtime.CONS = env.bindings[static_root['cons']]
+		runtime.NIL = root.fetch(static_root['nil'])
+		runtime.CONS = root.fetch(static_root['cons'])
 	else:
 		runtime.NIL, runtime.CONS = None, None
+	return root
 
-def _prepare_global_scope(env:StackBottom, items):
-	for key, dfn in items:
+def _prepare(env:StackFrame, namespace:ontology.NS):
+	for key, dfn in namespace.local.items():
 		if isinstance(dfn, syntax.Record):
-			env.bindings[dfn] = Constructor(key, dfn.spec.field_names())
+			env.install(dfn, Constructor(key, dfn.spec.field_names()))
 		elif isinstance(dfn, (syntax.SubTypeSpec, syntax.TypeAlias)):
 			if isinstance(dfn.body, (syntax.ArrowSpec, syntax.TypeCall)):
 				pass
 			elif isinstance(dfn.body, syntax.RecordSpec):
-				env.bindings[dfn] = Constructor(key, dfn.body.field_names())
+				env.install(dfn, Constructor(key, dfn.body.field_names()))
 			elif dfn.body is None:
-				env.bindings[dfn] = {"": key}
+				env.install(dfn, {"": key})
 			else:
 				raise ValueError("Tagged scalars (%r) are not implemented."%key)
 		elif isinstance(dfn, syntax.FFI_Alias):
-			env.bindings[dfn] = _native_object(dfn)
+			env.install(dfn, _native_object(dfn))
+		elif isinstance(dfn, syntax.UserDefinedFunction):
+			env.hold_place_for(dfn)
 		elif type(dfn) in _ignore_these:
 			pass
 		else:
@@ -78,8 +86,6 @@ def _native_object(dfn:syntax.FFI_Alias):
 		return dfn.val
 
 _ignore_these = {
-	# type(None),
-	syntax.UserDefinedFunction,  # Gets built on-demand.
 	syntax.ArrowSpec,
 	syntax.TypeCall,
 	syntax.Variant,
@@ -108,5 +114,7 @@ def decons(item:dict) -> list:
 	if item is not runtime.NIL:
 		result.append(item)
 	return result
+
+###############################################################################
 
 

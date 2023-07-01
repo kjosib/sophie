@@ -29,8 +29,10 @@ export_section  -> EXPORT ':' comma_list(name) ';'             | :empty
 import_section  -> IMPORT ':' semicolon_list(import_directive) | :empty
 typedef_section -> TYPE ':' semicolon_list(type_declaration)   | :empty
 assume_section  -> ASSUME ':' semicolon_list(assumption)       | :empty
-define_section  -> DEFINE ':' semicolon_list(function)         | :empty
+define_section  -> DEFINE ':' semicolon_list(top_level)        | :empty
 main_section    -> BEGIN ':' semicolon_list(expr)              | :empty
+
+top_level -> function | actor
 ```
 
 Since I'd like Sophie to support a unit/module system,
@@ -73,28 +75,6 @@ generic(item)  -> reference optional(square_list(item))   :TypeCall
 arrow_of(item) -> round_list(item) '->' item              :ArrowSpec
 ```
 -----
-**The general structure of a function:**
-```
-function -> name optional(round_list(parameter)) annotation '=' expr optional(where_clause)    :UserDefinedFunction
-where_clause -> WHERE semicolon_list(function) END name :WhereClause
-```
-
-Parameters to a function allow things to be implied.
-You can leave off the type for a name,
-or use a question-mark anywhere a type-name would normally go,
-and Sophie will deal with it sensibly.
-```
-parameter  ->   name annotation   :FormalParameter
-annotation ->  :nothing | ':' arg_type
-
-arg_type -> generic(arg_type) | arrow_of(arg_type)
-          | '?' name    :ExplicitTypeVariable
-          | '?'         :ImplicitTypeVariable
-
-```
-I suppose it bears mention that all Sophie functions are implicitly generic
-to whatever extent the body-expression can support.
-
 **Parameter Type Assumptions:**
 
 This may feel a bit like BASIC's `dim` statement, but it's entirely optional.
@@ -114,8 +94,34 @@ only by how you use it.
 *Note 2: One could imagine warning about unconstrained parameters, or even making it a stricture for large projects.*
 
 -----
+**The general structure of a function:**
+```
+function -> name formals annotation '=' expr optional(where_clause)     :UserDefinedFunction
+where_clause -> WHERE semicolon_list(function) END name                 :WhereClause
+```
+
+Parameters to a function allow things to be implied.
+You can leave off the type for a name,
+or use a question-mark anywhere a type-name would normally go,
+and Sophie will deal with it sensibly.
+```
+formals -> optional(round_list(parameter))
+parameter  ->   name annotation   :FormalParameter
+annotation ->  :nothing | ':' arg_type
+
+arg_type -> generic(arg_type) | arrow_of(arg_type)
+          | '?' name    :ExplicitTypeVariable
+          | '?'         :ImplicitTypeVariable
+
+```
+I suppose it bears mention that all Sophie functions are implicitly generic
+to whatever extent the body-expression can support.
+
+-----
 
 **The Expression Grammar:**
+
+The bulk of the expression grammar covers the pure-functional aspects of the language.
 
 ```
 expr -> integer | real | short_string | list_expr | case_expr | match_expr
@@ -143,7 +149,7 @@ expr -> integer | real | short_string | list_expr | case_expr | match_expr
 
 | reference :Lookup
 | expr round_list(expr) :Call
-| expr list_expr :call_upon_list
+| expr list_expr        :call_upon_list
 
 | .YES   :truth
 | .NO    :falsehood
@@ -166,20 +172,33 @@ Experience may later suggest expanding the `pattern` grammar, but this will do f
 
 -----
 
+**Expressing Observable Behavior**
 
-**Actor-Oriented Bits**
+Pure functions may be easy to reason about,
+but they're not much fun at parties because
+they don't actually *do* anything.
 
-This is going to come together in very small bites.
-For this increment, I'm adding only one new production rule:
+Sophie needs a 
+
+The general idea is that an action (or rather, a plan of action)
+is just a special type of value which happens to express 
+observable outcomes, with just a few extra production rules.
 
 ```
-expr -> expr ':' name     :MessageRef
+
+expr -> SKIP                :Skip
+      | expr ':' name       :BoundMethod
+      | DO semicolon_list(expr) END     :DoBlock
+
+function -> TO name formals IS expr optional(where_clause)     :UserDefinedMethod
 ```
-
-
+I could see the argument that a constructor should be just another (side-effecting) expression,
+but the main purpose I have in mind for them is to establish and initialize the internal state of an actor.
+Before that job finishes, any help should come from the global scope.
+If tediously-large common subexpressions become a problem in practice,
+then maybe an adjustment will be called for.
 
 -----
-
 **Foreign Function Interface**
 
 Most Sophie users won't need to worry about these rules,
@@ -217,6 +236,7 @@ round_list(x) -> '(' comma_list(x) ')'
 ```
 %bogus UMINUS
 %left '(' '[' '.'
+%nonassoc NEW
 %right '^'
 %left '*' '/' '%' DIV MOD
 %left '+' '-'
@@ -227,6 +247,7 @@ round_list(x) -> '(' comma_list(x) ')'
 %nonassoc  ':'
 
 %right '->' IF ELSE
+%nonassoc ':='
 ```
 
 This next bit tells the parser-generator how to tell which terminals have semantic value,

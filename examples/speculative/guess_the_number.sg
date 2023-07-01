@@ -1,65 +1,38 @@
-# In line with the notion of actors I'm presently aiming for,
-# This attempts to define a guess-the-number game using the
-# new console-actor and a cooperating actor for the game itself.
-
+# Version of the number-guessing game which exercises tne
+# new asynchronous message-passing semantics.
 
 define:
 
 EOL = chr(10);
 intro = ["I have chosen a random number from 1 to 100.", EOL, EOL];
 
-to start(r) is              # Defining a global method. There is no 'self' or 'my'.
-    new game(goal):turn     # This can be either a single command or a braced-block.
-where                       # Methods may have local functions nested in a static scope.
-    goal = int(r*100)+1;    # Consistent with syntax for outer functions,
-end start;                  # the method name is repeated at the end of a where-block.
-
-actor game(goal) is     # Parameters (e.g. goal) are to be immutable.
-    my score := 0;      # One or more mutations circumscribe the initial mutable state.
-where                   # All interesting actors must have methods. They live under the 'where' keyword.
-    to take_turn is do          # We can use a do-block as a sequential command.
-        console:echo ["What is your guess? "];  # Causal ordering makes the echo happen
-        console:read(self:guess);               # before the read happens.
-    end;
-    to guess(g) is case val(g) as v of      # An expression may decide on a command.
-        this -> do                          # That makes a command a kind of expression.
-            my score := my score + 1;       #       ( Here's a state mutation! )
-            consider(int(v.item));          # So, a function can return a command.
+game(r) = turn(1) where
+    goal = int(r*100)+1;
+    turn(score) = do
+        console:echo ["What is your guess? "];
+        console:read(guess);
+    end where
+        guess(g) = case val(g) as v of
+            this -> consider(int(v.item));
+            nope -> do
+                console:echo ["I didn't grok that number.", EOL];
+                turn(score);
+            end;
+        esac;
+        consider(g:number) = case
+            when g > goal then again('high', 'low');
+            when g < goal then again('low', 'high');
+            else win;
+        esac;
+        again(far, near) = do
+            console:echo ['Too ', far, '. Try a ', near, 'er number.', EOL];
+            turn(score+1);
         end;
-        nope -> do
-            console:echo ["I didn't grok that number.", EOL];
-            self:take_turn;     # Messages to the self rely on causal ordering, not stacking.
-        end;
-    esac;
-    consider(g:number) = case                       # A local function is not a method,
-        when g > goal then again('high', 'low');    # but it has access to the surrounding scope.
-        when g < goal then again('low', 'high');    # You can think of it like a private method.
-        else win;
-    esac;
-    again(far, near) = do
-        console:echo ['Too ', far, '. Try a ', near, 'er number.', EOL];
-        self:take_turn;
-    end;
-    win = console:echo ["You win after ", str(my score), " guesses!", EOL];
-    # Note the reference to 'my score' here.
-    # That makes 'win' a volatile function: Its result cannot safely be memoized.
-    # Volatility is contagious: Any function or expression that mentions a volatile
-    # object is itself also volatile, with transitive closure.
-    # Mutation is also volatile.
+        win = console:echo ["You win after ", str(score), " guesses!", EOL];
+    end turn;
 end game;
 
 begin:
     console:echo(intro);
-    console:random(start);
+    console:random(game);
 
-
-# At this point you may be wondering when to define a function vs. a method.
-    # Sending a message invokes a method asynchronously.
-    # The behavior of a method is performed synchronously in the context of some actor.
-    # Evaluating a function has no side effects, but may compute a behavior to perform.
-    # Expressions / functions that access actor state are volatile.
-
-# Sanity Rule:
-# Volatile sub-expressions are subject to eager evaluation.
-    # This means local sequential reasoning will work.
-    # It also still lets you make an infinite list of a snapshot of some state.

@@ -6,7 +6,7 @@ from boozetools.support.failureprone import SourceText, Issue, Evidence, Severit
 from . import syntax
 from .ontology import Expr
 from .calculus import TYPE_ENV, SophieType
-from .stacking import ActivationRecord
+from .stacking import StackFrame
 
 class Report:
 	""" Might this end up participating in a result-monad? """
@@ -91,6 +91,11 @@ class Report:
 		self._issues.append((Pic(text, [])))
 		self.error("Defining words", [source.head()], msg)
 	
+	def missing_foreign(self, source):
+		intro = "Missing Foreign Module"
+		caption = "This module could not be found."
+		self._issues.append(Pic(intro, [Annotation(self._path, source.head(), caption)]))
+	
 	def missing_linkage(self, source):
 		intro = "Missing Foreign Linkage Function"
 		caption = "This module has no 'sophie_init'."
@@ -156,15 +161,19 @@ def illustrate(source, the_slice, caption):
 	width = the_slice.stop - the_slice.start
 	return illustration(single_line, col, width, prefix='% 6d :' % row, caption=caption)
 
+class Tracer:
+	def __init__(self):
+		self.trace = []
+	def called_with(self, path, span:slice, bindings:dict):
+		bind_text = ', '.join("%s:%s" % (p.nom.text, t) for p, t in bindings.items())
+		self.trace.append(Annotation(path, span, "Called with " + bind_text))
+	def called_from(self, path, span):
+		self.trace.append(Annotation(path, span, "Called from here"))
+
 def trace_stack(env:TYPE_ENV) -> list[Annotation]:
-	trace = []
-	while isinstance(env, ActivationRecord):
-		bindings = ', '.join("%s:%s" % (p.nom.text, t) for p, t in env.bindings.items())
-		trace.append(Annotation(env.path(), env.udf.head(), "Called with " + bindings))
-		env = env.dynamic_link
-		if hasattr(env, "pc"):
-			trace.append(Annotation(env.path(), env.pc.head(), "Called from here"))
-	return trace
+	tracer = Tracer()
+	env.trace(tracer)
+	return tracer.trace
 
 class Pic:
 	def __init__(self, intro:str, trace:list[Annotation]):

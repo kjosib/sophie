@@ -12,6 +12,24 @@ from boozetools.support.symtab import NoSuchSymbol, SymbolAlreadyExists
 from . import syntax, diagnostics
 from .ontology import NS, Symbol
 
+class RoadMap:
+	def __init__(self):
+		self.all_user_defined = []
+		self.all_match_expressions = []
+	
+	def check_all_match_expressions(self, report):
+		on_match_error = report.on_error("Checking Type-Case Matches")
+		for mx in self.all_match_expressions:
+			_check_one_match_expression(mx, on_match_error)
+	
+	def build_match_dispatch_tables(self):
+		""" The simple evaluator uses these. """
+		for mx in self.all_match_expressions:
+			mx.dispatch = {}
+			for alt in mx.alternatives:
+				key = alt.pattern.nom.key()
+				mx.dispatch[key] = alt.sub_expr
+
 class _TopDown(Visitor):
 	"""
 	Convenience base-class to handle the dreary bits of a
@@ -40,7 +58,7 @@ class _TopDown(Visitor):
 		# word-agnostic until we know the type of expr.lhs.
 		self.visit(expr.lhs, env)
 	
-	def visit_MessageRef(self, expr: syntax.MessageRef, env):
+	def visit_BoundMethod(self, expr: syntax.BoundMethod, env):
 		# word-agnostic until we know the type of expr.receiver.
 		self.visit(expr.receiver, env)
 	
@@ -57,6 +75,13 @@ class _TopDown(Visitor):
 	def visit_ExplicitList(self, expr: syntax.ExplicitList, env):
 		for e in expr.elts:
 			self.visit(e, env)
+	
+	def visit_DoBlock(self, db: syntax.DoBlock, env):
+		for s in db.steps:
+			self.visit(s, env)
+
+	# def visit_MakeMessage(self, mm:syntax.MakeMessage, env):
+	# 	self.visit(mm.expr, env)
 
 class WordDefiner(_TopDown):
 	"""
@@ -69,13 +94,12 @@ class WordDefiner(_TopDown):
 	"""
 	globals : NS
 	
-	def __init__(self, module:syntax.Module, outer:NS, report):
+	def __init__(self, module:syntax.Module, outer:NS, report:diagnostics.Report):
 		self._report = report
 		self._on_error = report.on_error("Defining words")
 		self.redef, self._missing_foreign_symbols = [], []
 		self.globals = module.globals = outer.new_child(module)
-		self.all_match_expressions = module.all_match_expressions = []
-		self.all_functions = module.all_functions = []
+		self.roadmap = RoadMap()
 		
 		for d in module.imports: self.visit_ImportModule(d, module)
 		for td in module.types: self.visit(td)
@@ -92,7 +116,7 @@ class WordDefiner(_TopDown):
 			self._on_error(self.redef, "I see the same name defined earlier in the same scope:")
 
 	def _install(self, namespace: NS, dfn:Symbol):
-		try: namespace[dfn.nom.text] = dfn
+		try: namespace[dfn.nom.key()] = dfn
 		except SymbolAlreadyExists: self.redef.append(dfn.nom)
 	
 	def _declare_type(self, td:syntax.TypeDeclaration):
@@ -137,17 +161,17 @@ class WordDefiner(_TopDown):
 		for a in it.arguments:
 			self.visit(a, env)
 
-	def visit_UserDefinedFunction(self, fn:syntax.UserDefinedFunction, env:NS):
-		self.all_functions.append(fn)
-		self._install(env, fn)
-		inner = fn.namespace = env.new_child(fn)
-		for param in fn.params:
+	def visit_UserDefinedFunction(self, udf:syntax.UserDefinedFunction, env:NS):
+		self.roadmap.all_user_defined.append(udf)
+		self._install(env, udf)
+		inner = udf.namespace = env.new_child(udf)
+		for param in udf.params:
 			self.visit(param, inner)
-		if fn.result_type_expr is not None:
-			self.visit(fn.result_type_expr, inner)
-		for sub_fn in fn.where:
+		if udf.result_type_expr is not None:
+			self.visit(udf.result_type_expr, inner)
+		for sub_fn in udf.where:
 			self.visit(sub_fn, inner)
-		self.visit(fn.expr, inner)
+		self.visit(udf.expr, inner)
 	
 	def visit_FormalParameter(self, fp:syntax.FormalParameter, env:NS):
 		self._install(env, fp)
@@ -155,13 +179,16 @@ class WordDefiner(_TopDown):
 			self.visit(fp.type_expr, env)
 	
 	def visit_ExplicitTypeVariable(self, gt:syntax.ExplicitTypeVariable, env:NS):
-		if gt.nom.text not in env:
+		if gt.nom.key() not in env:
 			self._install(env, syntax.TypeParameter(gt.nom))
 	
 	def visit_Lookup(self, l:syntax.Lookup, env:NS): pass
-
+	
+	# def visit_Mutation(self, m:syntax.Mutation, env:NS):
+	# 	self.visit(m.expr, env)
+	
 	def visit_MatchExpr(self, mx:syntax.MatchExpr, env:NS):
-		self.all_match_expressions.append(mx)
+		self.roadmap.all_match_expressions.append(mx)
 		self.visit(mx.subject.expr, env)
 		inner = mx.namespace = env.new_child(mx)
 		self._install(inner, mx.subject)
@@ -207,46 +234,13 @@ class WordDefiner(_TopDown):
 			for group in d.groups:
 				self._define_type_params(group)
 				for sym in group.symbols:
-					self.visit(sym, group.param_space, py_module)
+					self.visit(sym, py_module)
 	
-	def visit_FFI_Alias(self, sym:syntax.FFI_Alias, env:NS, py_module):
-		key = sym.nom.text if sym.alias is None else sym.alias.value
+	def visit_FFI_Alias(self, sym:syntax.FFI_Alias, py_module):
+		key = sym.nom.key() if sym.alias is None else sym.alias.value
 		try: sym.val = getattr(py_module, key)
 		except AttributeError: self._missing_foreign_symbols.append(sym)
 		else: self._install(self.globals, sym)
-
-class StaticDepthPass(_TopDown):
-	# Assign static depth to the definitions of all parameters and functions.
-	# This pass cannot fail.
-	def __init__(self, module):
-		for fn in module.outer_functions:
-			self.visit_UserDefinedFunction(fn, 0)
-		for expr in module.main:
-			self.visit(expr, 0)
-			
-	def visit_UserDefinedFunction(self, fn:syntax.UserDefinedFunction, depth:int):
-		fn.static_depth = depth
-		inner = depth + (1 if fn.params else 0)
-		for param in fn.params:
-			param.static_depth = inner
-		self.visit(fn.expr, inner)
-		for sub_fn in fn.where:
-			self.visit_UserDefinedFunction(sub_fn, inner)
-		
-	def visit_MatchExpr(self, mx:syntax.MatchExpr, depth:int):
-		mx.subject.static_depth = depth
-		self.visit(mx.subject.expr, depth)
-		for alt in mx.alternatives:
-			self.visit(alt.sub_expr, depth)
-			for sub_ex in alt.where:
-				self.visit(sub_ex, depth)
-		if mx.otherwise is not None:
-			self.visit(mx.otherwise, depth)
-		
-
-	def visit_Lookup(self, l:syntax.Lookup, depth:int):
-		assert not hasattr(l, "source_depth")
-		l.source_depth = depth
 
 class WordResolver(_TopDown):
 	"""
@@ -266,18 +260,18 @@ class WordResolver(_TopDown):
 	
 	dubious_constructors: list[syntax.Reference]
 	
-	def __init__(self, module:syntax.Module, report):
+	def __init__(self, module:syntax.Module, report:diagnostics.Report, roadmap:RoadMap):
 		on_error = report.on_error("Finding Definitions")
 		self.dubious_constructors = []
 		self.undef:list[syntax.Nom] = []
 		self.module = module
 		for td in module.types:
 			self.visit(td)
-		for d in module.foreign:
-			self.visit(d)
-		for fn in module.all_functions:
-			fn.source_path = module.path
-			self.visit_UserDefinedFunction(fn)
+		for item in module.foreign:
+			self.visit(item)
+		for item in roadmap.all_user_defined:
+			item.source_path = module.path
+			self.visit(item)
 		for expr in module.main:
 			self.visit(expr, module.globals)
 		if self.undef:
@@ -300,7 +294,7 @@ class WordResolver(_TopDown):
 	
 	def _lookup(self, nom:syntax.Nom, env:NS):
 		try:
-			return env[nom.text]
+			return env[nom.key()]
 		except NoSuchSymbol:
 			self.undef.append(nom)
 			return Bogon(nom)
@@ -322,13 +316,13 @@ class WordResolver(_TopDown):
 		for p in tc.arguments:
 			self.visit(p, env)
 
-	def visit_UserDefinedFunction(self, fn:syntax.UserDefinedFunction):
-		for param in fn.params:
+	def visit_UserDefinedFunction(self, sym:syntax.UserDefinedFunction):
+		for param in sym.params:
 			if param.type_expr is not None:
-				self.visit(param.type_expr, fn.namespace)
-		if fn.result_type_expr is not None:
-			self.visit(fn.result_type_expr, fn.namespace)
-		self.visit(fn.expr, fn.namespace)
+				self.visit(param.type_expr, sym.namespace)
+		if sym.result_type_expr is not None:
+			self.visit(sym.result_type_expr, sym.namespace)
+		self.visit(sym.expr, sym.namespace)
 
 	def visit_MatchExpr(self, mx:syntax.MatchExpr, env:NS):
 		self.visit(mx.subject.expr, env)
@@ -345,7 +339,7 @@ class WordResolver(_TopDown):
 		dfn = lu.ref.dfn
 		if isinstance(dfn, syntax.TypeAlias) or not dfn.has_value_domain():
 			self.dubious_constructors.append(lu.ref)
-
+	
 	def visit_ImportForeign(self, d:syntax.ImportForeign):
 		for ref in d.linkage or ():
 			self.visit(ref, self.module.globals)
@@ -367,16 +361,13 @@ class AliasChecker(Visitor):
 	Stop worrying about function cycles; I'll catch that problem in the type checker.
 	"""
 	
-	def __init__(self, module: syntax.Module, report: diagnostics.Report):
+	def __init__(self, module: syntax.Module, report: diagnostics.Report, roadmap:RoadMap):
 		self.on_error = report.on_error("Circular reasoning")
 		self.non_types = []
 		self.graph = {td:[] for td in module.types}
-		for td in module.types:
-			self.visit(td)
-		for d in module.foreign:
-			self.visit(d)
-		for fn in module.all_functions:
-			self.visit(fn)
+		self._tour(module.types)
+		self._tour(module.foreign)
+		self._tour(roadmap.all_user_defined)
 		if self.non_types:
 			self.on_error(self.non_types, "Need a type-name here; found this instead.")
 		alias_order = []
@@ -395,6 +386,10 @@ class AliasChecker(Visitor):
 			assert len(alias_order) == len(module.types)
 			module.types = alias_order
 	pass
+
+	def _tour(self, them):
+		for item in them:
+			self.visit(item)
 	
 	def visit_TypeAlias(self, ta:syntax.TypeAlias):
 		self.graph[ta].append(ta.body)
@@ -449,12 +444,10 @@ class AliasChecker(Visitor):
 	def visit_ExplicitTypeVariable(self, expr:syntax.ExplicitTypeVariable): pass
 	def visit_ImplicitTypeVariable(self, it:syntax.ImplicitTypeVariable): pass
 
-	def visit_UserDefinedFunction(self, fn:syntax.UserDefinedFunction):
-		for p in fn.params:
-			self.visit(p)
-		if fn.result_type_expr:
-			self.visit(fn.result_type_expr)
-	
+	def visit_UserDefinedFunction(self, sym:syntax.UserDefinedFunction):
+		for p in sym.params: self.visit(p)
+		if sym.result_type_expr: self.visit(sym.result_type_expr)
+
 	def visit_ImportForeign(self, d:syntax.ImportForeign):
 		for group in d.groups:
 			self.visit(group.type_expr)
@@ -463,12 +456,9 @@ def check_constructors(dubious_constructors:list[syntax.Reference], report:diagn
 	bogons = [ref.head() for ref in dubious_constructors if not ref.dfn.has_value_domain()]
 	if bogons: report.error("Checking Constructors", bogons, "These type-names are not data-constructors.")
 
-def check_all_match_expressions(module: syntax.Module, report):
-	on_match_error = report.on_error("Checking Type-Case Matches")
-	for mx in module.all_match_expressions:
-		_check_one_match_expression(mx, on_match_error)
 
 def _check_one_match_expression(mx:syntax.MatchExpr, on_error):
+	# todo: Delegate exhaustiveness-checking to the type checker.
 	non_subtypes = []
 	duplicates = set()
 	first = {}
@@ -495,7 +485,11 @@ def _check_one_match_expression(mx:syntax.MatchExpr, on_error):
 		return
 	
 	primary_variant = subtypes[0].variant
-	mistypes = [alt.pattern for alt in mx.alternatives if alt.pattern.dfn.variant is not primary_variant]
+	mistypes = [
+		alt.pattern
+		for alt in mx.alternatives
+		if alt.pattern.dfn.variant is not primary_variant
+	]
 	
 	if mistypes:
 		on_error([mx.alternatives[0].pattern] + mistypes, "These do not all come from the same variant type.")
@@ -509,13 +503,6 @@ def _check_one_match_expression(mx:syntax.MatchExpr, on_error):
 		on_error([mx], "This case-construction does not cover all the cases of <%s> and lacks an otherwise-clause." % mx.variant.nom.text)
 	pass
 
-def build_match_dispatch_tables(module: syntax.Module):
-	""" The simple evaluator uses these. """
-	for mx in module.all_match_expressions:
-		mx.dispatch = {}
-		for alt in mx.alternatives:
-			key = alt.pattern.nom.key()
-			mx.dispatch[key] = alt.sub_expr
 
 class DependencyPass(_TopDown):
 	"""
@@ -562,22 +549,25 @@ class DependencyPass(_TopDown):
 				for parameter in spill:
 					self._insert(parameter, destination)
 	
-	def _clean_up_after(self, module: syntax.Module):
+	def _clean_up_after(self, roadmap:RoadMap):
 		self._outer.clear()
 		self._overflowing.clear()
 		self._outflows.clear()
-		for mx in module.all_match_expressions:
+		for mx in roadmap.all_match_expressions:
 			del self.depends[mx.subject]
 
-	def visit_Module(self, module: syntax.Module):
-		for fn in module.all_functions:
-			self._prepare(fn)
-		for mx in module.all_match_expressions:
+	def visit_Module(self, roadmap:RoadMap):
+		for item in roadmap.all_user_defined:
+			self._prepare(item)
+		for mx in roadmap.all_match_expressions:
 			self._prepare(mx.subject)
-		for fn in module.all_functions:
-			self.visit(fn.expr, fn)
+		for item in roadmap.all_user_defined:
+			self.visit(item)
 		self._flow_dependencies()
-		self._clean_up_after(module)
+		self._clean_up_after(roadmap)
+
+	def visit_UserDefinedFunction(self, udf:syntax.UserDefinedFunction):
+		self.visit(udf.expr, udf)
 
 	def visit_Lookup(self, lu: syntax.Lookup, env):
 		self.visit(lu.ref, env)
@@ -595,7 +585,7 @@ class DependencyPass(_TopDown):
 		else:
 			assert False, (dfn, type(dfn))
 				
-	def visit_MatchExpr(self, mx:syntax.MatchExpr, env:NS):
+	def visit_MatchExpr(self, mx:syntax.MatchExpr, env):
 		self.visit(mx.subject.expr, mx.subject)
 		for alt in mx.alternatives:
 			self.visit(alt.sub_expr, env)

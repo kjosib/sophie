@@ -25,7 +25,7 @@ Try this bit of nonsense:
 
 When you try to run this nonsense::
 
-    D:\GitHub\sophie>py -m sophie zoo\fail\type_check\num_plus_string.sg
+    D:\GitHub\sophie>sophie zoo\fail\type_check\num_plus_string.sg
     Error while Checking Types: Needed number; got string.
     Excerpt from D:\GitHub\sophie\zoo\fail\type_check\num_plus_string.sg :
          5 :    add(a,b) = a + b;
@@ -65,7 +65,7 @@ Checking Programs Without Running Them
 You can ask Sophie to check your program without running it, using the ``-c`` option.
 In that case, Sophie will list the inferred types of all the functions::
 
-	D:\GitHub\sophie>py -m sophie examples\tutorial\define_functions.sg -c
+	D:\GitHub\sophie>sophie examples\tutorial\define_functions.sg -c
 	Loading D:\GitHub\sophie\examples\tutorial\define_functions.sg
 	2 >> double : (number) -> number
 	2 >> square : (number) -> number
