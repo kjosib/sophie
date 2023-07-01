@@ -85,7 +85,7 @@ Predefined functions include:
 * ``flat(xss)``: Given a list of lists, return a single list composed of the elements of each input list in sequence.
 * ``sum(xs)``: add all the numbers in the given list and return their sum, or a if the list is empty.
 * ``take(n, xs)``: return a list composed of the first ``n`` elements of ``xs``.
-* ``skip(n, xs)``: return the remainder of list ``xs`` after skipping the first ``n`` elements.
+* ``drop(n, xs)``: return the remainder of list ``xs`` after skipping the first ``n`` elements.
 
 
 * Python's math library of functions and constants are also installed, with two caveats:

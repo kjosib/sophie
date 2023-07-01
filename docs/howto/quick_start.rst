@@ -36,18 +36,16 @@ Sooner or later this will get even easier.
 
 3. Download the code for Sophie.
 
-   Option One: Get a current snap-shot
-        Save `this link <https://github.com/kjosib/sophie/archive/refs/heads/main.zip>`_
-        to your computer somewhere you can find it easily.
-        That's a direct link to an up-to-the-minute version of all of Sophie.
-
-   Option Two: Get a stable release
+   Option One: Get a stable(ish) release
         `Click here <https://github.com/kjosib/sophie/releases>`_
         and fetch the most recent "Source code (zip)" asset
         to your computer somewhere you can find it easily.
 
-        If you use this option, you should look for the corresponding version
-        of the documentation, for there have been a few changes in the language.
+   Option Two: Get a current snap-shot
+        Save `this link <https://github.com/kjosib/sophie/archive/refs/heads/main.zip>`_
+        That's a direct link to an up-to-the-minute version of all of Sophie.
+        **Fair warning:** This version may contain new features *and bugs*.
+        I'll generally make a stable release before adding bugs though.
 
    If you'd prefer to browse the repository online, it's `here <https://github.com/kjosib/sophie>`_.
 
@@ -57,7 +55,7 @@ Sooner or later this will get even easier.
    (If you got a version-coded release, then ``main`` is replaced by the version-code.)
    Mainly, you'll want the ``sophie`` folder.
 
-5. Try an example. Here's how it looks in Windows command line::
+5. You can try an example even without "installing". Here's how it looks in Windows command line::
 
     D:\>cd sophie-main\sophie-main
 
@@ -75,19 +73,19 @@ Sooner or later this will get even easier.
 
     D:\sophie-main\sophie-main>cd \
 
-    D:\>py -m sophie
+    D:\>sophie
     This is an interpreter for the Sophie programming language.
 
-    usage: py -m sophie [-h] [-c] [-x] program
+    usage: sophie [-h] [-c] [-x] program
 
 
     For example:
 
-        py -m sophie program.sg
+        sophie program.sg
 
     will run program.sg if possible, or else try to explain why not.
 
-        py -m sophie -h
+        sophie -h
 
     will explain all the arguments.
 

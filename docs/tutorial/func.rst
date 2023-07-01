@@ -62,7 +62,7 @@ It also defines a constant, called ``five``, which conveniently enough refers to
 
 If you're curious (and I hope you are) you can run it like::
 
-	D:\GitHub\sophie>py -m sophie examples\tutorial\define_functions.sg
+	D:\GitHub\sophie>sophie examples\tutorial\define_functions.sg
 	10
 	25
 	50

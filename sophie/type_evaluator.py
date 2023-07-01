@@ -13,11 +13,11 @@ The tricky bit is (mutually) recursive functions.
 """
 from typing import Iterable, Sequence
 from boozetools.support.foundation import Visitor
-from .ontology import Symbol, Actor
+from .ontology import Symbol
 from .syntax import ValExpr
 from . import syntax, primitive, diagnostics
 from .resolution import DependencyPass
-from .stacking import StackBottom, ActivationRecord
+from .stacking import StackFrame, RootFrame, ModuleFrame, FunctionFrame
 from .calculus import (
 	TYPE_ENV,
 	SophieType, TypeVisitor,
@@ -294,8 +294,8 @@ class DeductionEngine(Visitor):
 		self._recursion = {}
 		self._deps_pass = DependencyPass()
 	
-	def visit_Module(self, module:syntax.Module):
-		self._deps_pass.visit(module)
+	def visit_Module(self, module:syntax.Module, roadmap):
+		self._deps_pass.visit(roadmap)
 		for td in module.types: self.visit(td)
 		for fi in module.foreign: self.visit(fi)
 		env = StackBottom(module.path)
@@ -526,11 +526,11 @@ class DeductionEngine(Visitor):
 		assert isinstance(field_spec, syntax.FormalParameter), field_spec
 		return ManifestBuilder(parameters, lhs_type.type_args).visit(field_spec.type_expr)
 
-	def visit_MessageRef(self, mr:syntax.MessageRef, env:TYPE_ENV) -> SophieType:
+	def visit_BoundMethod(self, mr:syntax.BoundMethod, env:TYPE_ENV) -> SophieType:
 		receiver_type = self.visit(mr.receiver, env)
 		if receiver_type is ERROR: return ERROR
 		if not isinstance(receiver_type, ActorType):
-			need = "to receive message '%s' but it is not an actor" % mr.message_name.text
+			need = "to receive message '%s' but it is not an actor" % mr.method_name.text
 			self._report.bad_type(env, mr.receiver, need, receiver_type)
 			return ERROR
 		return MethodType()  # TODO

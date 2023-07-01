@@ -24,12 +24,6 @@ PACKAGE_ROOT = {
 	"sys" : Path(__file__).parent/"sys",
 }
 
-# Hack the console object into the root namespace before its lack causes a problem
-console_nom = ontology.Nom('console', None)
-console_symbol = syntax.FFI_Symbol(console_nom)
-console_symbol.val = runtime.console
-primitive.root_namespace['console'] = console_symbol
-# Now back to our show
 
 class Loader:
 	def __init__(self, report: Report, experimental:bool= False):
@@ -108,27 +102,25 @@ class Loader:
 		if self._report.sick(): return "parse"
 		assert isinstance(module, Module)
 		
-		resolution.WordDefiner(module, outer, self._report)
+		roadmap = resolution.WordDefiner(module, outer, self._report).roadmap
 		if self._report.sick(): return "define"
 		
-		resolution.StaticDepthPass(module)  # Cannot fail
-		
-		alias_constructors = resolution.WordResolver(module, self._report).dubious_constructors
+		alias_constructors = resolution.WordResolver(module, self._report, roadmap).dubious_constructors
 		if self._report.sick(): return "resolve"
 		
-		resolution.AliasChecker(module, self._report)
+		resolution.AliasChecker(module, self._report, roadmap)
 		if self._report.sick(): return "alias"
 		
 		resolution.check_constructors(alias_constructors, self._report)
 		if self._report.sick(): return "constructors"
 
-		resolution.check_all_match_expressions(module, self._report)
+		roadmap.check_all_match_expressions(self._report)
 		if self._report.sick(): return "match_check"
 		
-		resolution.build_match_dispatch_tables(module)  # Cannot fail, for checks have been done earlier.
+		roadmap.build_match_dispatch_tables()  # Cannot fail, for checks have been done earlier.
 		
-		self._deductionEngine.visit(module)
-		if self._report.sick(): return "type_check"
+		# self._deductionEngine.visit(module, roadmap)
+		# if self._report.sick(): return "type_check"
 	
 	def _root_for_import(self, base:Path, im:ImportModule):
 		if im.package is None:

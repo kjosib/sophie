@@ -50,7 +50,10 @@ class SophieType:
 	def __hash__(self): return self._hash
 	def __eq__(self, other: "SophieType"): return type(self) is type(other) and self._key == other._key
 	def exemplar(self) -> "SophieType": return _type_numbering_subsystem.exemplars[self.number]
-	def __str__(self) -> str: return self.visit(Render())
+	def __str__(self) -> str:
+		it = self.visit(Render())
+		assert isinstance(it, str), (it, type(self))
+		return it
 
 class TypeVariable(SophieType):
 	"""Did I say value-object? Not for type variables! These have identity."""
@@ -141,7 +144,8 @@ class MethodType(SophieType):
 	pass
 
 class MessageType(SophieType):
-	pass
+	def visit(self, visitor: "TypeVisitor"):
+		return visitor.on_message(self)
 
 class ActorType(SophieType):
 	pass
@@ -168,6 +172,7 @@ class TypeVisitor:
 	def on_tag_record(self, t: TaggedRecord): raise NotImplementedError(type(self))
 	def on_arrow(self, a:ArrowType): raise NotImplementedError(type(self))
 	def on_product(self, p:ProductType): raise NotImplementedError(type(self))
+	def on_message(self, m:MessageType): raise NotImplementedError(type(self))
 	def on_udf(self, f:UDFType): raise NotImplementedError(type(self))
 	def on_bottom(self): raise NotImplementedError(type(self))
 	def on_error_type(self): raise NotImplementedError(type(self))
@@ -200,6 +205,8 @@ class Render(TypeVisitor):
 		return a.arg.visit(self)+"->"+a.res.visit(self)
 	def on_product(self, p: ProductType):
 		return "(%s)"%(",".join(t.visit(self) for t in p.fields))
+	def on_message(self, m:MessageType):
+		return "<message>"
 	def on_udf(self, f: UDFType):
 		return "<%s/%d>"%(f.fn.nom.text, len(f.fn.params))
 	def on_bottom(self):

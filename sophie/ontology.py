@@ -42,11 +42,3 @@ class Reference(Expr):
 	dfn:Symbol   # Should happen during WordResolver pass.
 	def __init__(self, nom:Nom): self.nom = nom
 
-class Actor:
-	""" Interface for the run-time conception of an Actor. """
-	# This might not be the right place for this long-term,
-	# but in the short run it will serve.
-	def perform(self, message_name:str, args:tuple):
-		raise NotImplementedError(type(self))
-
-

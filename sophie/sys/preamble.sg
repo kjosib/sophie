@@ -95,9 +95,9 @@ define:
 		cons -> cons(xs.head, take(n-1, xs.tail));
 	esac;
 
-	skip(n, xs) = xs if n < 1 else case xs of
+	drop(n, xs) = xs if n < 1 else case xs of
 		nil -> nil;
-		cons -> skip(n-1, xs.tail);
+		cons -> drop(n-1, xs.tail);
 	esac;
 
 	sum(xs) = reduce(add, 0, xs) where add(a,b) = a+b; end sum;
@@ -110,7 +110,7 @@ define:
 
 	join(ss) = reduce(strcat, "", ss);  # Yes, this is O(n^2). Fixing that from within is nontrivial.
 
-	interleave(x, ys) = skip(1, flat(map(prefix, ys))) where prefix(y)=cons(x, cons(y, nil)); end interleave;
+	interleave(x, ys) = drop(1, flat(map(prefix, ys))) where prefix(y)=cons(x, cons(y, nil)); end interleave;
 
 	each_chr(s) = from(0) where
 		from(n) = nil if n >= len(s) else cons(mid(s,n,1), from(n+1));

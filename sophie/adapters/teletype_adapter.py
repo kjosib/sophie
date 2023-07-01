@@ -23,9 +23,9 @@ def run_app(env, app):
 			app = force(app['next'])
 		elif tag == 'read':
 			proc = force(app['next'])
-			app = force(proc.apply(env, [input()]))
+			app = force(proc.apply([input()]))
 		elif tag == 'random':
 			proc = force(app['next'])
-			app = force(proc.apply(env, [random.random()]))
+			app = force(proc.apply([random.random()]))
 	
 	

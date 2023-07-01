@@ -36,7 +36,7 @@ What's new here, then?
 
 You can run this program as follows::
 
-    D:\GitHub\sophie>py -m sophie examples\tutorial\patron.sg
+    D:\GitHub\sophie>sophie examples\tutorial\patron.sg
     Gulliver's Travels
 
 I'll grant it's not a very imposing result, but it shows that the mechanism works -- at least to some degree.

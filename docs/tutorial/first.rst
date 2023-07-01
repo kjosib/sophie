@@ -42,7 +42,7 @@ If you followed directions earlier, you already have a copy of this program at `
 Now suppose you're at a command-prompt_ and you've set the current-directory_ to wherever you extracted Sophie.
 If you then run::
 
-    py -m sophie examples/hello_world.sg
+    sophie examples/hello_world.sg
 
 you will see::
 
@@ -65,7 +65,7 @@ Let's break this down:
     * Ok, the ``end.`` is now optional in response to some random dude on the internet with an opinion.
 * At the moment, Sophie is implemented as a Python program.
 
-    * So in general, you will invoke ``py -m sophie`` followed by the pathname_ to your program.
+    * So in general, you will invoke ``sophie`` followed by the pathname_ to your program.
     * Some day, this may change. If you'd like to help that along, let's talk about something called *self-hosting*.
 
 
