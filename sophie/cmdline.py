@@ -29,7 +29,6 @@ parser = argparse.ArgumentParser(
 )
 parser.add_argument("program", help="try examples/turtle.sg for example.")
 parser.add_argument('-c', "--check", action="store_true", help="Check the program verbosely but do not actually execute the program.")
-# parser.add_argument('-p', "--no-preamble", action="store_true", help="Don't load the preamble.")
 parser.add_argument('-x', "--experimental", action="store_true", help="Opt into experimental code, which is presently nothing.")
 
 def run(args):
@@ -37,11 +36,12 @@ def run(args):
 	
 	from .diagnostics import Report
 	from .resolution import RoadMap
+	from .type_evaluator import type_program
 	from .executive import run_program
 	report = Report(verbose=args.check)
 	roadmap = RoadMap(Path.cwd(), args.program, report)
 	if report.ok():
-		pass # TODO: all the passes.
+		type_program(roadmap, report)
 	if report.sick():
 		report.complain_to_console()
 		return 1

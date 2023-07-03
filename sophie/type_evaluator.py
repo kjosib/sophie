@@ -14,10 +14,10 @@ The tricky bit is (mutually) recursive functions.
 from typing import Iterable, Sequence
 from boozetools.support.foundation import Visitor
 from .ontology import Symbol
-from .syntax import ValExpr
 from . import syntax, primitive, diagnostics
-from .resolution import DependencyPass
-from .stacking import Frame, RootFrame, Activation
+from .resolution import RoadMap, TopDown
+from .stacking import RootFrame, Activation
+from .syntax import ValExpr
 from .calculus import (
 	TYPE_ENV,
 	SophieType, TypeVisitor,
@@ -28,6 +28,121 @@ from .calculus import (
 	BOTTOM, ERROR,
 )
 
+class DependencyPass(TopDown):
+	"""
+	Solve the problem of which-all formal parameters does the value (and thus, type)
+	of each user-defined function actually depend on. A simplistic answer would be to just
+	use the parameters of the outermost function in a given nest. But inner functions
+	might not be so generic as all that. Better precision here means smarter memoization,
+	and thus faster type-checking.
+	
+	The nature of the algorithm is a transitive-closure / least-fixpoint operation.
+	Preparation is by means of a tree-walk.
+	
+	Incidentally:
+	Related analysis could determine the deepest non-local needed for a function,
+	which could possibly allow some functions to run at a shallower static-depth
+	than however they may appear in the source code. This could make the simple evaluator
+	a bit faster by improving the lifetime of thunks.
+	"""
+
+	def __init__(self):
+		# The interesting result:
+		self.depends: dict[Symbol, set[syntax.FormalParameter]] = {}
+		
+		# All manner of temp data, which should be cleaned afterward:
+		self._outer: dict[Symbol, set[syntax.FormalParameter]] = {}
+		self._parent: dict[Symbol, Symbol] = {}
+		self._outflows: dict[Symbol, set[Symbol]] = {}
+		self._overflowing = set()
+		
+	def visit_Module(self, module: syntax.Module):
+		self._walk_children(module.outer_functions, None)
+		for expr in module.main:
+			self.visit(expr, None)
+		self._flow_dependencies()
+		self._clean_up_after()
+
+	def _prepare(self, sym:Symbol, parent):
+		self._parent[sym] = parent
+		self.depends[sym] = set()
+		self._outer[sym] = set()
+		self._outflows[sym] = set()
+
+	def _walk_children(self, children: Sequence[syntax.UserFunction], parent):
+		for child in children: self._prepare(child, parent)
+		for child in children: self.visit_UserFunction(child, parent)
+
+	def _insert(self, param:syntax.FormalParameter, env:Symbol):
+		depends = self.depends[env]
+		if self._is_in_scope(param, env) and param not in depends:
+			depends.add(param)
+			outer = self._outer[env]
+			if self._is_non_local(param, env) and param not in outer:
+				outer.add(param)
+				self._overflowing.add(env)
+	
+	def _flow_dependencies(self):
+		# This algorithm might not be theoretically perfect,
+		# but for what it's about, it should be plenty fast.
+		# And it's straightforward to understand.
+		while self._overflowing:
+			source = self._overflowing.pop()
+			spill = self._outer[source]
+			for destination in self._outflows[source]:
+				for parameter in spill:
+					self._insert(parameter, destination)
+	
+	def _clean_up_after(self):
+		self._outer.clear()
+		self._parent.clear()
+		self._outflows.clear()
+		self._overflowing.clear()
+
+	def _is_in_scope(self, param:syntax.FormalParameter, env:Symbol):
+		if env is None:
+			return False
+		if isinstance(env, syntax.UserFunction):
+			return param in env.params or self._is_in_scope(param, self._parent[env])
+		if isinstance(env, syntax.Subject):
+			return self._is_in_scope(param, self._parent[env])
+		assert False, type(env)
+
+	@staticmethod
+	def _is_non_local(param:syntax.FormalParameter, env:Symbol):
+		if isinstance(env, syntax.UserFunction):
+			return param not in env.params
+		if isinstance(env, syntax.Subject):
+			return True
+		assert False, type(env)
+
+	def visit_UserFunction(self, udf: syntax.UserFunction, env):
+		# Params refer to themselves in this arrangement.
+		# The "breadcrumb" serves to indicate the nearest enclosing symbol.
+		self._parent[udf] = env
+		self._walk_children(udf.where, udf)
+		self.visit(udf.expr, udf)
+
+	def visit_Lookup(self, lu: syntax.Lookup, env):
+		self.visit(lu.ref, env)
+
+	def _is_relevant(self, sym):
+		return self._parent.get(sym) is not None
+
+	def visit_PlainReference(self, ref: syntax.PlainReference, env:Symbol):
+		dfn = ref.dfn
+		if isinstance(dfn, syntax.FormalParameter):
+			self._insert(dfn, env)
+		elif self._is_relevant(dfn):
+			self._outflows[dfn].add(env)
+
+	def visit_MatchExpr(self, mx: syntax.MatchExpr, env:Symbol):
+		self._prepare(mx.subject, env)
+		self.visit(mx.subject.expr, env)
+		for alt in mx.alternatives:
+			self.visit(alt.sub_expr, mx.subject)
+		if mx.otherwise is not None:
+			self.visit(mx.otherwise, mx.subject)
 
 class ArityError(Exception):
 	pass
@@ -292,15 +407,15 @@ class DeductionEngine(Visitor):
 		self._ffi = {}
 		self._memo = {}
 		self._recursion = {}
+		self._root = RootFrame()
 		self._deps_pass = DependencyPass()
 	
-	def visit_Module(self, module:syntax.Module, roadmap):
-		self._deps_pass.visit(roadmap)
+	def visit_Module(self, module:syntax.Module):
+		self._deps_pass.visit_Module(module)
 		for td in module.types: self.visit(td)
 		for fi in module.foreign: self.visit(fi)
-		env = StackBottom(module)
 		for expr in module.main:
-			result = self.visit(expr, env)
+			result = self.visit(expr, self._root)
 			self._report.info(result)
 		pass
 	
@@ -346,14 +461,14 @@ class DeductionEngine(Visitor):
 		fn = fn_type.fn
 		arity = len(fn.params)
 		if arity != len(arg_types): raise ArityError
-		inner = Activation(fn, env, fn_type.static_env, arg_types)
+		inner = Activation.for_function(fn_type.static_env, fn, arg_types)
 		return self.exec_UDF(fn, inner)
 		
 	def exec_UDF(self, fn:syntax.UserFunction, env:TYPE_ENV):
 		# The part where memoization must happen.
 		memo_symbols = self._deps_pass.depends[fn]
 		memo_types = tuple(
-			env.chase(p).bindings[p].number
+			env.chase(p).fetch(p).number
 			for p in memo_symbols
 		)
 		memo_key = fn, memo_types
@@ -434,10 +549,7 @@ class DeductionEngine(Visitor):
 		if isinstance(target, (syntax.TypeDeclaration, syntax.SubTypeSpec)):
 			return self._constructors[target]  # Must succeed because of resolution.check_constructors
 		if isinstance(target, syntax.FFI_Alias):
-			if isinstance(target.val, Actor):
-				return ActorType()
-			else:
-				return self._ffi[target]
+			return self._ffi[target]
 		
 		static_env = env.chase(target)
 		if isinstance(target, syntax.UserFunction):
@@ -447,7 +559,7 @@ class DeductionEngine(Visitor):
 				return self.exec_UDF(target, static_env)
 		else:
 			assert isinstance(target, (syntax.FormalParameter, syntax.Subject))
-			return static_env.bindings[target]
+			return static_env.fetch(target)
 		
 	def visit_ExplicitList(self, el:syntax.ExplicitList, env:TYPE_ENV) -> SumType:
 		# Since there's guaranteed to be at least one value,
@@ -476,10 +588,11 @@ class DeductionEngine(Visitor):
 		return union_find.result()
 	
 	def visit_MatchExpr(self, mx:syntax.MatchExpr, env:TYPE_ENV) -> SophieType:
+		# TODO: FLAG FOR REVIEW
 		def try_everything(type_args:Sequence[SophieType]):
 			union_find = UnionFinder(BOTTOM)
 			for alt in mx.alternatives:
-				env.bindings[mx.subject] = _hypothesis(alt.pattern.dfn, type_args)
+				env.assign(mx.subject,  _hypothesis(alt.pattern.dfn, type_args))
 				union_find.unify_with(self.visit(alt.sub_expr, env))
 				if union_find.died:
 					self._report.type_mismatch(env, mx.alternatives[0].sub_expr, alt.sub_expr)
@@ -487,16 +600,30 @@ class DeductionEngine(Visitor):
 			return union_find.result()
 
 		subject_type = self.visit(mx.subject.expr, env)
-		if subject_type is ERROR: return ERROR
-		assert isinstance(mx.variant, syntax.Variant)
-		if isinstance(subject_type, SumType) and subject_type.variant is mx.variant:
+		if subject_type is ERROR:
+			return ERROR
+		
+		if isinstance(subject_type, SumType):
+			# 1. Make sure either there's an else-clause, or every subtype is covered.
+			# 2. Build a union-find for only every relevant arm, and return that.
+			# 3. Maybe warn about unused arms?
+			# TODO: This last will require deeper thought.
+			#       One idea is sub-typing, e.g. an infinite list
+			#       is just a list that forsakes the option of nil.
 			return try_everything(subject_type.type_args)
+		
 		elif subject_type is BOTTOM:
+			# We're looking for base-cases at this point.
+			# We haven't a clue what type the subject might be,
+			# so run all the arms with the BOTTOM hypothesis.
+			# Hopefully at least one case returns a usable clue.
 			return try_everything([BOTTOM] * len(mx.variant.type_params))
+		
 		elif isinstance(subject_type, SubType) and subject_type.st.variant is mx.variant:
 			branch = mx.dispatch.get(subject_type.st.nom.text, mx.otherwise)
-			env.bindings[mx.subject] = subject_type
+			env.assign(mx.subject, subject_type)
 			return self.visit(branch, env)
+		
 		else:
 			self._report.bad_type(env, mx.subject.expr, mx.variant, subject_type)
 			return ERROR
@@ -542,4 +669,11 @@ def _hypothesis(st:Symbol, type_args:Sequence[SophieType]) -> SubType:
 		return EnumType(st)
 	if isinstance(body, syntax.RecordSpec):
 		return TaggedRecord(st, type_args)
+
+def type_program(roadmap:RoadMap, report:diagnostics.Report):
+	engine = DeductionEngine(report)
+	# The main idea:
+	engine.visit_Module(roadmap.preamble)
+	# for module in roadmap.each_module:
+	# 	engine.visit_Module(module)
 

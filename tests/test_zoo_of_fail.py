@@ -2,9 +2,9 @@ from pathlib import Path
 import unittest
 from unittest import mock
 
-from sophie import syntax
 from sophie.diagnostics import Report
 from sophie.resolution import RoadMap, Yuck
+from sophie.type_evaluator import type_program
 
 class Silence(Report):
 	def __init__(self):
@@ -19,13 +19,15 @@ zoo_fail = base_folder/"zoo/fail"
 def _identify_problem(folder:Path, filename:str):
 	assert (folder/filename).exists(), folder/filename
 	report = Silence()
-	try: RoadMap(folder, filename, report)
+	try:
+		roadmap = RoadMap(folder, filename, report)
+		type_program(roadmap, report)
 	except Yuck as ex:
 		assert 0 == report.complain_to_console.call_count
 		assert report.sick()
 		return ex.args[0]
 	else:
-		assert False
+		return "failed to fail"
 
 class ZooOfFail(unittest.TestCase):
 	""" Tests that assert about failure modes. """
