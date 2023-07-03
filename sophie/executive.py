@@ -4,21 +4,22 @@ This is the overall control for the run-time.
 """
 import sys
 from collections import deque
-from typing import Sequence
 from . import syntax, primitive, runtime, ontology
-from .stacking import StackFrame, RootFrame, ModuleFrame
+from .stacking import Frame, RootFrame, Activation
 from .runtime import (
 	force, _strict, Constructor, Primitive, Thunk,
 	drain_queue, Step
 )
+from .resolution import RoadMap
 
-def run_program(static_root, each_module: Sequence[syntax.Module]):
+def run_program(roadmap:RoadMap):
 	drivers = {}
-	root = _dynamic_root(static_root)
+	preamble_scope = roadmap.module_scopes[roadmap.preamble]
+	root = _dynamic_root(preamble_scope)
 	result = None
-	for module in each_module:
-		env = ModuleFrame(root, module.path)
-		_prepare(env, module.globals)
+	for module in roadmap.each_module:
+		env = Activation(root, module)
+		_prepare(env, roadmap.module_scopes[module])
 		for d in module.foreign:
 			if d.linkage is not None:
 				py_module = sys.modules[d.source.value]
@@ -57,23 +58,23 @@ def _dynamic_root(static_root) -> RootFrame:
 		runtime.NIL, runtime.CONS = None, None
 	return root
 
-def _prepare(env:StackFrame, namespace:ontology.NS):
+def _prepare(env:Frame, namespace:ontology.NS):
 	for key, dfn in namespace.local.items():
 		if isinstance(dfn, syntax.Record):
-			env.install(dfn, Constructor(key, dfn.spec.field_names()))
+			env.assign(dfn, Constructor(key, dfn.spec.field_names()))
 		elif isinstance(dfn, (syntax.SubTypeSpec, syntax.TypeAlias)):
 			if isinstance(dfn.body, (syntax.ArrowSpec, syntax.TypeCall)):
 				pass
 			elif isinstance(dfn.body, syntax.RecordSpec):
-				env.install(dfn, Constructor(key, dfn.body.field_names()))
+				env.assign(dfn, Constructor(key, dfn.body.field_names()))
 			elif dfn.body is None:
-				env.install(dfn, {"": key})
+				env.assign(dfn, {"": key})
 			else:
 				raise ValueError("Tagged scalars (%r) are not implemented."%key)
 		elif isinstance(dfn, syntax.FFI_Alias):
-			env.install(dfn, _native_object(dfn))
-		elif isinstance(dfn, syntax.UserDefinedFunction):
-			env.hold_place_for(dfn)
+			env.assign(dfn, _native_object(dfn))
+		elif isinstance(dfn, syntax.UserFunction):
+			env.declare(dfn)
 		elif type(dfn) in _ignore_these:
 			pass
 		else:

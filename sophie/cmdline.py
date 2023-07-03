@@ -36,17 +36,19 @@ def run(args):
 	# if args.no_preamble:
 	
 	from .diagnostics import Report
-	from .modularity import Loader
+	from .resolution import RoadMap
+	from .executive import run_program
 	report = Report(verbose=args.check)
-	loader = Loader(report, experimental=args.experimental)
-	loader.load_program(Path.cwd(), args.program)
+	roadmap = RoadMap(Path.cwd(), args.program, report)
+	if report.ok():
+		pass # TODO: all the passes.
 	if report.sick():
 		report.complain_to_console()
 		return 1
 	elif args.check:
 		print("Looks plausible to me.", file=sys.stderr)
 	else:
-		loader.run()
+		run_program(roadmap)
 
 def main():
 	if len(sys.argv) > 1:

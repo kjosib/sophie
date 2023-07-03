@@ -2,50 +2,39 @@ from pathlib import Path
 import unittest
 from unittest import mock
 
-from sophie.front_end import read_file, parse_text
-from sophie import syntax, diagnostics, modularity
+from sophie import syntax
+from sophie.diagnostics import Report
+from sophie.resolution import RoadMap, Yuck
 
-REPORT = diagnostics.Report(verbose=True)
+class Silence(Report):
+	def __init__(self):
+		super().__init__(False)
+		self.complain_to_console = mock.Mock()
+
 
 base_folder = Path(__file__).parent.parent
 example_folder = base_folder/"examples"
 zoo_fail = base_folder/"zoo/fail"
 
-def _parse(path):
-	REPORT.reset()
-	assert path.exists(), path
-	REPORT.set_path(path)
-	with mock.patch("boozetools.macroparse.runtime.print", lambda *x, file=None: None):
-		text = read_file(path, REPORT, None)
-		REPORT.assert_no_issues()
-		REPORT.complain_to_console = mock.Mock()
-		sut = parse_text(text, path, REPORT)
-		assert 0 == REPORT.complain_to_console.call_count
-	if sut is None:
-		assert REPORT.sick()
+def _identify_problem(folder:Path, filename:str):
+	assert (folder/filename).exists(), folder/filename
+	report = Silence()
+	try: RoadMap(folder, filename, report)
+	except Yuck as ex:
+		assert 0 == report.complain_to_console.call_count
+		assert report.sick()
+		return ex.args[0]
 	else:
-		REPORT.assert_no_issues()
-		assert isinstance(sut, syntax.Module), sut
-	return sut
-	
+		assert False
 
 class ZooOfFail(unittest.TestCase):
 	""" Tests that assert about failure modes. """
-	@classmethod
-	def setUpClass(cls) -> None:
-		super().setUpClass()
-		cls.loader = modularity.Loader(REPORT, experimental=True)
-	
+
 	def expect(self, folder, cases):
 		for basename in cases:
 			with self.subTest(basename):
-				path = zoo_fail / folder / (basename + ".sg")
-				sut = _parse(path)
-				self.loader._enter(path)
-				phase_at_failure = self.loader._prepare_module(sut, self.loader._preamble.globals)
-				self.loader._exit()
-				self.assertEqual(folder, phase_at_failure)
-	
+				self.assertEqual(folder, _identify_problem(zoo_fail / folder, basename + ".sg"))
+
 	def test_00_syntax_error(self):
 		self.expect("parse", (
 			"syntax_error",
@@ -109,21 +98,11 @@ class ZooOfFail(unittest.TestCase):
 	
 	
 	def test_07_import(self):
-		for basename in [
+		self.expect("import", [
 			"circular_import",
 			"missing_import",
-			"broken_import",
-		]:
-			with self.subTest(basename):
-				# Given
-				report = diagnostics.Report(verbose=False)
-				loader = modularity.Loader(report)
-				# When
-				module = loader.need_module(zoo_fail/"import"/ (basename + ".sg"), None)
-				# Then
-				assert type(module) is syntax.Module
-				assert report.sick()
-	
+		])
+
 
 
 # 	def test_bipartite(self):

@@ -175,11 +175,11 @@ def _bookend(head: Nom, coda: Nom):
 	if head.text != coda.text:
 		raise MismatchedBookendsError(head.head(), coda.head())
 
-class UserDefinedFunction(Term):
+class UserFunction(Term):
 	source_path: Path
 	namespace: NS
 	params: Sequence[FormalParameter]
-	where: Sequence["UserDefinedFunction"]
+	where: Sequence["UserFunction"]
 	def has_value_domain(self): return True
 	def head(self) -> slice: return self.nom.head()
 	def __repr__(self):
@@ -205,7 +205,7 @@ class UserDefinedFunction(Term):
 
 
 class WhereClause(NamedTuple):
-	sub_fns: Sequence[UserDefinedFunction]
+	sub_fns: Sequence[UserFunction]
 	end_name: Nom
 
 class Literal(ValExpr):
@@ -318,7 +318,7 @@ class ExplicitList(ValExpr):
 class Alternative(ValExpr):
 	pattern: Reference
 	sub_expr: ValExpr
-	where: Sequence[UserDefinedFunction]
+	where: Sequence[UserFunction]
 	
 	namespace: NS  # WordDefiner fills
 	
@@ -371,7 +371,7 @@ class ImportSymbol(NamedTuple):
 	hither : Optional[Nom]
 
 class ImportModule(Symbol):
-	module : "Module"  # Module loader fills this.
+	module_key: Path  # Module loader fills this.
 	def __init__(self, package:Optional[Nom], relative_path:Literal, nom:Optional[Nom], vocab:Optional[Sequence[ImportSymbol]]):
 		super().__init__(nom)
 		self.package = package
@@ -380,7 +380,6 @@ class ImportModule(Symbol):
 
 class FFI_Alias(Term):
 	""" Built-in and foreign (Python) function symbols. """
-	static_depth = 0
 	val:Any  # Fill in during WordDefiner pass
 	
 	def __init__(self, nom:Nom, alias:Optional[Literal]):
@@ -407,18 +406,13 @@ class ImportForeign:
 ImportDirective = Union[ImportModule, ImportForeign]
 
 class Module:
-	path: Path # Front end fills this in.
 	imports: list[ImportModule]
 	foreign: list[ImportForeign]
-	module_imports: NS  # Modules imported with an "as" clause.
-	wildcard_imports: NS  # Names imported with a wildcard. Sits underneath globals.
-	globals: NS  # WordDefiner pass creates this.
-	
-	def __init__(self, exports:list, imports:list[ImportDirective], types:list[TypeDeclaration], assumption:list[Assumption], functions:list[UserDefinedFunction], main:list):
+
+	def __init__(self, exports:list, imports:list[ImportDirective], types:list[TypeDeclaration], assumption:list[Assumption], functions:list[UserFunction], main:list):
 		self.exports = exports
 		self.imports = [i for i in imports if isinstance(i, ImportModule)]
 		self.foreign = [i for i in imports if isinstance(i, ImportForeign)]
 		self.types = types
 		self.outer_functions = functions
 		self.main = main
-		self.module_imports = NameSpace(place=self)

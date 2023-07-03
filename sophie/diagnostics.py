@@ -4,18 +4,19 @@ from traceback import TracebackException
 from pathlib import Path
 from boozetools.support.failureprone import SourceText, Issue, Evidence, Severity, illustration
 from . import syntax
-from .ontology import Expr
+from .ontology import Expr, Nom, Symbol
 from .calculus import TYPE_ENV, SophieType
-from .stacking import StackFrame
 
 class Report:
 	""" Might this end up participating in a result-monad? """
-	_issues : list[Issue]
+	_issues : list[Union[Issue, "Pic", "Redefined", "Undefined"]]
 	_path : Optional[Path]
 	
 	def __init__(self, verbose:bool):
 		self._verbose = verbose
-		self._issues : list[Union[Issue, "Pic"]] = []
+		self._issues = []
+		self._redefined = {}
+		self._undefined = None
 		self._path = None
 	
 	def ok(self): return not self._issues
@@ -61,42 +62,57 @@ class Report:
 		""" Does what it says on the tin """
 		if self._issues:
 			self.complain_to_console()
-			assert False
+			assert False, "This is supposed to be impossible."
 	
 	# Methods the front-end is likely to call:
-	def _file_error(self, path:Path, source, prefix:str):
-		intro = prefix+" "+str(path)
-		if source:
-			problem = [Annotation(self._path, source.head(), "")]
-		else:
-			problem = []
-		self._issues.append(Pic(intro, problem))
-		
-	def no_such_file(self, path:Path, source):
-		self._file_error(path, source, "I see no file called")
-	
-	def broken_file(self, path:Path, source):
-		self._file_error(path, source, "Something went pear-shaped while trying to read")
-	
-	def generic_parse_error(self, path:Path, lookahead, span:slice, hint:str):
-		intro = "Sophie got confused by %s."%lookahead
+	def generic_parse_error(self, path: Path, lookahead, span: slice, hint: str):
+		intro = "Sophie got confused by %s." % lookahead
 		problem = [Annotation(path, span, "Sophie got confused here")]
 		self._issues.append(Pic(intro, problem))
 		self._issues.append(Pic(hint, []))
 
+	# Methods the package / import mechanism invokes:
+
+	def _file_error(self, path:Path, cause:Expr, prefix:str):
+		intro = prefix+" "+str(path)
+		if cause:
+			problem = [Annotation(self._path, cause.head(), "")]
+		else:
+			problem = []
+		self._issues.append(Pic(intro, problem))
+		
+	def no_such_file(self, path:Path, cause:Expr):
+		self._file_error(path, cause, "I see no file called")
+	
+	def broken_file(self, path:Path, cause:Expr):
+		self._file_error(path, cause, "Something went pear-shaped while trying to read")
+	
+	def cyclic_import(self, cause, cycle):
+		intro = "Here begins a cycle of imports. Sophie considers that an error."
+		problem = [Annotation(self._path, cause.head(), "")]
+		footer = [" - The full cycle is:"]
+		footer.extend('     '+str(path) for path in cycle)
+		self._issues.append(Pic(intro, problem, footer))
+
+	def no_such_package(self, cause:Nom):
+		intro = "There's no such package:"
+		problem = [Annotation(self._path, cause.head(), "")]
+		footer = ["(At the moment, there is only sys.)"]
+		self._issues.append(Pic(intro, problem, footer))
+
 	# Methods the resolver passes might call:
-	def broken_foreign(self, source, tbx:TracebackException):
+	def broken_foreign_module(self, source, tbx:TracebackException):
 		msg = "Attempting to import this module threw an exception."
 		text = ''.join(tbx.format())
 		self._issues.append((Pic(text, [])))
 		self.error("Defining words", [source.head()], msg)
 	
-	def missing_foreign(self, source):
+	def missing_foreign_module(self, source):
 		intro = "Missing Foreign Module"
 		caption = "This module could not be found."
 		self._issues.append(Pic(intro, [Annotation(self._path, source.head(), caption)]))
-	
-	def missing_linkage(self, source):
+
+	def missing_foreign_linkage(self, source):
 		intro = "Missing Foreign Linkage Function"
 		caption = "This module has no 'sophie_init'."
 		self._issues.append(Pic(intro, [Annotation(self._path, source.head(), caption)]))
@@ -106,6 +122,24 @@ class Report:
 		caption = "This module's 'sophie_init' expects %d argument(s) but got %d instead."
 		ann = Annotation(self._path, d.source.head(), caption%(arity, len(d.linkage)))
 		self._issues.append(Pic(intro, [ann]))
+
+	def redefined_name(self, earlier:Symbol, later:Nom):
+		if earlier not in self._redefined:
+			issue = Redefined(_fetch(self._path), earlier.nom.head())
+			self._issues.append(issue)
+			self._redefined[earlier] = issue
+		self._redefined[earlier].note(later)
+
+	def undefined_name(self, guilty:slice):
+		if self._undefined is None:
+			self._undefined = Undefined(_fetch(self._path))
+			self._issues.append(self._undefined)
+		self._undefined.note(guilty)
+
+	def opaque_generic(self, guilty:Sequence[syntax.TypeParameter]):
+		admonition = "Opaque types are not to be made generic."
+		where = [g.head() for g in guilty]
+		self.error("Defining Types", where, admonition)
 
 	# Methods specific to report type-checking issues.
 	# Now this begins to look like something proper.
@@ -144,7 +178,7 @@ class Report:
 		problem = [Annotation(env.path(), fr.lhs.head(), complaint)]
 		self._issues.append(Pic(intro, problem+trace_stack(env)))
 	
-	def ill_founded_function(self, env:TYPE_ENV, udf:syntax.UserDefinedFunction):
+	def ill_founded_function(self, env:TYPE_ENV, udf:syntax.UserFunction):
 		intro = "This function's definition turned up circular, as in a=a."
 		problem = [Annotation(udf.source_path, udf.head(), "This one.")]
 		self._issues.append(Pic(intro, problem+trace_stack(env)))
@@ -176,7 +210,7 @@ def trace_stack(env:TYPE_ENV) -> list[Annotation]:
 	return tracer.trace
 
 class Pic:
-	def __init__(self, intro:str, trace:list[Annotation]):
+	def __init__(self, intro:str, trace:list[Annotation], footer=()):
 		source, path = ..., ...
 		self.lines = [intro, ""]
 		for ann in trace:
@@ -185,6 +219,7 @@ class Pic:
 				self.lines.append(str(path))
 				source = _fetch(path)
 			self.lines.append(illustrate(source, ann.slice, ann.caption))
+		self.lines.extend(footer)
 	def as_text(self, fetch):
 		return '\n'.join(self.lines)
 		
@@ -194,4 +229,24 @@ def _fetch(path) -> SourceText:
 	with open(path) as fh:
 		return SourceText(fh.read(), filename=str(path))
 
+class Redefined:
+	def __init__(self, source:SourceText, earliest:slice):
+		self._source = source
+		self._lines = [
+			"This symbol is defined more than once in the same scope.",
+			illustrate(source, earliest, "Earliest definition"),
+		]
+	def note(self, later:Nom):
+		self._lines.append(illustrate(self._source, later.head(), ""))
+	def as_text(self, fetch):
+		return '\n'.join(self._lines)
+
+class Undefined:
+	def __init__(self, source:SourceText):
+		self._source = source
+		self._lines = ["I don't see what this refers to."]
+	def note(self, later:slice):
+		self._lines.append(illustrate(self._source, later, ""))
+	def as_text(self, fetch):
+		return '\n'.join(self._lines)
 

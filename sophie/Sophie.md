@@ -96,7 +96,7 @@ only by how you use it.
 -----
 **The general structure of a function:**
 ```
-function -> name formals annotation '=' expr optional(where_clause)     :UserDefinedFunction
+function -> name formals annotation '=' expr optional(where_clause)     :UserFunction
 where_clause -> WHERE semicolon_list(function) END name                 :WhereClause
 ```
 

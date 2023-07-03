@@ -33,9 +33,9 @@ from typing import Iterable
 from boozetools.support.foundation import EquivalenceClassifier
 from . import syntax
 from .ontology import Symbol
-from .stacking import StackFrame
+from .stacking import Frame
 
-TYPE_ENV = StackFrame["SophieType"]
+TYPE_ENV = Frame["SophieType"]
 
 _type_numbering_subsystem = EquivalenceClassifier()
 
@@ -126,10 +126,10 @@ class ArrowType(SophieType):
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_arrow(self)
 
 class UDFType(SophieType):
-	fn: syntax.UserDefinedFunction
-	static_env: StackFrame[SophieType]
+	fn: syntax.UserFunction
+	static_env: TYPE_ENV
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_udf(self)
-	def __init__(self, fn:syntax.UserDefinedFunction, static_env:StackFrame[SophieType]):
+	def __init__(self, fn:syntax.UserFunction, static_env:TYPE_ENV):
 		self.fn = fn
 		self.static_env = static_env
 		# NB: The uniqueness notion here is excessive, but there's a plan to deal with that.

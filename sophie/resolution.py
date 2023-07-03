@@ -4,27 +4,99 @@ By the time this pass is finished, every name points to its symbol table entry,
 from which we can find the kind, type, and definition.
 """
 from importlib import import_module
+from pathlib import Path
 from traceback import TracebackException
 from typing import Union
 from inspect import signature
 from boozetools.support.foundation import Visitor, strongly_connected_components_hashable
 from boozetools.support.symtab import NoSuchSymbol, SymbolAlreadyExists
-from . import syntax, diagnostics
+from . import syntax, diagnostics, primitive
 from .ontology import NS, Symbol
+from .modularity import Program, SophieParseError, SophieImportError
+
+class Yuck(Exception):
+	"""
+	The first argument will be the name of the pass fraught with error.
+	The end-user might not care about this, but it's handy for testing.
+	"""
+	pass
 
 class RoadMap:
-	def __init__(self):
-		self.all_user_defined = []
-		self.all_match_expressions = []
-	
+	symbol_scopes : dict[Symbol, NS]
+	preamble : syntax.Module
+	module_scopes : dict[syntax.Module, NS]
+	import_alias : dict[syntax.Module, NS]
+	each_module : list[syntax.Module]
+	each_udf : list[syntax.UserFunction]
+	each_match : list[syntax.MatchExpr]
+	import_map : dict[syntax.ImportModule, syntax.Module]
+
+	def __init__(self, base_path:Path, module_path:str, report:diagnostics.Report):
+		self.symbol_scopes = {}
+		self.module_scopes = {}
+		self.import_alias = {}
+		self.each_module = []
+		self.each_udf = []
+		self.each_match = []
+
+		self.note_udf = self.each_udf.append
+		self.note_match = self.each_match.append
+
+		def register(parent, module_key):
+			module = program.parsed_modules[module_key]
+			assert isinstance(module, syntax.Module)
+			self.module_scopes[module] = parent.new_child(module_key)
+			self.import_alias[module] = NS(place=module_key)
+
+			report.set_path(module_key)
+			_WordDefiner(self, module, report)
+			if report.sick(): raise Yuck("define")
+
+			resolver = _WordResolver(self, module, report)
+			if report.sick(): raise Yuck("resolve")
+
+			_AliasChecker(self, module, report)
+			if report.sick(): raise Yuck("alias")
+
+			check_constructors(resolver.dubious_constructors, report)
+			if report.sick(): raise Yuck("constructors")
+
+			self.check_all_match_expressions(report)
+			if report.sick(): raise Yuck("match_check")
+
+			self.build_match_dispatch_tables()
+
+			self.each_match.clear()
+
+			# self._deductionEngine.visit(self)
+			# if self.report.sick(): raise Yuck("type_check"
+
+			return module
+
+		def per_module_tasks():
+			self.preamble = register(primitive.root_namespace, program.preamble_key)
+			preamble_scope = self.module_scopes[self.preamble]
+			for path in program.module_sequence:
+				self.each_module.append(register(preamble_scope, path))
+
+		try: program = Program(base_path, module_path, report)
+		except SophieParseError: raise Yuck("parse")
+		except SophieImportError: raise Yuck("import")
+		report.assert_no_issues()
+		self.import_map = program.import_map
+
+		per_module_tasks()
+
 	def check_all_match_expressions(self, report):
+		# TODO: This should be the type-checker's job.
 		on_match_error = report.on_error("Checking Type-Case Matches")
-		for mx in self.all_match_expressions:
+		for mx in self.each_match:
 			_check_one_match_expression(mx, on_match_error)
 	
 	def build_match_dispatch_tables(self):
 		""" The simple evaluator uses these. """
-		for mx in self.all_match_expressions:
+		# Cannot fail, for checks have been done earlier.
+		for mx in self.each_match:
 			mx.dispatch = {}
 			for alt in mx.alternatives:
 				key = alt.pattern.nom.key()
@@ -35,11 +107,24 @@ class _TopDown(Visitor):
 	Convenience base-class to handle the dreary bits of a
 	perfectly ordinary top-down walk through a syntax tree.
 	"""
+	globals: NS
+	import_alias: NS
+
+	def __init__(self, roadmap: RoadMap, module:syntax.Module, report:diagnostics.Report):
+		self.roadmap = roadmap
+		self.report = report
+		self.globals = self.roadmap.module_scopes[module]
+		self.import_alias = self.roadmap.import_alias[module]
+		self.visit_Module(module)
+
+	def visit_Module(self, module:syntax.Module):
+		raise NotImplementedError(type(self))
+
 	def visit_ArrowSpec(self, it: syntax.ArrowSpec, env):
 		for a in it.lhs:
 			self.visit(a, env)
 		self.visit(it.rhs, env)
-	
+
 	def visit_Literal(self, l:syntax.Literal, env): pass
 	def visit_ImplicitType(self, it:syntax.ImplicitTypeVariable, env): pass
 
@@ -80,10 +165,7 @@ class _TopDown(Visitor):
 		for s in db.steps:
 			self.visit(s, env)
 
-	# def visit_MakeMessage(self, mm:syntax.MakeMessage, env):
-	# 	self.visit(mm.expr, env)
-
-class WordDefiner(_TopDown):
+class _WordDefiner(_TopDown):
 	"""
 	At the end of this phase:
 		Names used in declarations have an attached symbol table entry.
@@ -92,33 +174,23 @@ class WordDefiner(_TopDown):
 	Attaches NameSpace objects in key places and install definitions.
 	Takes note of names with more than one definition in the same scope.
 	"""
-	globals : NS
-	
-	def __init__(self, module:syntax.Module, outer:NS, report:diagnostics.Report):
-		self._report = report
-		self._on_error = report.on_error("Defining words")
-		self.redef, self._missing_foreign_symbols = [], []
-		self.globals = module.globals = outer.new_child(module)
-		self.roadmap = RoadMap()
-		
-		for d in module.imports: self.visit_ImportModule(d, module)
+
+	def visit_Module(self, module:syntax.Module):
+		for d in module.imports: self.visit_ImportModule(d)
 		for td in module.types: self.visit(td)
 		for d in module.foreign: self.visit_ImportForeign(d)
-		
-		if self._missing_foreign_symbols:
-			self._on_error(self._missing_foreign_symbols, "Some foreign symbols could not be found.")
-			
 		for fn in module.outer_functions:  # Can't iterate all-functions yet; must build it first.
-			self.visit(fn, module.globals)
+			self.visit(fn, self.globals)
 		for expr in module.main:  # Might need to define some case-match symbols here.
-			self.visit(expr, module.globals)
-		if self.redef:
-			self._on_error(self.redef, "I see the same name defined earlier in the same scope:")
+			self.visit(expr, self.globals)
+		pass
 
 	def _install(self, namespace: NS, dfn:Symbol):
 		try: namespace[dfn.nom.key()] = dfn
-		except SymbolAlreadyExists: self.redef.append(dfn.nom)
-	
+		except SymbolAlreadyExists:
+			earlier = namespace[dfn.nom.key()]
+			self.report.redefined_name(earlier, dfn.nom)
+
 	def _declare_type(self, td:syntax.TypeDeclaration):
 		self._install(self.globals, td)
 		self._define_type_params(td)
@@ -132,8 +204,8 @@ class WordDefiner(_TopDown):
 	def visit_Opaque(self, o:syntax.Opaque):
 		self._install(self.globals, o)
 		if o.type_params:
-			self._on_error(o.type_params, "Opaque types are not to be made generic.")
-	
+			self.report.opaque_generic(o.type_params)
+
 	def visit_Variant(self, v:syntax.Variant):
 		self._declare_type(v)
 		ss = v.sub_space = NS(place=v)
@@ -161,8 +233,8 @@ class WordDefiner(_TopDown):
 		for a in it.arguments:
 			self.visit(a, env)
 
-	def visit_UserDefinedFunction(self, udf:syntax.UserDefinedFunction, env:NS):
-		self.roadmap.all_user_defined.append(udf)
+	def visit_UserFunction(self, udf:syntax.UserFunction, env:NS):
+		self.roadmap.note_udf(udf)
 		self._install(env, udf)
 		inner = udf.namespace = env.new_child(udf)
 		for param in udf.params:
@@ -184,11 +256,8 @@ class WordDefiner(_TopDown):
 	
 	def visit_Lookup(self, l:syntax.Lookup, env:NS): pass
 	
-	# def visit_Mutation(self, m:syntax.Mutation, env:NS):
-	# 	self.visit(m.expr, env)
-	
 	def visit_MatchExpr(self, mx:syntax.MatchExpr, env:NS):
-		self.roadmap.all_match_expressions.append(mx)
+		self.roadmap.note_match(mx)
 		self.visit(mx.subject.expr, env)
 		inner = mx.namespace = env.new_child(mx)
 		self._install(inner, mx.subject)
@@ -202,34 +271,38 @@ class WordDefiner(_TopDown):
 			self.visit(sub_ex, env)
 		self.visit(alt.sub_expr, env)
 	
-	def visit_ImportModule(self, im:syntax.ImportModule, module:syntax.Module):
+	def visit_ImportModule(self, im:syntax.ImportModule):
+		source_module = self.roadmap.import_map[im]
+		source_namespace = self.roadmap.module_scopes[source_module]
 		if im.nom is not None:
-			self._install(module.module_imports, im)
+			self._install(self.import_alias, im)
 		for alias in im.vocab:
 			yonder, hither = alias.yonder, alias.hither or alias.yonder
-			try: module.globals[hither.text] = im.module.globals[yonder.text]
-			except SymbolAlreadyExists:
-				collision = module.globals[hither.text].nom
-				self._on_error([collision, hither], "This symbol is already defined.")
-			except KeyError:
-				self._on_error([im.nom, yonder], "There is no corresponding symbol to import.")
+			try: subject = source_namespace[yonder.key()]
+			except KeyError: self.report.undefined_name(yonder.head())
+			else:
+				try: self.globals[hither.key()] = subject
+				except SymbolAlreadyExists:
+					collision = self.globals[hither.key()]
+					self.report.redefined_name(collision, hither)
+
 		pass
 	
 	def visit_ImportForeign(self, d:syntax.ImportForeign):
 		try: py_module = import_module(d.source.value)
 		except ModuleNotFoundError:
-			self._report.missing_foreign(d.source)
+			self.report.missing_foreign_module(d.source)
 		except ImportError as ex:
 			tbx = TracebackException.from_exception(ex)
-			self._report.broken_foreign(d.source, tbx)
+			self.report.broken_foreign_module(d.source, tbx)
 		else:
 			if d.linkage is not None:
 				if not hasattr(py_module, "sophie_init"):
-					self._report.missing_linkage(d.source)
+					self.report.missing_foreign_linkage(d.source)
 					return
 				arity = len(signature(py_module.sophie_init).parameters)
 				if arity != len(d.linkage):
-					self._report.wrong_linkage_arity(d, arity)
+					self.report.wrong_linkage_arity(d, arity)
 					return
 			for group in d.groups:
 				self._define_type_params(group)
@@ -239,10 +312,12 @@ class WordDefiner(_TopDown):
 	def visit_FFI_Alias(self, sym:syntax.FFI_Alias, py_module):
 		key = sym.nom.key() if sym.alias is None else sym.alias.value
 		try: sym.val = getattr(py_module, key)
-		except AttributeError: self._missing_foreign_symbols.append(sym)
+		except AttributeError:
+			guilty = (sym.alias or sym.nom).head()
+			self.report.undefined_name(guilty)
 		else: self._install(self.globals, sym)
 
-class WordResolver(_TopDown):
+class _WordResolver(_TopDown):
 	"""
 	At the end of this action, every name-reference in the source text is visible where it's used.
 	That is, a corresponding definition-object is in scope. It may not make sense,
@@ -259,24 +334,18 @@ class WordResolver(_TopDown):
 	"""
 	
 	dubious_constructors: list[syntax.Reference]
-	
-	def __init__(self, module:syntax.Module, report:diagnostics.Report, roadmap:RoadMap):
-		on_error = report.on_error("Finding Definitions")
+
+	def visit_Module(self, module:syntax.Module):
 		self.dubious_constructors = []
-		self.undef:list[syntax.Nom] = []
-		self.module = module
 		for td in module.types:
 			self.visit(td)
 		for item in module.foreign:
 			self.visit(item)
-		for item in roadmap.all_user_defined:
-			item.source_path = module.path
+		for item in self.roadmap.each_udf:
 			self.visit(item)
 		for expr in module.main:
-			self.visit(expr, module.globals)
-		if self.undef:
-			on_error(self.undef, "I do not see an available definition for:")
-	
+			self.visit(expr, self.globals)
+
 	def visit_Variant(self, v:syntax.Variant):
 		for st in v.subtypes:
 			if st.body is not None:
@@ -293,10 +362,9 @@ class WordResolver(_TopDown):
 			self.visit(f.type_expr, env)
 	
 	def _lookup(self, nom:syntax.Nom, env:NS):
-		try:
-			return env[nom.key()]
+		try: return env[nom.key()]
 		except NoSuchSymbol:
-			self.undef.append(nom)
+			self.report.undefined_name(nom.head())
 			return Bogon(nom)
 
 	def visit_PlainReference(self, ref:syntax.PlainReference, env:NS):
@@ -305,18 +373,20 @@ class WordResolver(_TopDown):
 	
 	def visit_QualifiedReference(self, ref:syntax.QualifiedReference, env:NS):
 		# Search among imports.
-		im = self._lookup(ref.space, self.module.module_imports)
+		im = self._lookup(ref.space, self.import_alias)
 		if isinstance(im, Bogon): ref.dfn = im
 		else:
 			assert isinstance(im, syntax.ImportModule)
-			ref.dfn = self._lookup(ref.nom, im.module.globals)
+			target_module = self.roadmap.import_map[im]
+			target_namespace = self.roadmap.module_scopes[target_module]
+			ref.dfn = self._lookup(ref.nom, target_namespace)
 	
 	def visit_TypeCall(self, tc:syntax.TypeCall, env:NS):
 		self.visit(tc.ref, env)
 		for p in tc.arguments:
 			self.visit(p, env)
 
-	def visit_UserDefinedFunction(self, sym:syntax.UserDefinedFunction):
+	def visit_UserFunction(self, sym:syntax.UserFunction):
 		for param in sym.params:
 			if param.type_expr is not None:
 				self.visit(param.type_expr, sym.namespace)
@@ -327,7 +397,7 @@ class WordResolver(_TopDown):
 	def visit_MatchExpr(self, mx:syntax.MatchExpr, env:NS):
 		self.visit(mx.subject.expr, env)
 		for alt in mx.alternatives:
-			self.visit(alt.pattern, self.module.globals)
+			self.visit(alt.pattern, self.globals)
 			self.visit(alt.sub_expr, mx.namespace)
 			for sub_ex in alt.where:
 				self.visit(sub_ex)
@@ -342,16 +412,15 @@ class WordResolver(_TopDown):
 	
 	def visit_ImportForeign(self, d:syntax.ImportForeign):
 		for ref in d.linkage or ():
-			self.visit(ref, self.module.globals)
+			self.visit(ref, self.globals)
 		for group in d.groups:
 			self.visit(group.type_expr, group.param_space)
 
 class Bogon(syntax.Symbol):
-	
 	def has_value_domain(self) -> bool:
 		return False
 
-class AliasChecker(Visitor):
+class _AliasChecker(Visitor):
 	"""
 	Check the arity of TypeCall forms.
 	Check for aliases being well-founded, up front before getting caught in a loop later:
@@ -361,13 +430,20 @@ class AliasChecker(Visitor):
 	Stop worrying about function cycles; I'll catch that problem in the type checker.
 	"""
 	
-	def __init__(self, module: syntax.Module, report: diagnostics.Report, roadmap:RoadMap):
-		self.on_error = report.on_error("Circular reasoning")
+	def __init__(self, roadmap: RoadMap, module:syntax.Module, report:diagnostics.Report):
+		self.on_error = report.on_error("Circular Reasoning")
+		self.roadmap = roadmap
+		self.report = report
+		self.globals = self.roadmap.module_scopes[module]
+		self.import_alias = self.roadmap.import_alias[module]
+		self.visit_Module(module)
+
+	def visit_Module(self, module: syntax.Module):
 		self.non_types = []
 		self.graph = {td:[] for td in module.types}
 		self._tour(module.types)
 		self._tour(module.foreign)
-		self._tour(roadmap.all_user_defined)
+		self._tour(self.roadmap.each_udf)
 		if self.non_types:
 			self.on_error(self.non_types, "Need a type-name here; found this instead.")
 		alias_order = []
@@ -444,7 +520,7 @@ class AliasChecker(Visitor):
 	def visit_ExplicitTypeVariable(self, expr:syntax.ExplicitTypeVariable): pass
 	def visit_ImplicitTypeVariable(self, it:syntax.ImplicitTypeVariable): pass
 
-	def visit_UserDefinedFunction(self, sym:syntax.UserDefinedFunction):
+	def visit_UserFunction(self, sym:syntax.UserFunction):
 		for p in sym.params: self.visit(p)
 		if sym.result_type_expr: self.visit(sym.result_type_expr)
 
@@ -504,7 +580,7 @@ def _check_one_match_expression(mx:syntax.MatchExpr, on_error):
 	pass
 
 
-class DependencyPass(_TopDown):
+class DependencyPass(Visitor):
 	"""
 	Solve the problem of which-all formal parameters does the value (and thus, type)
 	of each user-defined function actually depend on. A simplistic answer would be to just
@@ -553,20 +629,20 @@ class DependencyPass(_TopDown):
 		self._outer.clear()
 		self._overflowing.clear()
 		self._outflows.clear()
-		for mx in roadmap.all_match_expressions:
+		for mx in roadmap.each_match:
 			del self.depends[mx.subject]
 
 	def visit_Module(self, roadmap:RoadMap):
-		for item in roadmap.all_user_defined:
+		for item in roadmap.each_udf:
 			self._prepare(item)
-		for mx in roadmap.all_match_expressions:
+		for mx in roadmap.each_match:
 			self._prepare(mx.subject)
-		for item in roadmap.all_user_defined:
+		for item in roadmap.each_udf:
 			self.visit(item)
 		self._flow_dependencies()
 		self._clean_up_after(roadmap)
 
-	def visit_UserDefinedFunction(self, udf:syntax.UserDefinedFunction):
+	def visit_UserFunction(self, udf:syntax.UserFunction):
 		self.visit(udf.expr, udf)
 
 	def visit_Lookup(self, lu: syntax.Lookup, env):
@@ -578,7 +654,7 @@ class DependencyPass(_TopDown):
 			return
 		elif isinstance(dfn, syntax.FormalParameter):
 			self._insert(dfn, env)
-		elif isinstance(dfn, (syntax.UserDefinedFunction, syntax.Subject)):
+		elif isinstance(dfn, (syntax.UserFunction, syntax.Subject)):
 			assert hasattr(dfn, "static_depth"), dfn
 			if dfn.static_depth:
 				self._outflows[dfn].add(env)

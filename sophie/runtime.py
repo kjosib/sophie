@@ -1,15 +1,15 @@
 import traceback
 from typing import Any, Union, Sequence, Optional
 from collections import deque
-from . import syntax, primitive, ontology
-from .stacking import StackFrame, FunctionFrame
+from . import syntax, primitive
+from .stacking import Frame, Activation
 
 STRICT_VALUE = Union[
 	int, float, str, dict,
 	"Procedure", "BoundMethod", "Message", "Step",
 ]
 LAZY_VALUE = Union[STRICT_VALUE, "Thunk"]
-ENV = StackFrame[LAZY_VALUE]
+ENV = Frame[LAZY_VALUE]
 
 ###############################################################################
 
@@ -57,17 +57,17 @@ def _eval_lookup(expr:syntax.Lookup, dynamic_env:ENV):
 	static_env = dynamic_env.chase(sym)
 	try: return static_env.fetch(sym)
 	except KeyError:
-		if isinstance(sym, syntax.UserDefinedFunction):
+		if isinstance(sym, syntax.UserFunction):
 			if sym.params:
 				value = Closure(static_env, sym)
 			else:
-				inner = FunctionFrame(sym, static_env, ())
+				inner = Activation.for_function(static_env, sym, ())
 				value = delay(inner, sym.expr)
 		elif isinstance(sym, syntax.TypeAlias):
 			value = _snap_type_alias(sym, static_env)
 		else:
 			assert False, type(sym)
-		return static_env.install(sym, value)
+		return static_env.assign(sym, value)
 
 def _eval_bin_exp(expr:syntax.BinExp, dynamic_env:ENV):
 	return OPS[expr.glyph](_strict(expr.lhs, dynamic_env), _strict(expr.rhs, dynamic_env))
@@ -106,7 +106,7 @@ def _eval_explicit_list(expr:syntax.ExplicitList, dynamic_env:ENV):
 	return tail
 
 def _eval_match_expr(expr:syntax.MatchExpr, dynamic_env:ENV):
-	subject = dynamic_env.install(expr.subject, _strict(expr.subject.expr, dynamic_env))
+	subject = dynamic_env.assign(expr.subject, _strict(expr.subject.expr, dynamic_env))
 	tag = subject[""]
 	try:
 		branch = expr.dispatch[tag]
@@ -129,19 +129,19 @@ def _snap_type_alias(alias:syntax.TypeAlias, global_env:ENV):
 	try: return global_env.fetch(dfn)
 	except KeyError:
 		assert isinstance(dfn, syntax.TypeAlias)
-		return global_env.install(dfn, _snap_type_alias(dfn, global_env))
+		return global_env.assign(dfn, _snap_type_alias(dfn, global_env))
 
 EVALUABLE = Union[syntax.ValExpr, syntax.Reference]
 
 def evaluate(expr:EVALUABLE, dynamic_env:ENV) -> LAZY_VALUE:
-	assert isinstance(dynamic_env, StackFrame), type(dynamic_env)
+	assert isinstance(dynamic_env, Frame), type(dynamic_env)
 	try: fn = EVALUATE[type(expr)]
 	except KeyError: raise NotImplementedError(type(expr), expr)
 	try: return fn(expr, dynamic_env)
 	except Exception:
 		traceback.print_exc()
 		# for frame in THE_STACK:
-		# 	frame.dump()
+		# 	frame.trace(tracer)
 		exit(1)
 
 def delay(dynamic_env:ENV, expr:syntax.ValExpr) -> LAZY_VALUE:
@@ -173,14 +173,14 @@ class Procedure:
 class Closure(Procedure):
 	""" The run-time manifestation of a sub-function: a callable value tied to its natal environment. """
 
-	def __init__(self, static_link:ENV, udf:syntax.UserDefinedFunction):
+	def __init__(self, static_link:ENV, udf:syntax.UserFunction):
 		self._static_link = static_link
 		self._udf = udf
 	
 	def _name(self): return self._udf.nom.text
 
 	def apply(self, args: Sequence[LAZY_VALUE]) -> LAZY_VALUE:
-		inner_env = FunctionFrame(self._udf, self._static_link, args)
+		inner_env = Activation.for_function(self._static_link, self._udf, args)
 		return evaluate(self._udf.expr, inner_env)
 
 class Primitive(Procedure):
