@@ -1,6 +1,6 @@
 from pathlib import Path
 import unittest
-from sophie import executive, diagnostics, resolution
+from sophie import executive, diagnostics, resolution, type_evaluator
 
 base_folder = Path(__file__).parent.parent
 examples = base_folder/"examples"
@@ -9,7 +9,10 @@ zoo_ok = base_folder/"zoo/ok"
 
 def _good(folder, which) -> resolution.RoadMap:
 	report = diagnostics.Report(verbose=False)
-	try: return resolution.RoadMap(folder, which + ".sg", report)
+	try:
+		roadmap = resolution.RoadMap(folder, which + ".sg", report)
+		type_evaluator.type_program(roadmap, report)
+		return roadmap
 	except resolution.Yuck as ex:
 		assert report.sick()
 		report.complain_to_console()

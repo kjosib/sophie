@@ -7,7 +7,6 @@ Class-level type annotations make peace with pycharm wherever later passes add f
 from pathlib import Path
 from typing import Optional, Any, Sequence, NamedTuple, Union
 from boozetools.parsing.interface import SemanticError
-from boozetools.support.symtab import NameSpace
 from .ontology import (
 	Nom, Symbol, NS, Reference,
 	Expr, Term,
@@ -315,19 +314,19 @@ class ExplicitList(ValExpr):
 	def head(self) -> slice:
 		raise AssertionError
 
-class Alternative(ValExpr):
-	pattern: Reference
+class Alternative(Symbol):
 	sub_expr: ValExpr
 	where: Sequence[UserFunction]
 	
 	namespace: NS  # WordDefiner fills
-	
-	def __init__(self, pattern:Reference, _head, sub_expr:ValExpr, where:WhereClause):
+
+	def __init__(self, pattern:Nom, _head, sub_expr:ValExpr, where:WhereClause):
+		super().__init__(pattern)
 		self.pattern = pattern
 		self._head = _head
 		self.sub_expr = sub_expr
 		if where:
-			_bookend(pattern.nom, where.end_name)
+			_bookend(pattern, where.end_name)
 			self.where = where.sub_fns
 		else:
 			self.where = ()
@@ -352,7 +351,6 @@ class MatchExpr(ValExpr):
 	
 	namespace: NS  # WordDefiner fills
 	
-	variant:Variant  # check_match_expression infers this from the patterns
 	dispatch: dict[Optional[str]:ValExpr]
 	
 	def __init__(self, subject:Subject, alternatives: list[Alternative], otherwise: Optional[ValExpr]):

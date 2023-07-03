@@ -45,7 +45,14 @@ Some things are going well:
 * The module system got an upgrade: there is now a notion of a system-package and the beginnings of a standard library.
 * The FFI (into Python): Sophie can call Python; Python can call Sophie; and Python can install I/O drivers into Sophie.
 * Error display is improved in various ways. There is also now an easy way to install helpful messages for parse errors.
-  This works; there just aren't many good messages yet.
+  This works surprisingly well now.
+
+*Caveat:* Type-checking is presently out of commission in HEAD, but the release has it working.
+
+Some things are in progress:
+
+* I'm in progress to add asynchronous message-passing, with an eye towards a safe concurrency model.
+  (That's why type-checking is temporarily turned off)
 
 Certain things are not started yet:
 

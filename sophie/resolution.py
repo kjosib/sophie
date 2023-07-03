@@ -22,7 +22,6 @@ class Yuck(Exception):
 	pass
 
 class RoadMap:
-	symbol_scopes : dict[Symbol, NS]
 	preamble : syntax.Module
 	module_scopes : dict[syntax.Module, NS]
 	import_alias : dict[syntax.Module, NS]
@@ -32,7 +31,6 @@ class RoadMap:
 	import_map : dict[syntax.ImportModule, syntax.Module]
 
 	def __init__(self, base_path:Path, module_path:str, report:diagnostics.Report):
-		self.symbol_scopes = {}
 		self.module_scopes = {}
 		self.import_alias = {}
 		self.each_module = []
@@ -61,23 +59,9 @@ class RoadMap:
 			check_constructors(resolver.dubious_constructors, report)
 			if report.sick(): raise Yuck("constructors")
 
-			self.check_all_match_expressions(report)
-			if report.sick(): raise Yuck("match_check")
-
 			self.build_match_dispatch_tables()
 
-			self.each_match.clear()
-
-			# self._deductionEngine.visit(self)
-			# if self.report.sick(): raise Yuck("type_check"
-
 			return module
-
-		def per_module_tasks():
-			self.preamble = register(primitive.root_namespace, program.preamble_key)
-			preamble_scope = self.module_scopes[self.preamble]
-			for path in program.module_sequence:
-				self.each_module.append(register(preamble_scope, path))
 
 		try: program = Program(base_path, module_path, report)
 		except SophieParseError: raise Yuck("parse")
@@ -85,40 +69,26 @@ class RoadMap:
 		report.assert_no_issues()
 		self.import_map = program.import_map
 
-		per_module_tasks()
+		self.preamble = register(primitive.root_namespace, program.preamble_key)
+		preamble_scope = self.module_scopes[self.preamble]
+		for path in program.module_sequence:
+			self.each_module.append(register(preamble_scope, path))
 
-	def check_all_match_expressions(self, report):
-		# TODO: This should be the type-checker's job.
-		on_match_error = report.on_error("Checking Type-Case Matches")
-		for mx in self.each_match:
-			_check_one_match_expression(mx, on_match_error)
-	
 	def build_match_dispatch_tables(self):
 		""" The simple evaluator uses these. """
 		# Cannot fail, for checks have been done earlier.
 		for mx in self.each_match:
-			mx.dispatch = {}
-			for alt in mx.alternatives:
-				key = alt.pattern.nom.key()
-				mx.dispatch[key] = alt.sub_expr
+			mx.dispatch = {
+				alt.nom.key() : alt.sub_expr
+				for alt in mx.alternatives
+			}
+		self.each_match.clear()
 
-class _TopDown(Visitor):
+class TopDown(Visitor):
 	"""
 	Convenience base-class to handle the dreary bits of a
 	perfectly ordinary top-down walk through a syntax tree.
 	"""
-	globals: NS
-	import_alias: NS
-
-	def __init__(self, roadmap: RoadMap, module:syntax.Module, report:diagnostics.Report):
-		self.roadmap = roadmap
-		self.report = report
-		self.globals = self.roadmap.module_scopes[module]
-		self.import_alias = self.roadmap.import_alias[module]
-		self.visit_Module(module)
-
-	def visit_Module(self, module:syntax.Module):
-		raise NotImplementedError(type(self))
 
 	def visit_ArrowSpec(self, it: syntax.ArrowSpec, env):
 		for a in it.lhs:
@@ -126,6 +96,7 @@ class _TopDown(Visitor):
 		self.visit(it.rhs, env)
 
 	def visit_Literal(self, l:syntax.Literal, env): pass
+
 	def visit_ImplicitType(self, it:syntax.ImplicitTypeVariable, env): pass
 
 	def visit_ShortCutExp(self, it: syntax.ShortCutExp, env):
@@ -165,12 +136,26 @@ class _TopDown(Visitor):
 		for s in db.steps:
 			self.visit(s, env)
 
-class _WordDefiner(_TopDown):
+class _ResolutionPass(TopDown):
+	globals: NS
+	import_alias: NS
+
+	def __init__(self, roadmap: RoadMap, module:syntax.Module, report:diagnostics.Report):
+		self.roadmap = roadmap
+		self.report = report
+		self.globals = self.roadmap.module_scopes[module]
+		self.import_alias = self.roadmap.import_alias[module]
+		self.visit_Module(module)
+
+	def visit_Module(self, module:syntax.Module):
+		raise NotImplementedError(type(self))
+
+class _WordDefiner(_ResolutionPass):
 	"""
 	At the end of this phase:
 		Names used in declarations have an attached symbol table entry.
 		The entry is installed in all appropriate namespaces.
-		
+
 	Attaches NameSpace objects in key places and install definitions.
 	Takes note of names with more than one definition in the same scope.
 	"""
@@ -194,7 +179,7 @@ class _WordDefiner(_TopDown):
 	def _declare_type(self, td:syntax.TypeDeclaration):
 		self._install(self.globals, td)
 		self._define_type_params(td)
-	
+
 	def _define_type_params(self, item:Union[syntax.TypeDeclaration, syntax.FFI_Group]):
 		ps = item.param_space = self.globals.new_child(place=item)
 		for p in item.type_params:
@@ -214,14 +199,14 @@ class _WordDefiner(_TopDown):
 			self._install(ss, st)
 			if st.body is not None:
 				self.visit(st.body)
-				
+
 	def visit_Record(self, r:syntax.Record):
 		self._declare_type(r)
 		self.visit(r.spec)
 
 	def visit_TypeAlias(self, ta:syntax.TypeAlias):
 		self._declare_type(ta)
-		
+
 	def visit_RecordSpec(self, rs:syntax.RecordSpec):
 		# Ought to have a local name-space with names having types.
 		rs.field_space = NS(place=rs)
@@ -244,18 +229,18 @@ class _WordDefiner(_TopDown):
 		for sub_fn in udf.where:
 			self.visit(sub_fn, inner)
 		self.visit(udf.expr, inner)
-	
+
 	def visit_FormalParameter(self, fp:syntax.FormalParameter, env:NS):
 		self._install(env, fp)
 		if fp.type_expr is not None:
 			self.visit(fp.type_expr, env)
-	
+
 	def visit_ExplicitTypeVariable(self, gt:syntax.ExplicitTypeVariable, env:NS):
 		if gt.nom.key() not in env:
 			self._install(env, syntax.TypeParameter(gt.nom))
-	
+
 	def visit_Lookup(self, l:syntax.Lookup, env:NS): pass
-	
+
 	def visit_MatchExpr(self, mx:syntax.MatchExpr, env:NS):
 		self.roadmap.note_match(mx)
 		self.visit(mx.subject.expr, env)
@@ -270,7 +255,7 @@ class _WordDefiner(_TopDown):
 		for sub_ex in alt.where:
 			self.visit(sub_ex, env)
 		self.visit(alt.sub_expr, env)
-	
+
 	def visit_ImportModule(self, im:syntax.ImportModule):
 		source_module = self.roadmap.import_map[im]
 		source_namespace = self.roadmap.module_scopes[source_module]
@@ -287,7 +272,7 @@ class _WordDefiner(_TopDown):
 					self.report.redefined_name(collision, hither)
 
 		pass
-	
+
 	def visit_ImportForeign(self, d:syntax.ImportForeign):
 		try: py_module = import_module(d.source.value)
 		except ModuleNotFoundError:
@@ -308,7 +293,7 @@ class _WordDefiner(_TopDown):
 				self._define_type_params(group)
 				for sym in group.symbols:
 					self.visit(sym, py_module)
-	
+
 	def visit_FFI_Alias(self, sym:syntax.FFI_Alias, py_module):
 		key = sym.nom.key() if sym.alias is None else sym.alias.value
 		try: sym.val = getattr(py_module, key)
@@ -317,7 +302,7 @@ class _WordDefiner(_TopDown):
 			self.report.undefined_name(guilty)
 		else: self._install(self.globals, sym)
 
-class _WordResolver(_TopDown):
+class _WordResolver(_ResolutionPass):
 	"""
 	At the end of this action, every name-reference in the source text is visible where it's used.
 	That is, a corresponding definition-object is in scope. It may not make sense,
@@ -397,7 +382,6 @@ class _WordResolver(_TopDown):
 	def visit_MatchExpr(self, mx:syntax.MatchExpr, env:NS):
 		self.visit(mx.subject.expr, env)
 		for alt in mx.alternatives:
-			self.visit(alt.pattern, self.globals)
 			self.visit(alt.sub_expr, mx.namespace)
 			for sub_ex in alt.where:
 				self.visit(sub_ex)
@@ -532,139 +516,4 @@ def check_constructors(dubious_constructors:list[syntax.Reference], report:diagn
 	bogons = [ref.head() for ref in dubious_constructors if not ref.dfn.has_value_domain()]
 	if bogons: report.error("Checking Constructors", bogons, "These type-names are not data-constructors.")
 
-
-def _check_one_match_expression(mx:syntax.MatchExpr, on_error):
-	# todo: Delegate exhaustiveness-checking to the type checker.
-	non_subtypes = []
-	duplicates = set()
-	first = {}
-	
-	subtypes : list[syntax.SubTypeSpec] = []
-	
-	for alt in mx.alternatives:
-		dfn = alt.pattern.dfn
-		if isinstance(dfn, syntax.SubTypeSpec):
-			subtypes.append(dfn)
-			if dfn in first:
-				duplicates.add(first[dfn])
-				duplicates.add(alt.pattern)
-			else:
-				first[dfn] = alt.pattern
-		else:
-			non_subtypes.append(alt.pattern)
-	
-	if non_subtypes:
-		on_error(non_subtypes, "This case is not a member of any variant.")
-	if duplicates:
-		on_error(list(duplicates), "Duplicate cases here...")
-	if non_subtypes or duplicates:
-		return
-	
-	primary_variant = subtypes[0].variant
-	mistypes = [
-		alt.pattern
-		for alt in mx.alternatives
-		if alt.pattern.dfn.variant is not primary_variant
-	]
-	
-	if mistypes:
-		on_error([mx.alternatives[0].pattern] + mistypes, "These do not all come from the same variant type.")
-		return
-
-	mx.variant = primary_variant
-	exhaustive = len(first) == len(primary_variant.subtypes)
-	if exhaustive and mx.otherwise:
-		on_error([mx, mx.otherwise], "This case-construction is exhaustive; the else-clause cannot happen.")
-	if not (exhaustive or mx.otherwise):
-		on_error([mx], "This case-construction does not cover all the cases of <%s> and lacks an otherwise-clause." % mx.variant.nom.text)
-	pass
-
-
-class DependencyPass(Visitor):
-	"""
-	Solve the problem of which-all formal parameters does the value (and thus, type)
-	of each user-defined function actually depend on. A simplistic answer would be to just
-	use the parameters of the outermost function in a given nest. But inner functions
-	might not be so generic as all that. Better precision here means smarter memoization,
-	and thus faster type-checking.
-	
-	Incidentally:
-	The same analysis could determine the deepest non-local needed for a function,
-	which could possibly allow some functions to run at a shallower static-depth
-	than however they may appear in the source code. This could make the simple evaluator
-	a bit faster by improving the lifetime of thunks.
-	"""
-	def __init__(self):
-		self.depends : dict[Symbol:syntax.FormalParameter] = {}
-		self._outer = {}
-		self._outflows = {}
-		self._overflowing = set()
-		
-	def _prepare(self, sym:Symbol):
-		self.depends[sym] = set()
-		self._outer[sym] = set()
-		self._outflows[sym] = set()
-	
-	def _insert(self, parameter:syntax.FormalParameter, env:Symbol):
-		self.depends[env].add(parameter)
-		if parameter.static_depth <= env.static_depth:
-			# i.e. The parameter is non-local...
-			outer = self._outer[env]
-			if parameter not in outer:
-				self._outer[env].add(parameter)
-				self._overflowing.add(env)
-
-	def _flow_dependencies(self):
-		# This algorithm might not be theoretically perfect,
-		# but for what it's about, it should be plenty fast.
-		# And it's straightforward to understand.
-		while self._overflowing:
-			source = self._overflowing.pop()
-			spill = self._outer[source]
-			for destination in self._outflows[source]:
-				for parameter in spill:
-					self._insert(parameter, destination)
-	
-	def _clean_up_after(self, roadmap:RoadMap):
-		self._outer.clear()
-		self._overflowing.clear()
-		self._outflows.clear()
-		for mx in roadmap.each_match:
-			del self.depends[mx.subject]
-
-	def visit_Module(self, roadmap:RoadMap):
-		for item in roadmap.each_udf:
-			self._prepare(item)
-		for mx in roadmap.each_match:
-			self._prepare(mx.subject)
-		for item in roadmap.each_udf:
-			self.visit(item)
-		self._flow_dependencies()
-		self._clean_up_after(roadmap)
-
-	def visit_UserFunction(self, udf:syntax.UserFunction):
-		self.visit(udf.expr, udf)
-
-	def visit_Lookup(self, lu: syntax.Lookup, env):
-		self.visit(lu.ref, env)
-		
-	def visit_PlainReference(self, ref:syntax.PlainReference, env):
-		dfn = ref.dfn
-		if dfn.static_depth == 0:
-			return
-		elif isinstance(dfn, syntax.FormalParameter):
-			self._insert(dfn, env)
-		elif isinstance(dfn, (syntax.UserFunction, syntax.Subject)):
-			assert hasattr(dfn, "static_depth"), dfn
-			if dfn.static_depth:
-				self._outflows[dfn].add(env)
-		else:
-			assert False, (dfn, type(dfn))
-				
-	def visit_MatchExpr(self, mx:syntax.MatchExpr, env):
-		self.visit(mx.subject.expr, mx.subject)
-		for alt in mx.alternatives:
-			self.visit(alt.sub_expr, env)
-		if mx.otherwise is not None:
-			self.visit(mx.otherwise, env)
 
