@@ -2,7 +2,7 @@
 """
 import sys
 from pathlib import Path
-from typing import Union
+from typing import Union, Optional
 
 from boozetools.macroparse.runtime import TypicalApplication, make_tables
 from boozetools.scanning.engine import IterableScanner
@@ -54,22 +54,11 @@ class SophieParser(TypicalApplication):
 
 sophie_parser = SophieParser(_tables)
 
-def read_file(path:Path, report:Report, source):
-	"""Read file given by name; return contents."""
-	try:
-		with open(path, "r") as fh:
-			return fh.read()
-	except FileNotFoundError:
-		report.no_such_file(path, source)
-	except OSError:
-		report.broken_file(path, source)
-
 def parse_text(text:str, path:Path, report:Report) -> Union[syntax.Module, Issue]:
 	""" Submit text to parser; submit the resulting tree to subsequent pass """
 	assert isinstance(path, Path)
 	try:
 		module = sophie_parser.parse(text, filename=str(path))
-		module.path = path
 		return module
 	except syntax.MismatchedBookendsError as ex:
 		report.error("Checking Bookends", ex.args, "These names don't line up. Has part of a function been lost?")

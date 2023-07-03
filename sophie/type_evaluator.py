@@ -17,7 +17,7 @@ from .ontology import Symbol
 from .syntax import ValExpr
 from . import syntax, primitive, diagnostics
 from .resolution import DependencyPass
-from .stacking import StackFrame, RootFrame, ModuleFrame, FunctionFrame
+from .stacking import Frame, RootFrame, Activation
 from .calculus import (
 	TYPE_ENV,
 	SophieType, TypeVisitor,
@@ -298,7 +298,7 @@ class DeductionEngine(Visitor):
 		self._deps_pass.visit(roadmap)
 		for td in module.types: self.visit(td)
 		for fi in module.foreign: self.visit(fi)
-		env = StackBottom(module.path)
+		env = StackBottom(module)
 		for expr in module.main:
 			result = self.visit(expr, env)
 			self._report.info(result)
@@ -346,10 +346,10 @@ class DeductionEngine(Visitor):
 		fn = fn_type.fn
 		arity = len(fn.params)
 		if arity != len(arg_types): raise ArityError
-		inner = ActivationRecord(fn, env, fn_type.static_env, arg_types)
+		inner = Activation(fn, env, fn_type.static_env, arg_types)
 		return self.exec_UDF(fn, inner)
 		
-	def exec_UDF(self, fn:syntax.UserDefinedFunction, env:TYPE_ENV):
+	def exec_UDF(self, fn:syntax.UserFunction, env:TYPE_ENV):
 		# The part where memoization must happen.
 		memo_symbols = self._deps_pass.depends[fn]
 		memo_types = tuple(
@@ -440,7 +440,7 @@ class DeductionEngine(Visitor):
 				return self._ffi[target]
 		
 		static_env = env.chase(target)
-		if isinstance(target, syntax.UserDefinedFunction):
+		if isinstance(target, syntax.UserFunction):
 			if target.params:
 				return UDFType(target, static_env).exemplar()
 			else:

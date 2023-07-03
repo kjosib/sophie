@@ -1,4 +1,0 @@
-# What if the import fails to parse or check?
-import:
-"../define/defined_twice" as broken;
-end.

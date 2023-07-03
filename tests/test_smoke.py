@@ -1,27 +1,28 @@
 from pathlib import Path
 import unittest
-from sophie import modularity, diagnostics, syntax
+from sophie import executive, diagnostics, resolution
 
 base_folder = Path(__file__).parent.parent
 examples = base_folder/"examples"
 zoo_ok = base_folder/"zoo/ok"
 
 
-def _good(folder, which) -> modularity.Loader:
+def _good(folder, which) -> resolution.RoadMap:
 	report = diagnostics.Report(verbose=False)
-	loader = modularity.Loader(report, experimental=False)
-	if loader.load_program(folder, which + ".sg"):
-		return loader
-	else:
+	try: return resolution.RoadMap(folder, which + ".sg", report)
+	except resolution.Yuck as ex:
+		assert report.sick()
 		report.complain_to_console()
-		assert False
+		assert False, "Test failed %s phase"%ex.args[0]
 
 class ExampleSmokeTests(unittest.TestCase):
 	""" Run all the examples; Test for no smoke. """
 	
 	def test_alias(self):
 		""" The result of running a program is the value of its last expression. """
-		self.assertEqual(7, _good(examples, "tutorial/alias").run())
+		roadmap = _good(examples, "tutorial/alias")
+		result = executive.run_program(roadmap)
+		self.assertEqual(7, result)
 	
 	def test_turtle_examples_compile(self):
 		for name in ["turtle", "color_spiral", "simple_designs"]:
@@ -49,14 +50,16 @@ class ExampleSmokeTests(unittest.TestCase):
 			"tutorial/generic_parameter",
 		]:
 			with self.subTest(name):
-				_good(examples, name).run()
-	
+				roadmap = _good(examples, name)
+				executive.run_program(roadmap)
+
 	def test_zoo_of_ok(self):
 		for name in [
 			"arrows",
 		]:
 			with self.subTest(name):
-				_good(zoo_ok, name).run()
+				roadmap = _good(zoo_ok, name)
+				executive.run_program(roadmap)
 
 
 if __name__ == '__main__':
