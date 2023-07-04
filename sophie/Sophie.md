@@ -162,9 +162,10 @@ else_clause -> ELSE expr ';'
 ```
 For a while, that was all. But then Sophie got type-matching based on variant-types:
 ```
-match_expr -> CASE subject OF semicolon_list(alternative) optional(else_clause) ESAC  :MatchExpr
+match_expr -> CASE subject hint OF semicolon_list(alternative) optional(else_clause) ESAC  :MatchExpr
 subject -> name     :simple_subject
   | expr AS name    :Subject
+hint -> :nothing | ':' reference
 alternative -> name '->' expr optional(where_clause) :Alternative
 ```
 Experience may later suggest expanding the `pattern` grammar, but this will do for now.

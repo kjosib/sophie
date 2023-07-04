@@ -221,8 +221,9 @@ def truth(a_slice:slice): return Literal(True, a_slice)
 def falsehood(a_slice:slice): return Literal(False, a_slice)
 
 class Lookup(ValExpr):
+	# TODO: Decide if this AST node type pulls its weight.
+	#       Maybe I've forgotten a good a reason for it to exist?
 	ref:Reference
-	source_depth:int
 	def __init__(self, ref: Reference): self.ref = ref
 	def head(self) -> slice: return self.ref.head()
 
@@ -322,7 +323,6 @@ class Alternative(Symbol):
 
 	def __init__(self, pattern:Nom, _head, sub_expr:ValExpr, where:WhereClause):
 		super().__init__(pattern)
-		self.pattern = pattern
 		self._head = _head
 		self.sub_expr = sub_expr
 		if where:
@@ -346,15 +346,18 @@ def simple_subject(nom:Nom):
 
 class MatchExpr(ValExpr):
 	subject:Subject  # Symbol in scope within alternative expressions; contains the value of interest
+	hint: Optional[Reference]
 	alternatives: list[Alternative]
 	otherwise: Optional[ValExpr]
 	
 	namespace: NS  # WordDefiner fills
 	
+	variant:Variant  # Filled in match-check pass
 	dispatch: dict[Optional[str]:ValExpr]
 	
-	def __init__(self, subject:Subject, alternatives: list[Alternative], otherwise: Optional[ValExpr]):
+	def __init__(self, subject, hint, alternatives, otherwise):
 		self.subject = subject
+		self.hint = hint
 		self.alternatives, self.otherwise = alternatives, otherwise
 	
 	def head(self) -> slice:
