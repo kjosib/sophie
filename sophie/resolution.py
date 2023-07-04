@@ -10,7 +10,8 @@ from typing import Union
 from inspect import signature
 from boozetools.support.foundation import Visitor, strongly_connected_components_hashable
 from boozetools.support.symtab import NoSuchSymbol, SymbolAlreadyExists
-from . import syntax, diagnostics, primitive
+from . import syntax, primitive
+from .diagnostics import Report
 from .ontology import NS, Symbol
 from .modularity import Program, SophieParseError, SophieImportError
 
@@ -30,7 +31,7 @@ class RoadMap:
 	each_match : list[syntax.MatchExpr]
 	import_map : dict[syntax.ImportModule, syntax.Module]
 
-	def __init__(self, base_path:Path, module_path:str, report:diagnostics.Report):
+	def __init__(self, base_path:Path, module_path:str, report:Report):
 		self.module_scopes = {}
 		self.import_alias = {}
 		self.each_module = []
@@ -43,7 +44,8 @@ class RoadMap:
 		def register(parent, module_key):
 			module = program.parsed_modules[module_key]
 			assert isinstance(module, syntax.Module)
-			self.module_scopes[module] = parent.new_child(module_key)
+			module_scope = parent.new_child(module_key)
+			self.module_scopes[module] = module_scope
 			self.import_alias[module] = NS(place=module_key)
 
 			report.set_path(module_key)
@@ -58,9 +60,14 @@ class RoadMap:
 
 			check_constructors(resolver.dubious_constructors, report)
 			if report.sick(): raise Yuck("constructors")
+			
+			for mx in self.each_match:
+				_check_one_match_expression(mx, module_scope, report)
+			if report.sick(): raise Yuck("match_check")
 
 			self.build_match_dispatch_tables()
-
+			
+			self.each_match.clear()
 			return module
 
 		try: program = Program(base_path, module_path, report)
@@ -82,7 +89,7 @@ class RoadMap:
 				alt.nom.key() : alt.sub_expr
 				for alt in mx.alternatives
 			}
-		self.each_match.clear()
+
 
 class TopDown(Visitor):
 	"""
@@ -140,7 +147,7 @@ class _ResolutionPass(TopDown):
 	globals: NS
 	import_alias: NS
 
-	def __init__(self, roadmap: RoadMap, module:syntax.Module, report:diagnostics.Report):
+	def __init__(self, roadmap: RoadMap, module:syntax.Module, report:Report):
 		self.roadmap = roadmap
 		self.report = report
 		self.globals = self.roadmap.module_scopes[module]
@@ -381,6 +388,8 @@ class _WordResolver(_ResolutionPass):
 
 	def visit_MatchExpr(self, mx:syntax.MatchExpr, env:NS):
 		self.visit(mx.subject.expr, env)
+		if mx.hint is not None:
+			self.visit(mx.hint, env)
 		for alt in mx.alternatives:
 			self.visit(alt.sub_expr, mx.namespace)
 			for sub_ex in alt.where:
@@ -414,8 +423,7 @@ class _AliasChecker(Visitor):
 	Stop worrying about function cycles; I'll catch that problem in the type checker.
 	"""
 	
-	def __init__(self, roadmap: RoadMap, module:syntax.Module, report:diagnostics.Report):
-		self.on_error = report.on_error("Circular Reasoning")
+	def __init__(self, roadmap: RoadMap, module:syntax.Module, report:Report):
 		self.roadmap = roadmap
 		self.report = report
 		self.globals = self.roadmap.module_scopes[module]
@@ -429,18 +437,18 @@ class _AliasChecker(Visitor):
 		self._tour(module.foreign)
 		self._tour(self.roadmap.each_udf)
 		if self.non_types:
-			self.on_error(self.non_types, "Need a type-name here; found this instead.")
+			self.report.these_are_not_types(self.non_types)
 		alias_order = []
 		ok = True
 		for scc in strongly_connected_components_hashable(self.graph):
 			if len(scc) == 1:
 				node = scc[0]
 				if node in self.graph[node]:
-					self.on_error([node], "This is a circular definition.")
+					self.report.circular_type(scc)
 				elif isinstance(node, syntax.TypeDeclaration):
 					alias_order.append(node)
 			else:
-				self.on_error(scc, "These make a circular definition.")
+				self.report.circular_type(scc)
 				ok = False
 		if ok:
 			assert len(alias_order) == len(module.types)
@@ -470,8 +478,7 @@ class _AliasChecker(Visitor):
 		# a. Do we have the correct arity?
 		arg_arity = len(tc.arguments)
 		if arg_arity != param_arity:
-			pattern = "%d type-arguments were given; %d are needed."
-			self.on_error([tc], pattern % (arg_arity, param_arity))
+			self.report.wrong_type_arity(tc, arg_arity, param_arity)
 		for arg in tc.arguments:
 			self.visit(arg)
 
@@ -512,8 +519,47 @@ class _AliasChecker(Visitor):
 		for group in d.groups:
 			self.visit(group.type_expr)
 
-def check_constructors(dubious_constructors:list[syntax.Reference], report:diagnostics.Report):
+def check_constructors(dubious_constructors:list[syntax.Reference], report:Report):
 	bogons = [ref.head() for ref in dubious_constructors if not ref.dfn.has_value_domain()]
 	if bogons: report.error("Checking Constructors", bogons, "These type-names are not data-constructors.")
 
+def _check_one_match_expression(mx: syntax.MatchExpr, module_scope: NS, report: Report):
+	# Figure out what type of variant-record this MatchExpr is dissecting.
+	if mx.hint is None:
+		# Guess the variant based on the first alternative.
+		#
+		# Someday: Expand this to deal with local ambiguity
+		#          by consulting a larger amount of context.
+		first = mx.alternatives[0].nom
+		try: case = module_scope[first.key()]
+		except NoSuchSymbol:
+			report.undefined_name(first.head())
+			return
+		if not isinstance(case, syntax.SubTypeSpec):
+			report.not_a_case(first)
+			return
+		variant = case.variant
+	else:
+		variant = mx.hint.dfn
+		if not isinstance(variant, syntax.Variant):
+			report.not_a_variant(mx.hint)
+			return 
+
+	# Check for duplicate cases and typos.
+	seen, err = {}, False
+	for alt in mx.alternatives:
+		key = alt.nom.key()
+		if key in seen:
+			report.redefined_name(seen[key], alt.nom)
+			err = True
+		else: seen[key] = alt
+		if key not in variant.sub_space:
+			report.not_a_case_of(alt.nom, variant)
+	
+	# Check for exhaustiveness.
+
+	mx.variant = variant
+	exhaustive = len(seen) == len(variant.subtypes)
+	if      exhaustive and mx.otherwise : report.redundant_else(mx)
+	if not (exhaustive or  mx.otherwise): report.not_exhaustive(mx)
 

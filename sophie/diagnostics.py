@@ -4,7 +4,7 @@ from traceback import TracebackException
 from pathlib import Path
 from boozetools.support.failureprone import SourceText, Issue, Evidence, Severity, illustration
 from . import syntax
-from .ontology import Expr, Nom, Symbol
+from .ontology import Expr, Nom, Symbol, Reference
 from .calculus import TYPE_ENV, SophieType
 
 class Report:
@@ -45,13 +45,6 @@ class Report:
 		evidence = {self._path: [Evidence(s, "") for s in guilty]}
 		self._issues.append(Issue(phase, Severity.ERROR, msg, evidence))
 
-	def on_error(self, phase:str):
-		""" Return a convenience-function for a particular phase/pass to complain. """
-		# Can't call it a "pass" when "pass" is a reserved word...
-		def err(items:list[Expr], msg:str):
-			self.error(phase, [i.head() for i in items], msg)
-		return err
-	
 	def complain_to_console(self):
 		""" Emit all the issues to the console. """
 		for i in self._issues:
@@ -76,7 +69,7 @@ class Report:
 	def _file_error(self, path:Path, cause:Expr, prefix:str):
 		intro = prefix+" "+str(path)
 		if cause:
-			problem = [Annotation(self._path, cause.head(), "")]
+			problem = [Annotation(self._path, cause.head())]
 		else:
 			problem = []
 		self._issues.append(Pic(intro, problem))
@@ -89,14 +82,14 @@ class Report:
 	
 	def cyclic_import(self, cause, cycle):
 		intro = "Here begins a cycle of imports. Sophie considers that an error."
-		problem = [Annotation(self._path, cause.head(), "")]
+		problem = [Annotation(self._path, cause.head())]
 		footer = [" - The full cycle is:"]
 		footer.extend('     '+str(path) for path in cycle)
 		self._issues.append(Pic(intro, problem, footer))
 
 	def no_such_package(self, cause:Nom):
 		intro = "There's no such package:"
-		problem = [Annotation(self._path, cause.head(), "")]
+		problem = [Annotation(self._path, cause.head())]
 		footer = ["(At the moment, there is only sys.)"]
 		self._issues.append(Pic(intro, problem, footer))
 
@@ -140,6 +133,55 @@ class Report:
 		admonition = "Opaque types are not to be made generic."
 		where = [g.head() for g in guilty]
 		self.error("Defining Types", where, admonition)
+	
+	# Methods the Alias-checker calls
+	def these_are_not_types(self, non_types:Sequence[syntax.TypeCall]):
+		intro = "Words that get used like types, but refer to something else."
+		problem = [Annotation(self._path, tc.head()) for tc in non_types]
+		self._issues.append(Pic(intro, problem))
+	
+	def circular_type(self, scc:Sequence):
+		intro = "What we have here is a circular type-definition."
+		problem = [Annotation(self._path, node.head()) for node in scc]
+		self._issues.append(Pic(intro, problem))
+	
+	def wrong_type_arity(self, tc:syntax.TypeCall, given:int, needed:int):
+		pattern = "%d type-arguments were given; %d are needed."
+		intro = pattern % (given, needed)
+		problem = [Annotation(self._path, tc.head())]
+		self._issues.append(Pic(intro, problem))
+	
+	# Methods the match-checker calls
+	def not_a_variant(self, ref:Reference):
+		intro = "That's not a variant-type name"
+		ann = Annotation(self._path, ref.head())
+		self._issues.append(Pic(intro, [ann]))
+	
+	def not_a_case_of(self, nom:Nom, variant:syntax.Variant):
+		# pattern = "This case is not a member of the variant-type <%s>."
+		# intro = pattern%variant.nom.text
+		self.undefined_name(nom.head())
+		pass
+	
+	def not_a_case(self, nom:Nom):
+		intro = "This needs to refer to one case of a variant-type."
+		ann = Annotation(self._path, nom.head())
+		self._issues.append(Pic(intro, [ann]))
+	
+	def not_exhaustive(self, mx:syntax.MatchExpr):
+		pattern = "This case-block does not cover all the cases of <%s> and lacks an else-clause."
+		intro = pattern % mx.variant.nom.text
+		ann = Annotation(self._path, mx.head())
+		self._issues.append(Pic(intro, [ann]))
+		
+	def redundant_else(self, mx:syntax.MatchExpr):
+		intro = "This case-block has an extra else-clause."
+		problem = [
+			Annotation(self._path, mx.head(), "covers every case"),
+			Annotation(self._path, mx.otherwise.head(), "cannot happen")
+		]
+		footer = ["That's probably an oversight."]
+		self._issues.append(Pic(intro, problem, footer))
 
 	# Methods specific to report type-checking issues.
 	# Now this begins to look like something proper.
@@ -147,7 +189,7 @@ class Report:
 	def type_mismatch(self, env:TYPE_ENV, *args:syntax.ValExpr):
 		intro = "Types for these expressions need to match, but they do not."
 		path = env.path()
-		problem = [Annotation(path, e.head(), "") for e in args]
+		problem = [Annotation(path, e.head()) for e in args]
 		self._issues.append(Pic(intro, problem))
 		self._issues.append(Pic("Here's how that happens:", trace_stack(env)))
 	
@@ -187,7 +229,7 @@ class Report:
 class Annotation(NamedTuple):
 	path: Path
 	slice: slice
-	caption: str
+	caption: str = ""
 	
 def illustrate(source, the_slice, caption):
 	row, col = source.find_row_col(the_slice.start)
