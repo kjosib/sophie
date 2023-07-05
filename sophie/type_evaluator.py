@@ -135,11 +135,16 @@ class DependencyPass(TopDown):
 			self._insert(dfn, env)
 		elif self._is_relevant(dfn):
 			self._outflows[dfn].add(env)
+			
+	def visit_QualifiedReference(self, ref:syntax.QualifiedReference, env:Symbol):
+		pass
 
 	def visit_MatchExpr(self, mx: syntax.MatchExpr, env:Symbol):
 		self._prepare(mx.subject, env)
+		self._outflows[mx.subject].add(env)
 		self.visit(mx.subject.expr, env)
 		for alt in mx.alternatives:
+			self._walk_children(alt.where, mx.subject)
 			self.visit(alt.sub_expr, mx.subject)
 		if mx.otherwise is not None:
 			self.visit(mx.otherwise, mx.subject)
@@ -293,7 +298,7 @@ class Binder(Visitor):
 			else:
 				self.fail()
 		else:
-			raise NotImplementedError(actual)
+			self.fail()
 	
 	def visit_RecordType(self, formal: RecordType, actual: SophieType):
 		if isinstance(actual, RecordType) and formal.symbol is actual.symbol:
@@ -400,25 +405,45 @@ class UnionFinder(Visitor):
 		return this
 
 class DeductionEngine(Visitor):
-	def __init__(self, report:diagnostics.Report):
+	def __init__(self, roadmap:RoadMap, report:diagnostics.Report):
+		# self._trace_depth = 0
 		self._report = report  # .on_error("Checking Types")
 		self._types = { ot.symbol: ot for ot in _literal_type_map.values() }
 		self._constructors : dict[syntax.Symbol, SophieType] = {}
-		self._ffi = {}
+		self._ffi : dict[syntax.FFI_Alias, SophieType] = {}
 		self._memo = {}
 		self._recursion = {}
-		self._root = RootFrame()
 		self._deps_pass = DependencyPass()
+		self._list_symbol = roadmap.list_symbol
+		self._udf = {}
+		self._root = RootFrame()
+		self.visit_Module(roadmap.preamble)
+		for module in roadmap.each_module:
+			self.visit_Module(module)
 	
+	# def visit(self, host, *args, **kwargs):
+	# 	prefix = " "*self._trace_depth
+	# 	self._trace_depth += 1
+	# 	self._report.trace(prefix, ">", type(host).__name__, host)
+	# 	result = super().visit(host, *args, **kwargs)
+	# 	self._report.trace(prefix, "<", type(host).__name__, result)
+	# 	self._trace_depth -= 1
+	# 	return result
+
 	def visit_Module(self, module:syntax.Module):
+		self._report.info("Type-Check", module.source_path)
 		self._deps_pass.visit_Module(module)
 		for td in module.types: self.visit(td)
 		for fi in module.foreign: self.visit(fi)
+		local = Activation.for_module(self._root, module)
 		for expr in module.main:
-			result = self.visit(expr, self._root)
+			self._report.trace(" -->", expr)
+			result = self.visit(expr, local)
 			self._report.info(result)
-		pass
-	
+		self._root._bindings.update(local._bindings)
+
+	###############################################################################
+
 	def visit_Record(self, r: syntax.Record):
 		type_args = [TypeVariable() for _ in r.type_params]
 		self._types[r] = RecordType(r, type_args)
@@ -445,14 +470,18 @@ class DeductionEngine(Visitor):
 			original = self._constructors[it.symbol]
 			gamma = dict(zip(formals, it.type_args))
 			self._constructors[a] = original.visit(Rewriter(gamma))
-	
+
+	###############################################################################
+
 	def visit_ImportForeign(self, d:syntax.ImportForeign):
 		for group in d.groups:
 			type_args = [TypeVariable() for _ in group.type_params]
 			typ = ManifestBuilder(group.type_params, type_args).visit(group.type_expr)
 			for sym in group.symbols:
 				self._ffi[sym] = typ
-	
+
+	###############################################################################
+
 	@staticmethod
 	def visit_Literal(expr: syntax.Literal, env:TYPE_ENV) -> SophieType:
 		return _literal_type_map[type(expr.value)]
@@ -467,8 +496,9 @@ class DeductionEngine(Visitor):
 	def exec_UDF(self, fn:syntax.UserFunction, env:TYPE_ENV):
 		# The part where memoization must happen.
 		memo_symbols = self._deps_pass.depends[fn]
+		assert all(isinstance(s, syntax.FormalParameter) for s in memo_symbols)
 		memo_types = tuple(
-			env.chase(p).fetch(p).number
+			env.chase(p).fetch(p)  # .number
 			for p in memo_symbols
 		)
 		memo_key = fn, memo_types
@@ -476,6 +506,7 @@ class DeductionEngine(Visitor):
 			return self._memo[memo_key]
 		elif memo_key in self._recursion:
 			self._recursion[memo_key] = True
+			# self._report.trace(">Recursive:", fn, dict(zip((s.nom.text for s in memo_symbols), memo_types)))
 			return BOTTOM
 		else:
 			# TODO: check argument and return against declared contract.
@@ -490,12 +521,13 @@ class DeductionEngine(Visitor):
 					self._memo[memo_key] = self.visit(fn.expr, env)
 				if prior is BOTTOM:
 					self._report.ill_founded_function(env, fn)
+				# self._report.trace("<Resolved:", fn)
 					
 		return self._memo[memo_key]
 	
 	def _call_site(self, site: syntax.ValExpr, fn_type, args:Sequence[ValExpr], env:TYPE_ENV) -> SophieType:
 		arg_types = [self.visit(a, env) for a in args]
-		if any(t is ERROR for t in arg_types):
+		if ERROR in arg_types:
 			return ERROR
 
 		env.pc = site
@@ -519,7 +551,9 @@ class DeductionEngine(Visitor):
 		
 		elif isinstance(fn_type, UDFType):
 			try:
-				return self.apply_UDF(fn_type, arg_types, env)
+				result = self.apply_UDF(fn_type, arg_types, env)
+				# self._report.trace("     ", fn_type, tuple(arg_types), '-->', result)
+				return result
 			except ArityError:
 				self._report.wrong_arity(env, site, len(fn_type.fn.params), args)
 				return ERROR
@@ -556,7 +590,8 @@ class DeductionEngine(Visitor):
 			if target.params:
 				return UDFType(target, static_env).exemplar()
 			else:
-				return self.exec_UDF(target, static_env)
+				inner = Activation.for_function(static_env, target, ())
+				return self.exec_UDF(target, inner)
 		else:
 			assert isinstance(target, (syntax.FormalParameter, syntax.Subject))
 			return static_env.fetch(target)
@@ -572,7 +607,7 @@ class DeductionEngine(Visitor):
 				self._report.type_mismatch(env, el.elts[0], e)
 				return ERROR
 		element_type = union_find.result()
-		return SumType(primitive.LIST, (element_type,))
+		return SumType(self._list_symbol, (element_type,))
 
 	def visit_Cond(self, cond:syntax.Cond, env:TYPE_ENV) -> SophieType:
 		if_part_type = self.visit(cond.if_part, env)
@@ -588,39 +623,39 @@ class DeductionEngine(Visitor):
 		return union_find.result()
 	
 	def visit_MatchExpr(self, mx:syntax.MatchExpr, env:TYPE_ENV) -> SophieType:
-		# TODO: FLAG FOR REVIEW
 		def try_everything(type_args:Sequence[SophieType]):
 			union_find = UnionFinder(BOTTOM)
 			for alt in mx.alternatives:
-				env.assign(mx.subject,  _hypothesis(alt.pattern.dfn, type_args))
-				union_find.unify_with(self.visit(alt.sub_expr, env))
+				subtype_symbol = mx.namespace[alt.nom.key()]
+				inner = Activation.for_subject(env, mx.subject)
+				inner.assign(mx.subject,  _hypothesis(subtype_symbol, type_args))
+				for subfn in alt.where: inner.declare(subfn)
+				union_find.unify_with(self.visit(alt.sub_expr, inner))
 				if union_find.died:
 					self._report.type_mismatch(env, mx.alternatives[0].sub_expr, alt.sub_expr)
+					return ERROR
+			if mx.otherwise is not None:
+				inner = Activation.for_subject(env, mx.subject)
+				inner.assign(mx.subject, subject_type)
+				union_find.unify_with(self.visit(mx.otherwise, inner))
+				if union_find.died:
+					self._report.type_mismatch(env, mx.alternatives[0].sub_expr, mx.otherwise)
 					return ERROR
 			return union_find.result()
 
 		subject_type = self.visit(mx.subject.expr, env)
 		if subject_type is ERROR:
 			return ERROR
-		
+
 		if isinstance(subject_type, SumType):
-			# 1. Make sure either there's an else-clause, or every subtype is covered.
-			# 2. Build a union-find for only every relevant arm, and return that.
-			# 3. Maybe warn about unused arms?
-			# TODO: This last will require deeper thought.
-			#       One idea is sub-typing, e.g. an infinite list
-			#       is just a list that forsakes the option of nil.
 			return try_everything(subject_type.type_args)
 		
 		elif subject_type is BOTTOM:
-			# We're looking for base-cases at this point.
-			# We haven't a clue what type the subject might be,
-			# so run all the arms with the BOTTOM hypothesis.
-			# Hopefully at least one case returns a usable clue.
 			return try_everything([BOTTOM] * len(mx.variant.type_params))
 		
 		elif isinstance(subject_type, SubType) and subject_type.st.variant is mx.variant:
-			branch = mx.dispatch.get(subject_type.st.nom.text, mx.otherwise)
+			case_key = subject_type.st.nom.text
+			branch = mx.dispatch.get(case_key, mx.otherwise)
 			env.assign(mx.subject, subject_type)
 			return self.visit(branch, env)
 		
@@ -669,11 +704,4 @@ def _hypothesis(st:Symbol, type_args:Sequence[SophieType]) -> SubType:
 		return EnumType(st)
 	if isinstance(body, syntax.RecordSpec):
 		return TaggedRecord(st, type_args)
-
-def type_program(roadmap:RoadMap, report:diagnostics.Report):
-	engine = DeductionEngine(report)
-	# The main idea:
-	engine.visit_Module(roadmap.preamble)
-	# for module in roadmap.each_module:
-	# 	engine.visit_Module(module)
 

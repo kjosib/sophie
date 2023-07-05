@@ -1,3 +1,9 @@
+"""
+Build the primitive namespace.
+Also, some bits used for operator syntax
+and the primitive literal types
+"""
+
 from functools import lru_cache
 from .ontology import NS, Nom
 from .syntax import Opaque, Variant, FFI_Symbol
@@ -5,8 +11,6 @@ from . import calculus
 
 root_namespace = NS(place=None)
 ops = {}
-
-LIST : Variant  # Generated in the preamble.
 
 def _built_in_type(name:str) -> calculus.OpaqueType:
 	symbol = Opaque(Nom(name, None))
@@ -30,12 +34,6 @@ def _arrow_of(typ: calculus.SophieType, arity:int) -> calculus.ArrowType:
 	return calculus.ArrowType(calculus.ProductType((typ,) * arity), typ)
 
 def _init():
-	"""
-	Build and return the primitive namespace.
-	Oh, and also some bits used for operator syntax.
-	
-	It's special because it's pre-typed.
-	"""
 	import operator
 	binary = _arrow_of_math(2)
 	ops["PowerOf"] = operator.pow, binary

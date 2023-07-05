@@ -48,6 +48,7 @@ class ValExpr(Expr):
 class PlainReference(Reference):
 	def head(self) -> slice:
 		return self.nom.head()
+	def __str__(self): return "<ref:%s>"%self.nom.text
 
 class QualifiedReference(Reference):
 	space: Nom
@@ -221,11 +222,12 @@ def truth(a_slice:slice): return Literal(True, a_slice)
 def falsehood(a_slice:slice): return Literal(False, a_slice)
 
 class Lookup(ValExpr):
-	# TODO: Decide if this AST node type pulls its weight.
-	#       Maybe I've forgotten a good a reason for it to exist?
+	# Reminder: This AST node exists in opposition to TypeCall so I can write
+	# behavior for references in value context vs. references in type context.
 	ref:Reference
 	def __init__(self, ref: Reference): self.ref = ref
 	def head(self) -> slice: return self.ref.head()
+	def __str__(self): return str(self.ref)
 
 class FieldReference(ValExpr):
 	def __init__(self, lhs: ValExpr, field_name: Nom): self.lhs, self.field_name = lhs, field_name
@@ -409,6 +411,7 @@ ImportDirective = Union[ImportModule, ImportForeign]
 class Module:
 	imports: list[ImportModule]
 	foreign: list[ImportForeign]
+	source_path: Path  # Module loader fills this.
 
 	def __init__(self, exports:list, imports:list[ImportDirective], types:list[TypeDeclaration], assumption:list[Assumption], functions:list[UserFunction], main:list):
 		self.exports = exports
@@ -417,3 +420,5 @@ class Module:
 		self.types = types
 		self.outer_functions = functions
 		self.main = main
+	
+	def head(self): return slice(0,0)

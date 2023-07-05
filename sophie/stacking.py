@@ -11,10 +11,12 @@ Upon this simplified foundation, I'll build as needed to properly reflect
 the upcoming message-passing semantics.
 """
 
-from typing import TypeVar, Generic
+from typing import TypeVar, Generic, Union
 from pathlib import Path
 from .ontology import Symbol
-from .syntax import UserFunction, ValExpr, Subject
+from .syntax import UserFunction, ValExpr, Subject, Module
+
+CRUMB = Union[Symbol, Module]
 
 T = TypeVar("T")
 
@@ -23,6 +25,7 @@ PLACE_HOLDER = object()
 class Frame(Generic[T]):
 	_bindings : dict[T]
 	pc : ValExpr = None
+	breadcrumb : CRUMB = None
 	def path(self) -> Path: raise NotImplementedError(type(self))
 	def chase(self, key:Symbol) -> "Frame[T]": raise NotImplementedError(type(self))
 	def trace(self, tracer): raise NotImplementedError(type(self))
@@ -40,19 +43,20 @@ class RootFrame(Frame):
 	"""The runtime counterpart to primitive-root namespace"""
 	def __init__(self):
 		self._bindings = {}
-	def path(self) -> Path:
-		pass
 	def chase(self, key:Symbol) -> "Frame[T]":
-		assert key in self._bindings, key  # Name resolution succeeded.
+		assert key in self._bindings, key
 		return self
 	def trace(self, tracer):
 		tracer.hit_bottom()
 
 class Activation(Frame):
-	def __init__(self, static_link: Frame[T], breadcrumb:Symbol):
+	def __init__(self, static_link: Frame[T], breadcrumb:CRUMB):
 		self._bindings = {}
 		self._static_link = static_link
 		self.breadcrumb = breadcrumb
+	
+	def path(self) -> Path:
+		return self.breadcrumb.source_path
 		
 	def chase(self, key:Symbol) -> Frame[T]:
 		return self if key in self._bindings else self._static_link.chase(key)
@@ -71,6 +75,13 @@ class Activation(Frame):
 
 	@staticmethod
 	def for_subject(static_link: Frame[T], subject:Subject) -> "Activation[T]":
-		ar = Activation(static_link, subject)
+		ar = Activation(static_link, static_link.breadcrumb)
 		ar.declare(subject)
+		return ar
+	
+	@staticmethod
+	def for_module(static_link: Frame[T], module:Module) -> "Activation[T]":
+		ar = Activation(static_link, module)
+		for udf in module.outer_functions:
+			ar.declare(udf)
 		return ar

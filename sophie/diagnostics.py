@@ -12,8 +12,8 @@ class Report:
 	_issues : list[Union[Issue, "Pic", "Redefined", "Undefined"]]
 	_path : Optional[Path]
 	
-	def __init__(self, verbose:bool):
-		self._verbose = verbose
+	def __init__(self, verbose:int):
+		self._verbose = verbose or 0   # Because None is incomparable.
 		self._issues = []
 		self._redefined = {}
 		self._undefined = None
@@ -27,6 +27,10 @@ class Report:
 	
 	def info(self, *args):
 		if self._verbose:
+			print(*args, file=sys.stderr)
+	
+	def trace(self, *args):
+		if self._verbose > 1:
 			print(*args, file=sys.stderr)
 	
 	def set_path(self, path:Optional[Path]):
@@ -184,7 +188,6 @@ class Report:
 		self._issues.append(Pic(intro, problem, footer))
 
 	# Methods specific to report type-checking issues.
-	# Now this begins to look like something proper.
 	
 	def type_mismatch(self, env:TYPE_ENV, *args:syntax.ValExpr):
 		intro = "Types for these expressions need to match, but they do not."
@@ -240,11 +243,21 @@ def illustrate(source, the_slice, caption):
 class Tracer:
 	def __init__(self):
 		self.trace = []
-	def called_with(self, path, span:slice, bindings:dict):
-		bind_text = ', '.join("%s:%s" % (p.nom.text, t) for p, t in bindings.items())
+	def called_with(self, path, span:slice, args:dict):
+		bind_text = ', '.join("%s:%s" % (p.nom.text, t) for p, t in args.items())
 		self.trace.append(Annotation(path, span, "Called with " + bind_text))
 	def called_from(self, path, span):
 		self.trace.append(Annotation(path, span, "Called from here"))
+	def hit_bottom(self):
+		pass
+	def trace_frame(self, breadcrumb, bindings, pc):
+		path = breadcrumb.source_path
+		if pc is not None: self.called_from(path, pc.head())
+		args = {
+			k:v for k,v in bindings.items()
+			if isinstance(k, syntax.FormalParameter)
+		}
+		if args: self.called_with(path, breadcrumb.head(), args)
 
 def trace_stack(env:TYPE_ENV) -> list[Annotation]:
 	tracer = Tracer()
