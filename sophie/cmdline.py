@@ -28,20 +28,22 @@ parser = argparse.ArgumentParser(
 	description="Interpreter for the Sophie programming langauge.",
 )
 parser.add_argument("program", help="try examples/turtle.sg for example.")
-parser.add_argument('-c', "--check", action="store_true", help="Check the program verbosely but do not actually execute the program.")
+parser.add_argument('-c', "--check", action="count", help="Check the program verbosely but do not actually execute the program.")
 parser.add_argument('-x', "--experimental", action="store_true", help="Opt into experimental code, which is presently nothing.")
 
 def run(args):
-	# if args.no_preamble:
-	
 	from .diagnostics import Report
-	from .resolution import RoadMap
-	from .type_evaluator import type_program
+	from .resolution import RoadMap, Yuck
+	from .type_evaluator import DeductionEngine
 	from .executive import run_program
 	report = Report(verbose=args.check)
-	roadmap = RoadMap(Path.cwd(), args.program, report)
-	if report.ok():
-		type_program(roadmap, report)
+	try: roadmap = RoadMap(Path.cwd() / args.program, report)
+	except Yuck:
+		assert report.sick()
+		report.complain_to_console()
+		return 1
+	assert report.ok()
+	DeductionEngine(roadmap, report)
 	if report.sick():
 		report.complain_to_console()
 		return 1

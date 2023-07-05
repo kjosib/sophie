@@ -10,8 +10,9 @@ zoo_ok = base_folder/"zoo/ok"
 def _good(folder, which) -> resolution.RoadMap:
 	report = diagnostics.Report(verbose=False)
 	try:
-		roadmap = resolution.RoadMap(folder, which + ".sg", report)
-		type_evaluator.type_program(roadmap, report)
+		roadmap = resolution.RoadMap(folder / (which + ".sg"), report)
+		type_evaluator.DeductionEngine(roadmap, report)
+		report.assert_no_issues()
 		return roadmap
 	except resolution.Yuck as ex:
 		assert report.sick()

@@ -50,7 +50,7 @@ class SophieType:
 	def __hash__(self): return self._hash
 	def __eq__(self, other: "SophieType"): return type(self) is type(other) and self._key == other._key
 	def exemplar(self) -> "SophieType": return _type_numbering_subsystem.exemplars[self.number]
-	def __str__(self) -> str:
+	def __repr__(self) -> str:
 		it = self.visit(Render())
 		assert isinstance(it, str), (it, type(self))
 		return it
@@ -89,7 +89,6 @@ class SumType(SophieType):
 		assert len(self.type_args) == len(variant.type_params)
 		super().__init__(self.variant, *(a.number for a in self.type_args))
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_sum(self)
-	def __repr__(self): return "[SumType:%s]"%self.variant.nom.text
 
 class SubType(SophieType):
 	st : syntax.SubTypeSpec
@@ -138,7 +137,6 @@ class UDFType(SophieType):
 		# TODO: It would be sufficient to key on the types captured in the lexical closure.
 		#       Only DeductionEngine.visit_Lookup creates these, so it could provide the capture.
 		super().__init__(object())
-	def __repr__(self): return "[UDFType:%s]"%self.fn.nom.text
 
 class MethodType(SophieType):
 	pass

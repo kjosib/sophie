@@ -4,30 +4,33 @@ from unittest import mock
 
 from sophie.diagnostics import Report
 from sophie.resolution import RoadMap, Yuck
-from sophie.type_evaluator import type_program
+from sophie.type_evaluator import DeductionEngine
 
 class Silence(Report):
 	def __init__(self):
 		super().__init__(False)
 		self.complain_to_console = mock.Mock()
-
+	pass
 
 base_folder = Path(__file__).parent.parent
 example_folder = base_folder/"examples"
 zoo_fail = base_folder/"zoo/fail"
 
 def _identify_problem(folder:Path, filename:str):
-	assert (folder/filename).exists(), folder/filename
+	specimen_path = folder / filename
+	assert specimen_path.exists(), specimen_path
 	report = Silence()
 	try:
-		roadmap = RoadMap(folder, filename, report)
-		type_program(roadmap, report)
+		roadmap = RoadMap(specimen_path, report)
 	except Yuck as ex:
 		assert 0 == report.complain_to_console.call_count
 		assert report.sick()
 		return ex.args[0]
 	else:
-		return "failed to fail"
+		report.assert_no_issues()
+		DeductionEngine(roadmap, report)
+		if report.sick(): return "type_check"
+		else: return "failed to fail"
 
 class ZooOfFail(unittest.TestCase):
 	""" Tests that assert about failure modes. """

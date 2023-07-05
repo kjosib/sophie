@@ -30,14 +30,13 @@ class Program:
 	# Weird observation: Dealing with the preamble is mildly weird.
 	"""
 
-	def __init__(self, base_path:Path, module_path:str, report: Report):
-		def require(path:Path, cause:Optional[Expr]) -> Path:
+	def __init__(self, main_path:Path, report: Report):
+		def require(path:Path, cause:Optional[Expr]) -> Module:
 			""" This function may raise an exception on failure. """
 			abs_path = path.resolve()
-			if abs_path not in self.parsed_modules:
-				miss_cache(abs_path, cause)
-				self.module_sequence.append(abs_path)
-			return abs_path
+			if abs_path not in parsed_modules:
+				self.module_sequence.append(miss_cache(abs_path, cause))
+			return parsed_modules[abs_path]
 
 		def miss_cache(abs_path: Path, cause: Optional[Expr]):
 			if abs_path in construction_stack:
@@ -45,29 +44,34 @@ class Program:
 				report.cyclic_import(cause, construction_stack[depth:])
 				raise SophieImportError
 			else:
-				report.info("Loading", abs_path)
-				try:
-					with open(abs_path, "r") as fh:
-						text = fh.read()
-				except FileNotFoundError:
-					report.no_such_file(abs_path, cause)
-					raise SophieImportError
-				except OSError:
-					report.broken_file(abs_path, cause)
-					raise SophieImportError
-				if text is None:
-					assert report.sick()
+				return load_module(abs_path, cause)
+			
+		def load_module(abs_path: Path, cause: Optional[Expr]):
+			report.info("Loading", abs_path)
+			try:
+				with open(abs_path, "r") as fh:
+					text = fh.read()
+			except FileNotFoundError:
+				report.no_such_file(abs_path, cause)
+				raise SophieImportError
+			except OSError:
+				report.broken_file(abs_path, cause)
+				raise SophieImportError
+			if text is None:
+				assert report.sick()
+			else:
+				enter(abs_path)
+				module = parse_text(text, abs_path, report)
+				if module:
+					report.assert_no_issues()
+					module.source_path = abs_path
+					chase_the_imports(abs_path.parent, module.imports)
+					parsed_modules[abs_path] = module
 				else:
-					enter(abs_path)
-					module = parse_text(text, abs_path, report)
-					if module:
-						report.assert_no_issues()
-						chase_the_imports(abs_path.parent, module.imports)
-						self.parsed_modules[abs_path] = module
-					else:
-						assert report.sick()
-						raise SophieParseError
-					leave()
+					assert report.sick()
+					raise SophieParseError
+				leave()
+				return module
 
 		def enter(abs_path):
 			construction_stack.append(abs_path)
@@ -85,8 +89,7 @@ class Program:
 			for im in directives:
 				assert isinstance(im, ImportModule)
 				import_path = root_for_import(base, im) / (im.relative_path.value + ".sg")
-				import_key = require(import_path, im.relative_path)
-				self.import_map[im] = self.parsed_modules[import_key]
+				self.import_map[im] = require(import_path, im.relative_path)
 
 		def root_for_import(base: Path, im: ImportModule):
 			if im.package is None:
@@ -99,11 +102,10 @@ class Program:
 					raise SophieImportError
 
 		construction_stack = []
-
 		self.import_map:dict[ImportModule,Module] = {}
-		self.parsed_modules:dict[Path,Module] = {}
-		self.module_sequence:list[Path] = []
-		self.preamble_key = (PACKAGE_ROOT["sys"] / "preamble.sg").resolve()
-		miss_cache(self.preamble_key, None)
-		self.main_key = require(base_path / module_path, None)
+		parsed_modules:dict[Path,Module] = {}
+		self.module_sequence:list[Module] = []
+		preamble_path = (PACKAGE_ROOT["sys"] / "preamble.sg").resolve()
+		self.preamble = load_module(preamble_path, None)
+		self.main_key = require(main_path, None)
 

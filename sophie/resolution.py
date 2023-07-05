@@ -24,6 +24,7 @@ class Yuck(Exception):
 
 class RoadMap:
 	preamble : syntax.Module
+	list_symbol : syntax.Variant
 	module_scopes : dict[syntax.Module, NS]
 	import_alias : dict[syntax.Module, NS]
 	each_module : list[syntax.Module]
@@ -31,7 +32,7 @@ class RoadMap:
 	each_match : list[syntax.MatchExpr]
 	import_map : dict[syntax.ImportModule, syntax.Module]
 
-	def __init__(self, base_path:Path, module_path:str, report:Report):
+	def __init__(self, main_path:Path, report:Report):
 		self.module_scopes = {}
 		self.import_alias = {}
 		self.each_module = []
@@ -41,14 +42,13 @@ class RoadMap:
 		self.note_udf = self.each_udf.append
 		self.note_match = self.each_match.append
 
-		def register(parent, module_key):
-			module = program.parsed_modules[module_key]
+		def register(parent, module):
 			assert isinstance(module, syntax.Module)
-			module_scope = parent.new_child(module_key)
+			module_scope = parent.new_child(module.source_path)
 			self.module_scopes[module] = module_scope
-			self.import_alias[module] = NS(place=module_key)
+			self.import_alias[module] = NS(place=module.source_path)
 
-			report.set_path(module_key)
+			report.set_path(module.source_path)
 			_WordDefiner(self, module, report)
 			if report.sick(): raise Yuck("define")
 
@@ -70,20 +70,20 @@ class RoadMap:
 			self.each_match.clear()
 			return module
 
-		try: program = Program(base_path, module_path, report)
+		try: program = Program(main_path, report)
 		except SophieParseError: raise Yuck("parse")
 		except SophieImportError: raise Yuck("import")
 		report.assert_no_issues()
 		self.import_map = program.import_map
 
-		self.preamble = register(primitive.root_namespace, program.preamble_key)
+		self.preamble = register(primitive.root_namespace, program.preamble)
 		preamble_scope = self.module_scopes[self.preamble]
+		self.list_symbol = preamble_scope['list']
 		for path in program.module_sequence:
 			self.each_module.append(register(preamble_scope, path))
 
 	def build_match_dispatch_tables(self):
-		""" The simple evaluator uses these. """
-		# Cannot fail, for checks have been done earlier.
+		""" Both the type checker and the simple evaluator uses these. """
 		for mx in self.each_match:
 			mx.dispatch = {
 				alt.nom.key() : alt.sub_expr
@@ -166,8 +166,8 @@ class _WordDefiner(_ResolutionPass):
 	Attaches NameSpace objects in key places and install definitions.
 	Takes note of names with more than one definition in the same scope.
 	"""
-
 	def visit_Module(self, module:syntax.Module):
+		self._source_path = module.source_path
 		for d in module.imports: self.visit_ImportModule(d)
 		for td in module.types: self.visit(td)
 		for d in module.foreign: self.visit_ImportForeign(d)
@@ -226,6 +226,7 @@ class _WordDefiner(_ResolutionPass):
 			self.visit(a, env)
 
 	def visit_UserFunction(self, udf:syntax.UserFunction, env:NS):
+		udf.source_path = self._source_path
 		self.roadmap.note_udf(udf)
 		self._install(env, udf)
 		inner = udf.namespace = env.new_child(udf)
