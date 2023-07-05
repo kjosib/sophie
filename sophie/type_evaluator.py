@@ -410,7 +410,9 @@ class DeductionEngine(Visitor):
 		self._report = report  # .on_error("Checking Types")
 		self._types = { ot.symbol: ot for ot in _literal_type_map.values() }
 		self._constructors : dict[syntax.Symbol, SophieType] = {}
-		self._ffi : dict[syntax.FFI_Alias, SophieType] = {}
+		self._ffi : dict[syntax.FFI_Alias, SophieType] = {
+			primitive.root_namespace['console'] : ActorType(),
+		}
 		self._memo = {}
 		self._recursion = {}
 		self._deps_pass = DependencyPass()
