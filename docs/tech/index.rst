@@ -12,7 +12,5 @@ I'll add notes as they seem necessary while the overall system fills out.
     :maxdepth: 2
     :caption: Contents:
 
-    future
     mechanics
-    foreign
 

@@ -205,8 +205,13 @@ class Report:
 
 	def bad_type(self, env:TYPE_ENV, expr:syntax.ValExpr, need, got):
 		intro = "Type-checking found a problem. Here's how it happens:"
-		complaint = "This %s needs to be %s."%(got, need)
+		complaint = "This %s needs to be a(n) %s."%(got, need)
 		problem = [Annotation(env.path(), expr.head(), complaint)]
+		self._issues.append(Pic(intro, problem+trace_stack(env)))
+
+	def bad_message(self, env:TYPE_ENV, expr:syntax.BoundMethod, agent_type:SophieType):
+		intro = "This %s does not understand..."%agent_type
+		problem = [Annotation(env.path(), expr.method_name.head(), "this message")]
 		self._issues.append(Pic(intro, problem+trace_stack(env)))
 	
 	def type_has_no_fields(self, env:TYPE_ENV, fr:syntax.FieldReference, lhs_type):
@@ -238,7 +243,7 @@ def illustrate(source, the_slice, caption):
 	row, col = source.find_row_col(the_slice.start)
 	single_line = source.line_of_text(row)
 	width = the_slice.stop - the_slice.start
-	return illustration(single_line, col, width, prefix='% 6d :' % row, caption=caption)
+	return illustration(single_line, col, width, prefix='% 6d |' % row, caption=caption)
 
 class Tracer:
 	def __init__(self):

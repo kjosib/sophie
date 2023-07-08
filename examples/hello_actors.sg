@@ -1,10 +1,7 @@
 # The simplest program that could possibly kick-start the next phase of Sophie's development.
 
-define:
-    EOL = chr(10);
-
 begin:
-	console:echo [
+	console!echo [
         "All the world's a stage,", EOL,
         "And all the men and women merely Players.", EOL,
     ];

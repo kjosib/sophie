@@ -40,6 +40,7 @@ class ExampleSmokeTests(unittest.TestCase):
 
 	def test_other_examples(self):
 		for name in [
+			"hello_actors",
 			"hello_world",
 			"tutorial/patron",
 			"tutorial/simple_calculations",

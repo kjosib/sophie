@@ -27,7 +27,7 @@ module_definition -> export_section import_section typedef_section assume_sectio
 
 export_section  -> EXPORT ':' comma_list(name) ';'             | :empty
 import_section  -> IMPORT ':' semicolon_list(import_directive) | :empty
-typedef_section -> TYPE ':' semicolon_list(type_declaration)   | :empty
+typedef_section -> TYPE ':' semicolon_list(type_decl)          | :empty
 assume_section  -> ASSUME ':' semicolon_list(assumption)       | :empty
 define_section  -> DEFINE ':' semicolon_list(top_level)        | :empty
 main_section    -> BEGIN ':' semicolon_list(expr)              | :empty
@@ -50,23 +50,29 @@ reference -> name     :PlainReference
 **The grammar of type declarations**
 
 ```
-type_declaration -> name IS OPAQUE                        :Opaque
-                  | name IS type_body                     :concrete_type
-                  | name type_parameters IS type_body     :generic_type
+type_decl  -> name type_parameters IS OPAQUE        :Opaque
+            | name type_parameters IS simple_type   :TypeAlias
+            | name type_parameters IS record_spec   :Record
+            | name type_parameters IS variant_spec  :Variant
+            | name type_parameters IS agent_spec    :Interface
 
-type_parameters -> square_list(name)   :type_parameters
+type_parameters -> square_list(name) :type_parameters     | :empty
 
-type_body -> simple_type | record_spec | variant_spec
 simple_type -> generic(simple_type) | arrow_of(simple_type)
 
-record_spec  -> round_list(field_dfn)                             :RecordSpec
-variant_spec -> CASE ':' semicolon_list(subtype) ESAC         :VariantSpec
+record_spec  -> round_list(field_dfn)                    :RecordSpec
+
+variant_spec -> CASE ':' semicolon_list(subtype) ESAC    :VariantSpec
 
 field_dfn -> name ':' simple_type   :FormalParameter
 
 subtype  -> name record_spec    :SubTypeSpec
           | name simple_type    :SubTypeSpec
           | name                :SubTypeSpec
+
+agent_spec  -> AGENT ':' semicolon_list(method_type) END
+method_type -> name optional(round_list(simple_type))      :MethodSpec
+
 ```
 *Sidebar:* The "simple" types in type declarations have a close cousin found in function declarations.
 The commonality is as follows:
@@ -96,8 +102,8 @@ only by how you use it.
 -----
 **The general structure of a function:**
 ```
-function -> name formals annotation '=' expr optional(where_clause)     :UserFunction
-where_clause -> WHERE semicolon_list(function) END name                 :WhereClause
+function -> name formals annotation '=' expr where_clause     :UserFunction
+where_clause -> :nothing | WHERE semicolon_list(function) END name                 :WhereClause
 ```
 
 Parameters to a function allow things to be implied.
@@ -166,7 +172,7 @@ match_expr -> CASE subject hint OF semicolon_list(alternative) optional(else_cla
 subject -> name     :simple_subject
   | expr AS name    :Subject
 hint -> :nothing | ':' reference
-alternative -> name '->' expr optional(where_clause) :Alternative
+alternative -> name '->' expr where_clause :Alternative
 ```
 Experience may later suggest expanding the `pattern` grammar, but this will do for now.
 
@@ -186,11 +192,10 @@ observable outcomes, with just a few extra production rules.
 
 ```
 
-expr -> SKIP                :Skip
-      | expr ':' name       :BoundMethod
+expr -> SKIP       :Skip
+      | expr '!' name       :BoundMethod
       | DO semicolon_list(expr) END     :DoBlock
 
-function -> TO name formals IS expr optional(where_clause)     :UserDefinedMethod
 ```
 I could see the argument that a constructor should be just another (side-effecting) expression,
 but the main purpose I have in mind for them is to establish and initialize the internal state of an actor.
@@ -208,7 +213,7 @@ import_directive -> FOREIGN short_string ffi_linkage ffi_body   :ImportForeign
 
 ffi_linkage -> round_list(reference)     |    '(' ')' :empty    |    :nothing
 ffi_body    -> WHERE semicolon_list(ffi_group)  END             |    :empty
-ffi_group   -> comma_list(ffi_symbol) ':' optional(type_parameters) simple_type  :FFI_Group
+ffi_group   -> comma_list(ffi_symbol) ':' type_parameters simple_type  :FFI_Group
 ffi_symbol  -> name                    :FFI_Symbol
              | name '@' short_string   :FFI_Alias
 ```
@@ -244,7 +249,7 @@ round_list(x) -> '(' comma_list(x) ')'
 %left NOT
 %left AND OR
 
-%nonassoc  ':'
+%nonassoc  '!'
 
 %right '->' IF ELSE
 %nonassoc ':='
@@ -254,7 +259,7 @@ This next bit tells the parser-generator how to tell which terminals have semant
 and therefore get passed to a production rule's action:
 ```
 %void_set UPPER
-%void '(' ')' '[' ']' '.' ',' ';' ':' '=' '@'
+%void '(' ')' '[' ']' '.' ',' ';' ':' '=' '@' '!'
 ```
 
 ## Definitions

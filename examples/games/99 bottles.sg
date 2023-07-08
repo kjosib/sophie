@@ -18,7 +18,5 @@ define:
         '99 bottles of soda on the wall!', EOL,
     ];
 
-    EOL = chr(10);  # I might consider adding string-escapes soon?
-
 begin:
-    console:echo(cons(EOL, bottles(5)));  # Increase 5 to 99 for the full experience.
+    console!echo(cons(EOL, bottles(5)));  # Increase 5 to 99 for the full experience.

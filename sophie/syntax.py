@@ -39,6 +39,8 @@ class TypeDeclaration(Symbol):
 def type_parameters(param_names:Sequence[Nom]):
 	return tuple(TypeParameter(n) for n in param_names)
 
+
+
 class SimpleType(Expr):
 	def can_construct(self) -> bool: raise NotImplementedError(type(self))
 
@@ -116,8 +118,6 @@ class VariantSpec(NamedTuple):
 	subtypes: list["SubTypeSpec"]
 
 class Opaque(TypeDeclaration):
-	def __init__(self, nom: Nom):
-		super().__init__(nom, ())
 	def has_value_domain(self): return False
 
 class TypeAlias(TypeDeclaration):
@@ -141,16 +141,19 @@ class Variant(TypeDeclaration):
 		for s in spec.subtypes: s.variant = self
 	def has_value_domain(self) -> bool: return False
 
-_spec_to_decl = {
-	RecordSpec : Record,
-	VariantSpec : Variant,
-	TypeCall : TypeAlias,
-	ArrowSpec : TypeAlias,
-}
+class MethodSpec(Symbol):
+	interface_decl : "Interface"
+	def __init__(self, nom:Nom, type_exprs:Sequence[SimpleType]):
+		super().__init__(nom)
+		self.type_exprs = type_exprs
+	def has_value_domain(self) -> bool: return False
 
-def concrete_type(nom: Nom, body): return generic_type(nom, (), body)
-def generic_type(nom: Nom, type_params:tuple[TypeParameter, ...], body):
-	return _spec_to_decl[body.__class__](nom, type_params, body)
+class Interface(TypeDeclaration):
+	method_space: NS
+	def __init__(self, nom: Nom, type_params:tuple[TypeParameter, ...], spec:Sequence[MethodSpec]):
+		super().__init__(nom, type_params)
+		self.spec = spec
+	def has_value_domain(self) -> bool: return False
 
 class SubTypeSpec(Symbol):
 	body: Optional[Union[RecordSpec, TypeCall, ArrowSpec]]

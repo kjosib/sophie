@@ -208,7 +208,7 @@ class Constructor(Procedure):
 		return structure
 
 class NativeObjectProxy:
-	""" Wrap Python objects in one of these to use them as actors. """
+	""" Wrap Python objects in one of these to use them as agents. """
 	def __init__(self, principal):
 		self._principal = principal
 	def receive(self, method_name, args):
@@ -321,25 +321,6 @@ def iterate_list(lst:LAZY_VALUE):
 
 import sys
 import random
-
-class Console:
-	@staticmethod
-	def echo(text):
-		for fragment in iterate_list(text):
-			sys.stdout.write(fragment)
-		sys.stdout.flush()
-
-	@staticmethod
-	def read(target:Procedure):
-		message = target.apply([input()])
-		message.run()
-
-	@staticmethod
-	def random(target:Procedure):
-		message = target.apply([random.random()])
-		message.run()
-
-primitive.root_namespace['console'].val = NativeObjectProxy(Console())
 
 ###############################################################################
 

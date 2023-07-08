@@ -1,0 +1,2 @@
+begin:
+console ! no_such_message;
