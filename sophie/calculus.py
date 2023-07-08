@@ -138,15 +138,14 @@ class UDFType(SophieType):
 		#       Only DeductionEngine.visit_Lookup creates these, so it could provide the capture.
 		super().__init__(object())
 
-class MethodType(SophieType):
-	pass
-
-class MessageType(SophieType):
-	def visit(self, visitor: "TypeVisitor"):
-		return visitor.on_message(self)
-
-class ActorType(SophieType):
-	pass
+class InterfaceType(SophieType):
+	def __init__(self, symbol:syntax.Interface, type_args: Iterable[SophieType]):
+		assert type(symbol) is syntax.Interface
+		self.symbol = symbol
+		self.type_args = tuple(a.exemplar() for a in type_args)
+		assert len(self.type_args) == len(symbol.type_params)
+		super().__init__(self.symbol, *(a.number for a in self.type_args))
+	def visit(self, visitor: "TypeVisitor"): return visitor.on_interface(self)
 
 class _Bottom(SophieType):
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_bottom()
@@ -170,8 +169,8 @@ class TypeVisitor:
 	def on_tag_record(self, t: TaggedRecord): raise NotImplementedError(type(self))
 	def on_arrow(self, a:ArrowType): raise NotImplementedError(type(self))
 	def on_product(self, p:ProductType): raise NotImplementedError(type(self))
-	def on_message(self, m:MessageType): raise NotImplementedError(type(self))
 	def on_udf(self, f:UDFType): raise NotImplementedError(type(self))
+	def on_interface(self, a:InterfaceType): raise NotImplementedError(type(self))
 	def on_bottom(self): raise NotImplementedError(type(self))
 	def on_error_type(self): raise NotImplementedError(type(self))
 
@@ -203,10 +202,10 @@ class Render(TypeVisitor):
 		return a.arg.visit(self)+"->"+a.res.visit(self)
 	def on_product(self, p: ProductType):
 		return "(%s)"%(",".join(t.visit(self) for t in p.fields))
-	def on_message(self, m:MessageType):
-		return "<message>"
 	def on_udf(self, f: UDFType):
 		return "<%s/%d>"%(f.fn.nom.text, len(f.fn.params))
+	def on_interface(self, a:InterfaceType):
+		return "<agent:%s>"%a.symbol.nom.text
 	def on_bottom(self):
 		return "?"
 	def on_error_type(self):

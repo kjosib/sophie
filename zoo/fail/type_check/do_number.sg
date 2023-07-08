@@ -1,0 +1,7 @@
+begin:
+    do
+        console!echo["Fee fie foe fum", EOL];
+        5;  # This line should fail to type-check.
+        console!echo["I smell the blood of a type-check failure!", EOL];
+    end;
+end.

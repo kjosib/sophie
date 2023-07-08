@@ -213,6 +213,13 @@ class _WordDefiner(_ResolutionPass):
 
 	def visit_TypeAlias(self, ta:syntax.TypeAlias):
 		self._declare_type(ta)
+	
+	def visit_Interface(self, i:syntax.Interface):
+		self._declare_type(i)
+		i.method_space = NS(place=i)
+		for ms in i.spec:
+			ms.interface_decl = i
+			self._install(i.method_space, ms)
 
 	def visit_RecordSpec(self, rs:syntax.RecordSpec):
 		# Ought to have a local name-space with names having types.
@@ -350,6 +357,9 @@ class _WordResolver(_ResolutionPass):
 	def visit_TypeAlias(self, ta:syntax.TypeAlias):
 		self.visit(ta.body, ta.param_space)
 	
+	def visit_Opaque(self, td:syntax.Opaque):
+		pass
+	
 	def visit_RecordSpec(self, rs:syntax.RecordSpec, env:NS):
 		for f in rs.fields:
 			self.visit(f.type_expr, env)
@@ -373,6 +383,14 @@ class _WordResolver(_ResolutionPass):
 			target_module = self.roadmap.import_map[im]
 			target_namespace = self.roadmap.module_scopes[target_module]
 			ref.dfn = self._lookup(ref.nom, target_namespace)
+	
+	def visit_Interface(self, i:syntax.Interface):
+		for ms in i.spec:
+			assert isinstance(ms, syntax.MethodSpec)
+			self.visit(ms, i.param_space)
+	def visit_MethodSpec(self, ms:syntax.MethodSpec, env:NS):
+		for tx in ms.type_exprs:
+			self.visit(tx, env)
 	
 	def visit_TypeCall(self, tc:syntax.TypeCall, env:NS):
 		self.visit(tc.ref, env)
@@ -488,7 +506,11 @@ class _AliasChecker(Visitor):
 		for st in v.subtypes:
 			if st.body is not None:
 				self.visit(st.body)
-	
+
+	def visit_Opaque(self, td: syntax.Opaque):
+		# An opaque type cannot be part of a cycle because it has out-degree zero.
+		pass
+
 	def visit_Record(self, r:syntax.Record):
 		self.visit(r.spec)
 	
@@ -509,6 +531,12 @@ class _AliasChecker(Visitor):
 			self.graph[expr].append(expr.rhs)
 			self.visit(expr.rhs)
 
+	def visit_Interface(self, i:syntax.Interface):
+		for ms in i.spec:
+			assert isinstance(ms, syntax.MethodSpec)
+			for tx in ms.type_exprs:
+				self.visit(tx)
+	
 	def visit_ExplicitTypeVariable(self, expr:syntax.ExplicitTypeVariable): pass
 	def visit_ImplicitTypeVariable(self, it:syntax.ImplicitTypeVariable): pass
 

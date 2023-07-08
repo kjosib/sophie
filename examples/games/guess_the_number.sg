@@ -1,25 +1,31 @@
-# Guess-the-number game.
-
-import:
-    sys."teletype" (done, echo, read, random);
+# Classic guess-a-number game to show working with the console
 
 define:
-    EOL = chr(10);
-    intro = ["I have chosen a random number from 1 to 100.", EOL, EOL];
-    game(r) = turn(1) where
-        goal = int(r*100)+1;
-        turn(score) = echo(["What is your guess? "], read(guess)) where
-            guess(g) = case val(g) as v of
-                this -> consider(int(v.item));
-                nope -> echo(["I didn't grok that number.", EOL], turn(score));
-            esac;
-            consider(g:number) = case
-                when g > goal then echo(['Too high. Try a lower number.', EOL], turn(score+1));
-                when g < goal then echo(['Too low. Try a higher number.', EOL], turn(score+1));
-                else echo(["You win after ", str(score), " guesses!", EOL], done);
-            esac;
-        end turn;
-    end game;
+intro = ["I have chosen a random number from 1 to 100.", EOL, EOL];
+game(r) = turn(1) where
+    goal = int(r*100)+1;
+    turn(score) = do
+        console ! echo ["What is your guess? "];
+        console ! read(guess);
+    end where
+        guess(g) = case val(g) as v of
+            this -> consider(int(v.item));
+            nope -> do
+                console ! echo ["I didn't grok that number.", EOL];
+                turn(score);
+            end;
+        esac;
+        consider(g:number) = case
+            when g > goal then go_again('Too high. Try a lower number.');
+            when g < goal then go_again('Too low. Try a higher number.');
+            else win;
+        esac;
+        go_again(text) = do console ! echo [text, EOL]; turn(score+1); end;
+        win = console ! echo ["You win after ", str(score), " guesses!", EOL];
+    end turn;
+end game;
 
 begin:
-    echo(intro, random(game));
+    console ! echo(intro);
+    console ! random(game);
+

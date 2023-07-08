@@ -23,8 +23,7 @@ from .calculus import (
 	SophieType, TypeVisitor,
 	OpaqueType, ProductType, ArrowType, TypeVariable,
 	RecordType, SumType, SubType, TaggedRecord, EnumType,
-	MethodType, MessageType,
-	UDFType, ActorType,
+	UDFType, InterfaceType,
 	BOTTOM, ERROR,
 )
 
@@ -188,6 +187,8 @@ class ManifestBuilder(Visitor):
 			return SumType(dfn, args).exemplar()
 		if isinstance(dfn, syntax.TypeAlias):
 			return ManifestBuilder(dfn.type_params,args).visit(dfn.body)
+		if isinstance(dfn, syntax.Interface):
+			return InterfaceType(dfn, args).exemplar()
 		raise NotImplementedError(type(dfn))
 	
 	def visit_ArrowSpec(self, spec:syntax.ArrowSpec):
@@ -214,7 +215,7 @@ class Rewriter(TypeVisitor):
 class Binder(Visitor):
 	"""
 	Discovers (or fails) a substitution-of-variables (in the formal)
-	which make the formal accept the actual as an instance.
+	which makes the formal accept the actual as an instance.
 	"""
 	def __init__(self, engine:"DeductionEngine", env:TYPE_ENV):
 		self.gamma = {}
@@ -226,7 +227,7 @@ class Binder(Visitor):
 		self.ok = False
 	
 	def bind(self, formal: SophieType, actual: SophieType):
-		if actual is BOTTOM or formal.number == actual.number:
+		if actual in (BOTTOM, ERROR) or formal.number == actual.number:
 			return
 		else:
 			self.visit(formal, actual)
@@ -258,11 +259,11 @@ class Binder(Visitor):
 			# Use a nested type-environment to bind the arguments "backwards":
 			# The argument to the formal-function must be acceptable to the actual-function.
 			# The actual-function does its work on that set of bindings.
-			# The actual-result, which should presumably be concrete,
-			# must be suitable as what the formal-result dictates.
 			save_gamma = self.gamma
 			self.gamma = dict(save_gamma)  # Generally fairly small, so asymptotic is NBD here.
 			self.bind(actual.arg, formal.arg)
+			# The actual-result could contain type-variables from the formal side,
+			# and these must be suitable as what the formal-result dictates.
 			result = actual.res.visit(Rewriter(self.gamma))
 			self.gamma = save_gamma
 			self.bind(formal.res, result)
@@ -270,11 +271,9 @@ class Binder(Visitor):
 			if len(actual.fn.params) != len(formal.arg.fields):
 				self.fail()
 			else:
+				# TODO: Check types against FormalParameter contracts.
 				result = self._engine.apply_UDF(actual, formal.arg.fields, self._dynamic_link)
-				if result is ERROR:
-					self.fail()
-				else:
-					self.bind(formal.res, result)
+				self.bind(formal.res, result)
 		else:
 			self.fail()
 	
@@ -409,10 +408,9 @@ class DeductionEngine(Visitor):
 		# self._trace_depth = 0
 		self._report = report  # .on_error("Checking Types")
 		self._types = { ot.symbol: ot for ot in _literal_type_map.values() }
+		self._types[primitive.literal_act.symbol]  = primitive.literal_act
 		self._constructors : dict[syntax.Symbol, SophieType] = {}
-		self._ffi : dict[syntax.FFI_Alias, SophieType] = {
-			primitive.root_namespace['console'] : ActorType(),
-		}
+		self._ffi : dict[syntax.FFI_Alias, SophieType] = {}
 		self._memo = {}
 		self._recursion = {}
 		self._deps_pass = DependencyPass()
@@ -423,15 +421,6 @@ class DeductionEngine(Visitor):
 		for module in roadmap.each_module:
 			self.visit_Module(module)
 	
-	# def visit(self, host, *args, **kwargs):
-	# 	prefix = " "*self._trace_depth
-	# 	self._trace_depth += 1
-	# 	self._report.trace(prefix, ">", type(host).__name__, host)
-	# 	result = super().visit(host, *args, **kwargs)
-	# 	self._report.trace(prefix, "<", type(host).__name__, result)
-	# 	self._trace_depth -= 1
-	# 	return result
-
 	def visit_Module(self, module:syntax.Module):
 		self._report.info("Type-Check", module.source_path)
 		self._deps_pass.visit_Module(module)
@@ -472,6 +461,13 @@ class DeductionEngine(Visitor):
 			original = self._constructors[it.symbol]
 			gamma = dict(zip(formals, it.type_args))
 			self._constructors[a] = original.visit(Rewriter(gamma))
+	
+	def visit_Opaque(self, td:syntax.Opaque):
+		self._types[td] = OpaqueType(td)
+	
+	def visit_Interface(self, i:syntax.Interface):
+		type_args = [TypeVariable() for _ in i.type_params]
+		self._types[i] = InterfaceType(i, type_args)
 
 	###############################################################################
 
@@ -559,9 +555,6 @@ class DeductionEngine(Visitor):
 			except ArityError:
 				self._report.wrong_arity(env, site, len(fn_type.fn.params), args)
 				return ERROR
-			
-		elif isinstance(fn_type, MethodType):
-			return MessageType()  # TODO
 			
 		else:
 			raise NotImplementedError(type(fn_type))
@@ -691,13 +684,42 @@ class DeductionEngine(Visitor):
 		return ManifestBuilder(parameters, lhs_type.type_args).visit(field_spec.type_expr)
 
 	def visit_BoundMethod(self, mr:syntax.BoundMethod, env:TYPE_ENV) -> SophieType:
-		receiver_type = self.visit(mr.receiver, env)
-		if receiver_type is ERROR: return ERROR
-		if not isinstance(receiver_type, ActorType):
-			need = "to receive message '%s' but it is not an actor" % mr.method_name.text
-			self._report.bad_type(env, mr.receiver, need, receiver_type)
+		lhs_type = self.visit(mr.receiver, env)
+		if lhs_type is ERROR: return ERROR
+		if isinstance(lhs_type, InterfaceType):
+			try:
+				ms = lhs_type.symbol.method_space[mr.method_name.key()]
+			except KeyError:
+				self._report.bad_message(env, mr, lhs_type)
+				return ERROR
+			else:
+				assert isinstance(ms, syntax.MethodSpec)
+				parameters = lhs_type.symbol.type_params
+				builder = ManifestBuilder(parameters, lhs_type.type_args)
+				if ms.type_exprs:
+					args = ProductType(builder.visit(tx) for tx in ms.type_exprs)
+					return ArrowType(args, primitive.literal_act)
+				else:
+					return primitive.literal_act
+		else:
+			self._report.bad_message(env, mr, lhs_type)
 			return ERROR
-		return MethodType()  # TODO
+	
+	def visit_DoBlock(self, do:syntax.DoBlock, env:TYPE_ENV) -> SophieType:
+		# A bit verbose to pick up all errors, not just the first.
+		answer = primitive.literal_act
+		for step in do.steps:
+			env.pc = step
+			step_type = self.visit(step, env)
+			assert isinstance(step_type, SophieType)
+			if step_type is ERROR: answer = ERROR
+			elif step_type is BOTTOM:
+				if answer is not ERROR:
+					answer = BOTTOM
+			elif step_type != primitive.literal_act:
+				self._report.bad_type(env, step, primitive.literal_act, step_type)
+				answer = ERROR
+		return answer
 
 def _hypothesis(st:Symbol, type_args:Sequence[SophieType]) -> SubType:
 	assert isinstance(st, syntax.SubTypeSpec)

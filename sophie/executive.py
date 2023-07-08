@@ -91,6 +91,7 @@ _ignore_these = {
 	syntax.TypeCall,
 	syntax.Variant,
 	syntax.Opaque,
+	syntax.Interface,
 }
 
 def dethunk(result:dict):

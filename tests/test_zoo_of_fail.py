@@ -44,12 +44,12 @@ class ZooOfFail(unittest.TestCase):
 		self.expect("parse", (
 			"syntax_error",
 			"mismatched_where",
-			"generic_opaque",
 		))
 
 	def test_01_define(self):
 		self.expect("define", [
 			"defined_twice",
+			"generic_opaque",
 		])
 	
 	def test_02_resolve(self):
@@ -97,10 +97,10 @@ class ZooOfFail(unittest.TestCase):
 			"lacks_field",
 			"mismatched_case_when",
 			"num_plus_string",
+			"bad_message",
 			"omega",
 			"wrong_arity",
 		])
-	
 	
 	def test_07_import(self):
 		self.expect("import", [

@@ -46,6 +46,10 @@ end;
 	# ``fsum``, ``prod``, and ``hypot`` also work on vectors; same problem. (Pure-Sophie versions are provided.)
 	# ``frexp`` returns a tuple, which would confuse the evaluator. It needs an adapter to a known record type.
 
+foreign "sophie.adapters.teletype_adapter"
+    where console : Console;
+end;
+
 type:
 	list[x] is CASE:
 		 cons(head:x, tail:list[x]);
@@ -58,6 +62,12 @@ type:
 
 	pair[a,b] is (fst:a, snd:b);
 
+	Console is agent:
+		echo(list[string]);
+		read((string)->act);
+		random((number)->act);
+	end;
+	
 define:
 	id(x) = x;
 	any(xs) = case xs of nil -> no; cons -> xs.head or any(xs.tail); esac;
@@ -115,5 +125,7 @@ define:
 	each_chr(s) = from(0) where
 		from(n) = nil if n >= len(s) else cons(mid(s,n,1), from(n+1));
 	end each_chr;
+
+    EOL = chr(10);
 
 end.

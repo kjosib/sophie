@@ -6,24 +6,21 @@ and the primitive literal types
 
 from functools import lru_cache
 from .ontology import NS, Nom
-from .syntax import Opaque, Variant, FFI_Symbol
+from .syntax import Opaque, FFI_Symbol
 from . import calculus
 
 root_namespace = NS(place=None)
 ops = {}
 
 def _built_in_type(name:str) -> calculus.OpaqueType:
-	symbol = Opaque(Nom(name, None))
+	symbol = Opaque(Nom(name, None), ())
 	term = calculus.OpaqueType(symbol)
 	root_namespace[name] = symbol
 	return term
 literal_number = _built_in_type("number")
 literal_string = _built_in_type("string")
 literal_flag = _built_in_type("flag")
-
-# Hack the console object into the root namespace
-root_namespace['console'] = FFI_Symbol(Nom('console', None))
-
+literal_act = _built_in_type("act")
 
 @lru_cache()
 def _arrow_of_math(arity:int) -> calculus.ArrowType:
