@@ -38,6 +38,7 @@ and then take notes on how things go.
 
 Some things are going well:
 
+* Sophie has type-safe asynchronous message-passing concurrency. Sort of. (A type-safe message-queue and console-agent work.)
 * Sophie has Turtle-graphics! (See [here](https://github.com/kjosib/sophie/blob/main/examples/turtle.sg) for examples.)
 * Sophie is interactive! See [this guessing game](https://github.com/kjosib/sophie/blob/main/examples/guess_the_number.sg) as an example.
 * The new type-checker gives excellent feedback and cannot be fooled. Through abstract interpretation it completely rules out *type* errors.
@@ -47,20 +48,15 @@ Some things are going well:
 * Error display is improved in various ways. There is also now an easy way to install helpful messages for parse errors.
   This works surprisingly well now.
 
-*Caveat:* Type-checking is presently out of commission in HEAD, but the release has it working.
-
 Some things are in progress:
 
-* I'm in progress to add asynchronous message-passing, with an eye towards a safe concurrency model.
-  (That's why type-checking is temporarily turned off)
+* SDL bindings (via PyGame for now)
 
 Certain things are not started yet:
 
 * Variable-Arity Functions.
 * Ad-hoc polymorphic multi-methods.
 * List comprehension (expressions like `[expr FOR name IN expr]`) are removed from the syntax for now.
-* Asynchrony.
-  The pipe-dream is an asynchronous and resilient processes network similar to Erlang.
 
 ## Why not just use Language X, Y, or Z?
 
