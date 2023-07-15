@@ -6,7 +6,7 @@ and the primitive literal types
 
 from functools import lru_cache
 from .ontology import NS, Nom
-from .syntax import Opaque, FFI_Symbol
+from .syntax import Opaque
 from . import calculus
 
 root_namespace = NS(place=None)

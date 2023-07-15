@@ -50,6 +50,7 @@ Some things are going well:
 
 Some things are in progress:
 
+* The ability to create new agents under program control
 * SDL bindings (via PyGame for now)
 
 Certain things are not started yet:
