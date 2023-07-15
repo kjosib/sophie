@@ -184,24 +184,38 @@ Pure functions may be easy to reason about,
 but they're not much fun at parties because
 they don't actually *do* anything.
 
-Sophie needs a 
+Sophie needs a way to express action.
 
 The general idea is that an action (or rather, a plan of action)
 is just a special type of value which happens to express 
 observable outcomes, with just a few extra production rules.
 
 ```
-
 expr -> SKIP       :Skip
       | expr '!' name       :BoundMethod
-      | DO semicolon_list(expr) END     :DoBlock
+      | with_agents DO semicolon_list(expr) END     :DoBlock
 
+with_agents -> :empty | WITH semicolon_list(new_agent)
+new_agent -> name ':=' expr   :NewAgent
 ```
-I could see the argument that a constructor should be just another (side-effecting) expression,
-but the main purpose I have in mind for them is to establish and initialize the internal state of an actor.
-Before that job finishes, any help should come from the global scope.
-If tediously-large common subexpressions become a problem in practice,
-then maybe an adjustment will be called for.
+
+* The SKIP action does nothing, but means Sophie does not need single-branch conditionals.
+  It can also have a place in case-expressions.
+* The exclamation point for sending messages is attested in a few languages.
+  I suspect there's benefit to distinguishing method/message-binding from field access.
+* The do-block expresses sequence, packaging several actions into one.
+
+One sort of action remains: To create a new instance of some agent-class.
+This may *look* like assignment, but Sophie attaches some rules:
+
+* You can only create agents in the preamble of a do-block.
+* The scope of an agent-name is from the point *after* its definition until the end of its do-block.
+* No two agents created in the same do-block may have the same agent-name.
+
+Thus, agents are created in procedural context, where it is perfectly fine to have side-effects.
+
+*Semantic Note:*
+Evidently the type system will need to distinguish between *agent-instance* and *agent-class.*
 
 -----
 **Foreign Function Interface**
@@ -241,7 +255,6 @@ round_list(x) -> '(' comma_list(x) ')'
 ```
 %bogus UMINUS
 %left '(' '[' '.'
-%nonassoc NEW
 %right '^'
 %left '*' '/' '%' DIV MOD
 %left '+' '-'
@@ -252,7 +265,6 @@ round_list(x) -> '(' comma_list(x) ')'
 %nonassoc  '!'
 
 %right '->' IF ELSE
-%nonassoc ':='
 ```
 
 This next bit tells the parser-generator how to tell which terminals have semantic value,

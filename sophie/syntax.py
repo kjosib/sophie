@@ -368,8 +368,15 @@ class MatchExpr(ValExpr):
 	def head(self) -> slice:
 		return self.subject.head()
 
+class NewAgent(Symbol):
+	def __init__(self, nom:Nom, expr:ValExpr):
+		super().__init__(nom)
+		self.expr = expr
+	def has_value_domain(self) -> bool: return True
+
 class DoBlock(ValExpr):
-	def __init__(self, steps:list[ValExpr]):
+	def __init__(self, agents:list[NewAgent], steps:list[ValExpr]):
+		self.agents = agents
 		self.steps = steps
 
 class ImportSymbol(NamedTuple):

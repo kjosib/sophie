@@ -19,7 +19,7 @@ The design goals, *in priority order,* are:
 8. Strong type-correctness (without requiring type-annotations) so run-time troubles are few and far between.
 9. Foreign Function Interface.
 10. Multimethods. Better yet, related packages of multimethods. Possibly with default generic implementations.
-11. Event-driven concurrency over a sensible (maybe pluggable?) process-model. (Probably actors, as in Erlang.)
+11. Asynchronous message-passing concurrency. Erlang is the inspiration here, but Sophie's messages are type-safe.
 12. Other nice things to have.
 
 When all is said and done, I'd like Sophie to be a viable alternative for learning (or deepening one's grasp of) comp-sci.
@@ -31,9 +31,7 @@ Things on Deck
 
 The next increment will probably focus on one of:
 
-* Something practical. Not sure what yet. Maybe PyGame bindings?
-* Better error messages for type-errors. I want something akin to a stack-trace.
-* Better error display. There's bound to be a decent library for this.
+* PyGame bindings with sample applications. Perhaps some simple mouse interaction would be a nice start.
 * Stack-trace for domain-errors (e.g. division by zero) at runtime.
 * Better semantics for *tagged-value* variants.
 
@@ -43,8 +41,6 @@ Open Design Problems:
 * Multimethods
 * Partial functions
 * Strictness analysis
-* Strongly-Typed Concurrency Model. (Actors? Channels? Pub/Sub?)
-* Engaging multiple IO drivers from a single process
 * First-Class Aborts
 
 Other Nice Things to Have

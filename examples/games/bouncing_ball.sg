@@ -31,9 +31,9 @@ define:
 		reflect(L:linear, p:number) = linear(p-L.p, 0-L.v);
 	end court;
 
-	bounce(old:station, w:wall) = station(nu.fst, combine) where
-		nu = w(old.fst);
-		combine = old.snd or nu.snd;
+	bounce(old:station, w:wall) = station(new.fst, combine) where
+		new = w(old.fst);
+		combine = old.snd or new.snd;
 	end bounce; # Die-hard functional programmers will recognize the similarity to a monadic bind operator.
 
 	apply_walls(old:station, walls:list[wall]):station = case walls of
