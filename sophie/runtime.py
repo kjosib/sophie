@@ -275,7 +275,6 @@ def drain_queue():
 class Message(Step):
 	def run(self):
 		# print("  <- Enqueue", self)
-		assert hasattr(self, "proceed")
 		THE_QUEUE.append(self)
 	def proceed(self):
 		raise NotImplementedError(type(self))
@@ -314,13 +313,6 @@ def iterate_list(lst:LAZY_VALUE):
 	while lst is not NIL:
 		yield force(lst['head'])
 		lst = force(lst['tail'])
-
-###############################################################################
-#
-#  Give the console object run-time teeth
-
-import sys
-import random
 
 ###############################################################################
 
