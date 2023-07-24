@@ -3,8 +3,8 @@ Fantastic Lists and Where to Find Them
 
 
 .. contents::
-	:local:
-	:depth: 3
+    :local:
+    :depth: 3
 
 
 So far, almost all the data in the tutorial has been numbers,
@@ -21,10 +21,10 @@ Case Study: Music Archive
 Suppose you're going to write some code that deals with a library of music.
 You might end up with some type definitions like this::
 
-	type:
-	year is number;
-	track is (title:string, artist:string, published:year, recorded:year);
-	album is (title:string, published:year, tracks:list[track]);
+    type:
+    year is number;
+    track is (title:string, artist:string, published:year, recorded:year);
+    album is (title:string, published:year, tracks:list[track]);
 
 Line by line:
 
@@ -36,12 +36,12 @@ Line by line:
 
 Here's some sample expression of an album::
 
-	sample = album("50 Public-Domain Songs", 2022, [
-		track("After You Get What You Want, You Don't Want It", "Irving Berlin", 1925, 2021),
-		track("Some of These Days", "Shelton Brooks", 1925, 2022),
-	]);
+    sample = album("50 Public-Domain Songs", 2022, [
+        track("After You Get What You Want, You Don't Want It", "Irving Berlin", 1925, 2021),
+        track("Some of These Days", "Shelton Brooks", 1925, 2022),
+    ]);
 
-	some_year = sample.published;
+    some_year = sample.published;
 
 Notice a few things:
 
@@ -61,10 +61,10 @@ So, for instance, ``[1, "apple"]`` is not a list because it contains elements of
 You can also make lists one element at a time, using the ``cons`` constructor.
 These are two ways to write the exact same list::
 
-	begin:
-		cons(1, cons(2, cons(3, nil)));
-		[1, 2, 3];
-	end.
+    begin:
+        cons(1, cons(2, cons(3, nil)));
+        [1, 2, 3];
+    end.
 
 Obviously the second way is much preferable for many cases,
 but when you're composing lists functionally it's handy to have the other.
@@ -72,10 +72,10 @@ but when you're composing lists functionally it's handy to have the other.
 Now, you might be wondering how to get at data in lists.
 This is a good time to look at the code for the ``map`` built-in function::
 
-	map(fn, xs) = case xs of
-		nil -> nil;
-		cons -> cons(fn(xs.head), map(fn, xs.tail));
-	esac;
+    map(fn, xs) = case xs of
+        nil -> nil;
+        cons -> cons(fn(xs.head), map(fn, xs.tail));
+    esac;
 
 How to explain this? On two levels: what it does, and how it works.
 
@@ -200,29 +200,29 @@ but here's a handy list of built-in list processing functions:
 * ``skip`` - Given a number and a source-list, produce only that portion of *source-list* after the first *number* elements are skipped over.
 
 A word about ``reduce``:
-	The idea here is that you have a list and you want to crush it down into a single value.
-	To do this, you have a function (of two parameters) and some *initial* value.
-	This function, applied to the *initial* value and the head of the list,
-	produces a new *intermediate* value. We then apply your function to the *intermediate* value and the *next* element of the list,
-	over and over until we run out of list-elements. At that point, whatever was the last value to be returned from your function
-	is the result of ``reduce``.
-
-	Here's an example::
-
-		sum(xs) = reduce(add, 0, xs) where add(a,b) = a+b; end sum;
-
-	Many authors refer to this behavior as a *fold*, evoking the image of literally folding a strip of paper over on itself many times.
-	Some authors might specifically call it a *left-fold* due to its dynamic of processing the elements in the list from first to last.
-	There are perhaps around a dozen commonly-encountered variants of approximately this function.
-	Some expect a seed value; some take the seed from the head of the list. Some work in reverse.
-	Some try to form a balanced tree of sub-list sub-folds. Some might even work in parallel across different CPU cores.
-	Some reverse the arguments to the provided function. Some produce only the final result;
-	others produce the list of intermediate values.
-
-	If there's a point, it's this: There are many interesting patterns of iteration.
-	Some of those patterns may well have conventional names, but they're all just variations on a simple theme.
-	At the moment, Sophie is not trying to *catch them all.*
-	It's easy enough to just catch the ones you need when you need them.
-	Eventually, Sophie might add a library of these so-called *morphisms*.
+    The idea here is that you have a list and you want to crush it down into a single value.
+    To do this, you have a function (of two parameters) and some *initial* value.
+    This function, applied to the *initial* value and the head of the list,
+    produces a new *intermediate* value. We then apply your function to the *intermediate* value and the *next* element of the list,
+    over and over until we run out of list-elements. At that point, whatever was the last value to be returned from your function
+    is the result of ``reduce``.
+    
+    Here's an example::
+    
+        sum(xs) = reduce(add, 0, xs) where add(a,b) = a+b; end sum;
+    
+    Many authors refer to this behavior as a *fold*, evoking the image of literally folding a strip of paper over on itself many times.
+    Some authors might specifically call it a *left-fold* due to its dynamic of processing the elements in the list from first to last.
+    There are perhaps around a dozen commonly-encountered variants of approximately this function.
+    Some expect a seed value; some take the seed from the head of the list. Some work in reverse.
+    Some try to form a balanced tree of sub-list sub-folds. Some might even work in parallel across different CPU cores.
+    Some reverse the arguments to the provided function. Some produce only the final result;
+    others produce the list of intermediate values.
+    
+    If there's a point, it's this: There are many interesting patterns of iteration.
+    Some of those patterns may well have conventional names, but they're all just variations on a simple theme.
+    At the moment, Sophie is not trying to *catch them all.*
+    It's easy enough to just catch the ones you need when you need them.
+    Eventually, Sophie might add a library of these so-called *morphisms*.
 
 .. _standard preamble: https://github.com/kjosib/sophie/blob/main/sophie/preamble.py

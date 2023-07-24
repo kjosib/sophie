@@ -19,4 +19,5 @@ define:
     ];
 
 begin:
-    console!echo(cons(EOL, bottles(5)));  # Increase 5 to 99 for the full experience.
+    # Increase 5 to 99 on the next line for the full experience.
+    console ! echo(cons(EOL, bottles(5)));

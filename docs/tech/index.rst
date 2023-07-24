@@ -1,7 +1,7 @@
-Sophie Internals
+Mechanics of Sophie
 ====================
 
-Notes on the design and implementation of nontrivial subsystems in the implementation.
+This chapter contains notes on the design and implementation of nontrivial subsystems.
 I'll add notes as they seem necessary while the overall system fills out.
 
 .. note::
@@ -12,5 +12,10 @@ I'll add notes as they seem necessary while the overall system fills out.
     :maxdepth: 2
     :caption: Contents:
 
-    mechanics
-
+    errors
+    imports
+    type_checking
+    tree_walk
+    except
+    queue
+    ast
