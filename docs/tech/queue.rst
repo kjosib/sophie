@@ -153,9 +153,9 @@ Moving data between CPU cores costs time.
 In a well-loaded system, we should like to keep lines of communication within the same CPU core when possible.
 
 The other (and perhaps more obvious) problem is that a single global task queue represents a point of contention.
-As the number of cores (and thus threads) rises, 
+As the number of cores (and thus threads) rises, this becomes a bigger problem.
 
-Presently, the fashion something called `"work-stealing" (BL94) <BL94_>`_.
+Presently, the height of fashion in thread schedulers is something called `"work-stealing" (BL94) <BL94_>`_.
 The big idea is that each worker-thread has its own work queue, thus to diminish contention for a global queue.
 Translated to actors, the basic rule is to schedule previously-dormant actors on the same worker-thread as the
 source of the message. (This normally minimizes the amount of communication between CPU cores.)
@@ -194,7 +194,7 @@ The right thing is to yield the CPU to another program, or to the operating syst
     These *wait* very efficiently but there is a smidgen of overhead associated with each operation.
     If I write "mutex" I specifically mean this ordinary kind of lock.
 
-    Spin-locks do not yield the CPU between attempts to acquire the lock, "spin" around a tight loop.
+    Spin-locks do not yield the CPU between attempts to acquire the lock, but instead "spin" around a tight loop.
     The benefit is that when there is no contention the overhead is like two CPU instructions.
     It's a different trade-off. If I write "spin-lock" then of course that is what I mean.
 
@@ -211,8 +211,8 @@ The basic worker-thread loop:
     |     Become Idle
     |     Take the THIEF_MUTEX
     |     "Steal" a task
-    |     Release the THIEF_MUTEX
     |     Become Busy
+    |     Release the THIEF_MUTEX
     | Run the task
     | Lather, rinse, repeat
 
@@ -223,7 +223,7 @@ To "steal" a task:
     | Choose any worker at random from the pool.
     | Try to dequeue a task from that worker's queue.
     | If that queue was empty, try the next in round-robin style.
-    | Keep this up until either success or having checked all possible queues.
+    | Keep this up until either success or having chewed through all possible queues.
     | If you've done checked every queue, sleep for a time-slice and go back to the beginning.
 
 In the worst case, this could leave one thread continually sleeping one time-slice at a time
@@ -235,18 +235,16 @@ Pinned Actors and Work-Stealing
 
 Recall the notion of having a dedicated O/S thread for certain system-level actors.
 When these actors need to send messages, they may need to wake those actors onto a
-different thread (i.e. worker) than what is currently running. 
+different thread (i.e. worker) than what is currently running.
 
-The work-stealing scheduler (as described so far) has one irksome assumption baked in:
-Only a worker can safely add to its own task queue.
-There would be a race involving the worker deciding it's idle,
-and thus failing to service a task delivered just afterwards -- at least until
-load rises high enough to rouse the affected worker.
+It turns out to be safe to wake an actor onto any work queue.
+If that queue happens to belong to an idle thread, then the thief will soon find it anyway.
 
-Perhaps the work-stealing algorithm could quite deliberately check for tasks accidentally
-delivered to idle workers -- in which case we don't need that score-board mechanism after all.
+Proof by induction: For number of idle workers =
+    | 0 -> the actor obviously lands in a queue that gets serviced.
+    | N+1 -> either the thief finds this actor or the problem reduces to N idle workers. 
 
-**Deadlock averted,** and it's nice when solving a design problem simplifies things.
+This is why the work-thief is defined to poll *all* work-queues, not just *avowedly busy* workers.
 
 On this account, the locks protecting worker task queues should probably be spin-locks.
 Contention should be negligible, and the critical section is but a queueing operation.
@@ -254,7 +252,7 @@ Contention should be negligible, and the critical section is but a queueing oper
 Work-Stealing and Shut-Down
 -----------------------------
 
-There is one subtlety relating to detecting shut-down.
+There is a peculiar subtlety to detecting termination correctly.
 
 Suppose we have a pinned system-actor representing the SDL library.
 And suppose the user performs an "end-program" action, such as clicking the red X in the corner of a window.
