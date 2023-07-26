@@ -197,7 +197,7 @@ but here's a handy list of built-in list processing functions:
 * ``cat`` -  Given two lists, produce a new list containing each element of the first list, and then each element of the second list.
 * ``flat`` - Given a list-of-lists, produce a single-level list consisting of all the elements of each sub-list in succession.
 * ``take`` - Given a number and a source-list, produce a new list containing at most the first *number* elements of *source-list*.
-* ``skip`` - Given a number and a source-list, produce only that portion of *source-list* after the first *number* elements are skipped over.
+* ``drop`` - Given a number and a source-list, produce only that portion of *source-list* after the first *number* elements are skipped over.
 
 A word about ``reduce``:
     The idea here is that you have a list and you want to crush it down into a single value.
@@ -225,4 +225,4 @@ A word about ``reduce``:
     It's easy enough to just catch the ones you need when you need them.
     Eventually, Sophie might add a library of these so-called *morphisms*.
 
-.. _standard preamble: https://github.com/kjosib/sophie/blob/main/sophie/preamble.py
+.. _standard preamble: https://github.com/kjosib/sophie/blob/main/sophie/sys/preamble.sg
