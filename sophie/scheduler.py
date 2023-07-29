@@ -5,6 +5,7 @@ but the semantics of the language are the same regardless.
 """
 import collections, threading, traceback
 
+POOL_SIZE = 3
 
 class ThreadPoolScheduler:
 	"""
@@ -34,8 +35,8 @@ class ThreadPoolScheduler:
 		self._mutex.acquire()
 		self._tasks.append(task)
 		if self._idle:
-			# The round-robin scheduling policy made manifest:
-			self._idle.popleft().release()
+			# Let's do an idle-stack rather than round-robin:
+			self._idle.pop().release()
 		self._mutex.release()
 
 	def _worker(self):
@@ -79,7 +80,7 @@ class ThreadPoolScheduler:
 		with self._mutex:
 			self._less_busy()
 
-MAIN_QUEUE = ThreadPoolScheduler(3)
+MAIN_QUEUE = ThreadPoolScheduler(POOL_SIZE)
 
 class SampleTask:
 	@staticmethod
@@ -88,5 +89,4 @@ class SampleTask:
 
 if __name__ == '__main__':
 	MAIN_QUEUE.perform(SampleTask())
-	
 
