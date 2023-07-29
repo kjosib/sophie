@@ -36,15 +36,15 @@ You can see more examples in the ``some_arithmetic.sg`` example file.
     What does this say about how Sophie reads mathematical expressions?
 
 .. important::
-	Sophie will only run a program she can read and understand completely in advance.
-	Otherwise you'll get a diagnostic message to try to help you sort out what went wrong.
-	These messages are not in their final form, but they should at least pinpoint the issues.
+    Sophie will only run a program she can read and understand completely in advance.
+    Otherwise you'll get a diagnostic message to try to help you sort out what went wrong.
+    These messages are not in their final form, but they should at least pinpoint the issues.
 
 * Exercise:
-	Modify the ``some_arithmetic.sg`` example file and save your changes,
-	then try to run the modified version.
-	What happens if you leave out a closing parenthesis, or leave out an operator between numbers?
-	Can you make sense of the diagnostic messages?
+    Modify the ``some_arithmetic.sg`` example file and save your changes,
+    then try to run the modified version.
+    What happens if you leave out a closing parenthesis, or leave out an operator between numbers?
+    Can you make sense of the diagnostic messages?
 
 Define your own!
 ~~~~~~~~~~~~~~~~~~
@@ -62,12 +62,12 @@ It also defines a constant, called ``five``, which conveniently enough refers to
 
 If you're curious (and I hope you are) you can run it like::
 
-	D:\GitHub\sophie>sophie examples\tutorial\define_functions.sg
-	10
-	25
-	50
-	100
-	600
+    D:\GitHub\sophie>sophie examples\tutorial\define_functions.sg
+    10
+    25
+    50
+    100
+    600
 
 Let's break this down:
 
