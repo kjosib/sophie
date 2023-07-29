@@ -3,6 +3,7 @@ from typing import Any, Union, Sequence, Optional
 from collections import deque
 from . import syntax, primitive
 from .stacking import Frame, Activation
+from .scheduler import MAIN_QUEUE
 
 STRICT_VALUE = Union[
 	int, float, str, dict,
@@ -264,20 +265,9 @@ class CompoundStep(Step):
 
 ###############################################################################
 
-THE_QUEUE = deque()
-
-def drain_queue():
-	while THE_QUEUE:
-		message = THE_QUEUE.popleft()
-		# print("  -> Dequeue", message)
-		message.proceed()
-
 class Message(Step):
-	def run(self):
-		# print("  <- Enqueue", self)
-		THE_QUEUE.append(self)
-	def proceed(self):
-		raise NotImplementedError(type(self))
+	def run(self): MAIN_QUEUE.insert_task(self)
+	def proceed(self): raise NotImplementedError(type(self))
 
 class ClosureMessage(Message):
 	def __init__(self, closure:Procedure, *args):
