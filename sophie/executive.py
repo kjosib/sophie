@@ -8,11 +8,18 @@ from . import syntax, primitive, runtime, ontology
 from .stacking import Frame, RootFrame, Activation
 from .runtime import (
 	force, _strict, Constructor, Primitive, Thunk,
-	drain_queue, Step
+	Step
 )
 from .resolution import RoadMap
+from .scheduler import MAIN_QUEUE
+
 
 def run_program(roadmap:RoadMap):
+	class MainTask:
+		@staticmethod
+		def proceed():
+			result.run()
+
 	drivers = {}
 	preamble_scope = roadmap.module_scopes[roadmap.preamble]
 	root = _dynamic_root(preamble_scope)
@@ -29,8 +36,7 @@ def run_program(roadmap:RoadMap):
 			env.pc = expr
 			result = _strict(expr, env)
 			if isinstance(result, Step):
-				result.run()
-				drain_queue()
+				MAIN_QUEUE.perform(MainTask)
 				continue
 			if isinstance(result, dict):
 				tag = result.get("")

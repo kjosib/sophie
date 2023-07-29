@@ -15,7 +15,7 @@ Now that Sophie is developing actor-oriented characteristics, she'll need proper
 
 
 The Original and Current Naive Message Queue
----------------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Running in a single thread, Sophie uses a ``collections.deque`` as a simple global message queue,
 for its ``.append(...)`` and ``.popleft()`` methods are highly optimized for this sort of thing.
@@ -24,7 +24,7 @@ Even though ``deque`` is thread-safe, it is not a complete solution for a thread
 This is because ``deque`` provides no means for a consumer to wait for a producer.
 
 The Obvious, But Incomplete, Next Step
-----------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Python's standard ``queue`` library provides a compact if less-efficient solution for
 the standard multi-threaded producer/consumer problem in the form of ``SimpleQueue``.
@@ -34,7 +34,7 @@ but it is supposed to come with a native-code implementation.
 Great! Now threads can yield the CPU while waiting for messages.
 
 Actors Are Not Threads!
----------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Conceptually, each actor has its own message queue and handles messages in arrival order.
 It would be straightforward to have a thread per actor in a loop around its own message queue. 
@@ -52,7 +52,7 @@ A single global queue with locking operations for every single message
 means a lot of contention for a single lock.
 
 A Simple Approach:
--------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Suppose we use a traditional thread-pool a'la `this article <https://en.wikipedia.org/wiki/Thread_pool>`_.
 But the tasks are not messages.
@@ -94,7 +94,7 @@ The scheduler on each thread in a pool looks like:
     | Repeat.
 
 Shutting Down
---------------
+~~~~~~~~~~~~~~
 
 There are basically two circumstances in which a program should quit:
 
@@ -106,16 +106,18 @@ A special "shut-down" message in the task queue could stand for the first case.
 
 Detecting the second case is rather less trivial.
 
-Suppose we define a special system-management queue with a small vocabulary.
-Then, if a thread times out on the task queue, it can send an "idle" message.
-Thereafter, at its next incoming task, it must send a "busy" message.
+Suppose every time a worker-thread goes idle, it first decrements a
+busy-workers counter in the thread pool object.
+Thereafter, at its next incoming task, it must increment that same counter.
+When this count reaches zero, the pool has run out of work to perform.
+It can notify a special system-management queue of this fact.
 
-The consumer of that system-management queue would just track the number of busy worker threads.
-When that number reaches zero, it would place the "shut-down" message on the work queue.
-(More sophisticated strategies are also possible, but beyond the scope of this note.)
+Let the main thread consume messages from yonder system-management queue.
+At first it can hand out tasks in sequence from Sophie's ``begin:`` block,
+When that's finished, it is finally time for the thread-pool to shut down.
 
 Pinning Actors to Particular Threads
---------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Certain system actors must be pinned to a particular thread. For examples:
 
@@ -135,15 +137,30 @@ The scheduler on a dedicated thread looks like:
     | Run the actor.
     | Repeat.
 
+... to the Main Thread
+------------------------
+
+It turns out ``tkinter`` is designed to only run correctly on the main thread.
+For the moment I deal with this by not running turtle graphics through the threading scheduler.
+But the plan in the near future is to have effectively a main-thread actor
+with its own dedicated message queue, similar to the ones described above.
+This can then dispatch to finicky subsystems like ``tkinter``.
+
+I'd like to keep most user-defined computation off the main thread, though.
+Perhaps I define two actors: One to run in a user thread and peel off suitable
+chunks of turtle instructions; one to run in the main thread and dispatch these.
+A similar concept might be relevant to SDL for emitting graphics.
+Eventually I might even expose the concept to user-code.
+
 Naked Procedures
-------------------
+~~~~~~~~~~~~~~~~~~
 
 **Sophie** also supports scheduling procedures not tied to specific actors.
 As far as the scheduler is concerned, this is just another task.
 Interface polymorphism is the solution.
 
 Something More Sophisticated?
--------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 As long as the implementation is Python, high-performance threading is an academic exercise.
 But let's do the exercise anyway.
@@ -178,7 +195,7 @@ The more important scheduling concerns are *worst-case latency* and *good citize
     work-sharing causes more communication between threads than does work-stealing.
 
 Honor Among Thieves: A Kinder, Gentler Work-Stealing Scheduler
-----------------------------------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The aforementioned paper (BL94) does not address shut-down or conditions of light load.
 It assumes that an idle thread can always find something to do by grubbing around other processor's work queues.
@@ -231,7 +248,7 @@ while other threads do all the work. That has some overhead. It's not much, but 
 We might want to eliminate it. But that's a problem for another day.
 
 Pinned Actors and Work-Stealing
----------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Recall the notion of having a dedicated O/S thread for certain system-level actors.
 When these actors need to send messages, they may need to wake those actors onto a
@@ -250,7 +267,7 @@ On this account, the locks protecting worker task queues should probably be spin
 Contention should be negligible, and the critical section is but a queueing operation.
 
 Work-Stealing and Shut-Down
------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 There is a peculiar subtlety to detecting termination correctly.
 
@@ -275,7 +292,7 @@ In that case, and *only* in that case,
 we may finally conclude that the system has entirely run out of work to perform.
 
 Fairness in a Work-Stealing Environment
---------------------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 One other pathology may afflict a work-stealing scheduler.
 Suppose an interactive system is under consistent (but not crushing) load.
@@ -298,7 +315,7 @@ Maybe we don't worry about it until someone complains.
 Maybe a system-management thread occasionally butts in to stir the pot.
 
 Conclusions
------------------------------
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 The three scheduling algorithms contemplated here are basically interchangeable:
 They each represent a different trade-off, but in the end they all do much the same work.
@@ -306,7 +323,7 @@ They each represent a different trade-off, but in the end they all do much the s
 Although "work-stealing" *seems* to offer the highest levels of concurrency and performance,
 it is also vastly more complex than either other approach.
 It seems reasonable that a global task queue might become a point of contention,
-but checking for idle workers could *also* be a point of contention -- depending on the memory consistency model.
+but checking for idle workers could *also* be a point of contention ~~ depending on the memory consistency model.
 
 Therefore, I will not bother with work-stealing, even in a properly-threading translation,
 until and unless it's objectively shown to be necessary.
