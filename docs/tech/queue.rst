@@ -93,6 +93,37 @@ The scheduler on each thread in a pool looks like:
     | Run the actor.
     | Repeat.
 
+How Many Threads?
+------------------
+
+I mentioned the heuristic of one thread per CPU core::
+
+    POOL_SIZE = cpu_count()
+
+However, this is not always best.
+
+For one thing, ``cpu_count()`` is defined to return ``None`` when it can't count.
+That would probably only apply to relatively old hardware, but still::
+
+    POOL_SIZE = cpu_count() or 3
+
+And for another, some systems let you restrict processes to certain CPU cores::
+
+    POOL_SIZE = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else os.cpu_count() or 3
+
+Jobs that perform a lot of I/O may be best served with more threads,
+some fraction of which will be waiting most of the time.
+For these, the optimal number of threads *just barely* keeps the CPU cores busy.
+Then again, if you have a good non-blocking I/O support library,
+this is less of a problem: The system just adapts.
+
+Finally, the end-user may wish to limit the job's level of concurrency,
+perhaps to guarantee resources for some other process.
+
+Oh, one last thing: Until the GIL's no longer a concern, I'll just go with three::
+
+    POOL_SIZE = 3
+
 Shutting Down
 ~~~~~~~~~~~~~~
 
