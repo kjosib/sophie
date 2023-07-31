@@ -8,7 +8,7 @@ from . import syntax, primitive, runtime, ontology
 from .stacking import Frame, RootFrame, Activation
 from .runtime import (
 	force, _strict, Constructor, Primitive, Thunk,
-	Step
+	Action
 )
 from .resolution import RoadMap
 from .scheduler import MAIN_QUEUE
@@ -18,7 +18,7 @@ def run_program(roadmap:RoadMap):
 	class MainTask:
 		@staticmethod
 		def proceed():
-			result.run()
+			result.perform()
 
 	drivers = {}
 	preamble_scope = roadmap.module_scopes[roadmap.preamble]
@@ -35,7 +35,7 @@ def run_program(roadmap:RoadMap):
 		for expr in module.main:
 			env.pc = expr
 			result = _strict(expr, env)
-			if isinstance(result, Step):
+			if isinstance(result, Action):
 				MAIN_QUEUE.perform(MainTask)
 				continue
 			if isinstance(result, dict):
