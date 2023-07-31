@@ -93,6 +93,18 @@ The scheduler on each thread in a pool looks like:
     | Run the actor.
     | Repeat.
 
+Object Pools? Profile First!
+-----------------------------
+
+A truism in performance tuning is to try not to allocate.
+But when it comes to performance, we should take nothing on faith.
+So I ran some experiments with ``python -m timeit``.
+It turns out that Python's reference-counting GC is more efficient than I gave it credit for.
+Using a ``deque`` as a ``deque``-pool turns out to be about 2-3% *slower* on my system
+than simply allocating a fresh ``deque`` every time an actor needs one.
+And furthermore, allocating a plain empty list is much faster still,
+as well as having much less memory overhead.
+
 How Many Threads?
 ------------------
 
@@ -168,20 +180,30 @@ The scheduler on a dedicated thread looks like:
     | Run the actor.
     | Repeat.
 
+There is one tricky bit: Dedicated-thread workers must still properly
+announce their idle/busy transitions to the main scheduler,
+lest the system incorrectly decide to shut-down too soon.
+
 ... to the Main Thread
 ------------------------
 
 It turns out ``tkinter`` is designed to only run correctly on the main thread.
-For the moment I deal with this by not running turtle graphics through the threading scheduler.
-But the plan in the near future is to have effectively a main-thread actor
-with its own dedicated message queue, similar to the ones described above.
+There's a straightforward solution: Run a dedicated work-queue on the main thread,
+and arrange a *Turtle-Graphics* actor pinned to that queue.
 This can then dispatch to finicky subsystems like ``tkinter``.
 
-I'd like to keep most user-defined computation off the main thread, though.
-Perhaps I define two actors: One to run in a user thread and peel off suitable
-chunks of turtle instructions; one to run in the main thread and dispatch these.
+This means that ``class DedicatedThread`` must take special care with the ``ALL_DONE`` sentinel-object
+that represents shut-down time, but that's an insignificant price to pay. 
+
+I have done this. It works fine. But by itself, it's nothing to write home about.
+
+I also wanted to keep the user-defined computation off the main thread.
+So I defined two actors: one to run in a user thread and peel off suitable
+chunks of turtle instructions; another to run in the main thread and dispatch these to ``tkinter``.
+Subjectively, this seems to result in a dramatic speed-up especially with the more-complex fractal designs.
+(Perhaps large parts of ``tkinter`` release the GIL, since it's TCL on the inside?)
+
 A similar concept might be relevant to SDL for emitting graphics.
-Eventually I might even expose the concept to user-code.
 
 Naked Procedures
 ~~~~~~~~~~~~~~~~~~
@@ -331,7 +353,7 @@ Recall that busy actors tend to reschedule themselves and their conversation par
 to the same thread over and over.
 
 It seems possible that such a system could enter an undesirable harmonic:
-Some threads comes to be dominated by a small, insular group of actors,
+Some threads come to be dominated by small, insular groups of actors,
 while other threads host a great many actors in a giant round-robin.
 Useful work is being done on every thread, but service levels are inconsistent:
 Some actors get dramatically more or less than a fair share of CPU.

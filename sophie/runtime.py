@@ -3,7 +3,7 @@ from typing import Any, Union, Sequence, Optional
 from collections import deque
 from . import syntax, primitive
 from .stacking import Frame, Activation
-from .scheduler import MAIN_QUEUE
+from .scheduler import MAIN_QUEUE, Task, Actor
 
 STRICT_VALUE = Union[
 	int, float, str, dict,
@@ -118,10 +118,10 @@ def _eval_match_expr(expr:syntax.MatchExpr, dynamic_env:ENV):
 	return delay(dynamic_env, branch)
 
 def _eval_do_block(expr:syntax.DoBlock, dynamic_env:ENV):
-	return CompoundStep(expr.steps, dynamic_env)
+	return CompoundAction(expr.steps, dynamic_env)
 
 def _eval_bind_method(expr:syntax.BoundMethod, dynamic_env:ENV):
-	return Method(_strict(expr.receiver, dynamic_env), expr.method_name.text)
+	return BoundMethod(_strict(expr.receiver, dynamic_env), expr.method_name.text)
 
 def _snap_type_alias(alias:syntax.TypeAlias, global_env:ENV):
 	# It helps to remember this is a run-time thing so type-parameters are irrelevant here.
@@ -208,90 +208,65 @@ class Constructor(Procedure):
 			structure[field] = arg
 		return structure
 
-class NativeObjectProxy:
-	""" Wrap Python objects in one of these to use them as agents. """
-	def __init__(self, principal):
-		self._principal = principal
-	def receive(self, method_name, args):
-		method = getattr(self._principal, method_name)
-		method(*args)
-
 ###############################################################################
 
-class ParametricTask(Procedure):
-	def __init__(self, closure):
-		self._closure = closure
-	def apply(self, args: Sequence[LAZY_VALUE]) -> Any:
-		return ClosureMessage(self._closure, *(promote(a) for a in args))
-
-class Method(Procedure):
+class BoundMethod(Procedure):
 	def __init__(self, receiver, method_name):
 		self._receiver = receiver
 		self._method_name = method_name
+	
 	def apply(self, args: Sequence[LAZY_VALUE]) -> LAZY_VALUE:
-		return MethodMessage(self._receiver, self._method_name, *(promote(a) for a in args))
-	def run(self):
-		# Mild hack r/n...
-		self.apply(()).run()
-
-def promote(arg):
-	# Convert a closure to a task, but all other things stay the same.
-	it = force(arg)
-	if isinstance(it, Closure): return ParametricTask(it)
-	else: return it
-
+		"""
+		Treatment of arguments needs to depend on their type.
+		Functional args 
+		"""
+		return MessageAction(self._receiver, self._method_name, *(force(a) for a in args))
+	
+	def perform(self):
+		# Mild hack...
+		# A bound method "performed" as-such, with no arguments,
+		# produces a corresponding message (again, with no arguments)
+		# and performs that message.
+		self.apply(()).perform()
 
 ###############################################################################
 
-class Step:
-	def run(self):
+class Action:
+	def perform(self):
 		raise NotImplementedError(type(self))
 
-class Nop(Step):
-	def run(self): pass
+class Nop(Action):
+	def perform(self): pass
 
-class CompoundStep(Step):
+class CompoundAction(Action):
 	def __init__(self, steps:Sequence[syntax.ValExpr], dynamic_env:ENV):
 		self._steps = steps
 		self._dynamic_env = dynamic_env
-	def run(self):
+	def perform(self):
 		# TODO: Solve the tail-recursion problem.
 		env = self._dynamic_env
 		for expr in self._steps:
 			env.pc = expr
-			step = _strict(expr, self._dynamic_env)
-			step.run()
+			action = _strict(expr, self._dynamic_env)
+			action.perform()
 
-
-###############################################################################
-
-class Message(Step):
-	def run(self): MAIN_QUEUE.insert_task(self)
-	def proceed(self): raise NotImplementedError(type(self))
-
-class ClosureMessage(Message):
-	def __init__(self, closure:Procedure, *args):
-		self._closure = closure
-		self._args = args
-	def proceed(self):
-		thunk = self._closure.apply(self._args)
-		step = force(thunk)
-		step.run()
-
-class SimpleTask(Message):
-	def __init__(self, thunk):
-		self._thunk = thunk
-	def proceed(self):
-		step = force(self._thunk)
-		step.run()
-
-class MethodMessage(Message):
+class MessageAction(Action):
 	def __init__(self, receiver, method_name, *args):
 		self._receiver = receiver
 		self._method_name = method_name
 		self._args = args
+		
+	def perform(self):
+		self._receiver.accept_message(self._method_name, self._args)
+
+###############################################################################
+
+class AsyncTask(Task):
+	def __init__(self, thunk):
+		self._thunk = thunk
 	def proceed(self):
-		self._receiver.receive(self._method_name, self._args)
+		action = force(self._thunk)
+		action.perform()
 
 ###############################################################################
 
