@@ -42,7 +42,7 @@ setuptools.setup(
     ],
 	python_requires='>=3.9',
 	install_requires=[
-		"booze-tools>=0.6.1.0",
+		"booze-tools>=0.6.2.1",
 		"pygame>=2.4.0",
 	]
 )
