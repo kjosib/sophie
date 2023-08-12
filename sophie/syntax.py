@@ -237,11 +237,15 @@ class FieldReference(ValExpr):
 	def __str__(self): return "(%s.%s)" % (self.lhs, self.field_name.text)
 	def head(self) -> slice: return self.field_name.head()
 
-class BoundMethod(ValExpr):
+class BindMethod(ValExpr):
 	def __init__(self, receiver: ValExpr, method_name: Nom):
 		self.receiver, self.method_name = receiver, method_name
 	def __str__(self): return "(%s.%s)" % (self.receiver, self.method_name.text)
 	def head(self) -> slice: return self.method_name.head()
+
+class AsTask(ValExpr):
+	def __init__(self, sub:ValExpr): self.sub = sub
+	def head(self) -> slice: return self.sub.head()
 
 class BinExp(ValExpr):
 	def __init__(self, glyph: str, lhs: ValExpr, o:slice, rhs: ValExpr):

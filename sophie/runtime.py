@@ -1,6 +1,5 @@
 import traceback
 from typing import Any, Union, Sequence, Optional
-from collections import deque
 from . import syntax, primitive
 from .stacking import Frame, Activation
 from .scheduler import MAIN_QUEUE, Task, Actor
@@ -120,8 +119,19 @@ def _eval_match_expr(expr:syntax.MatchExpr, dynamic_env:ENV):
 def _eval_do_block(expr:syntax.DoBlock, dynamic_env:ENV):
 	return CompoundAction(expr.steps, dynamic_env)
 
-def _eval_bind_method(expr:syntax.BoundMethod, dynamic_env:ENV):
+def _eval_bind_method(expr:syntax.BindMethod, dynamic_env:ENV):
 	return BoundMethod(_strict(expr.receiver, dynamic_env), expr.method_name.text)
+
+def _eval_as_task(expr:syntax.AsTask, dynamic_env:ENV):
+	sub = _strict(expr.sub, dynamic_env)
+	if isinstance(sub, Closure):
+		return ClosureMessage(sub)
+	else:
+		assert isinstance(sub, Action), type(sub)
+		assert not isinstance(sub, BoundMethod)
+		return PlainTask(sub)
+
+###############################################################################
 
 def _snap_type_alias(alias:syntax.TypeAlias, global_env:ENV):
 	# It helps to remember this is a run-time thing so type-parameters are irrelevant here.
@@ -162,7 +172,7 @@ OPS = {glyph:op for glyph, (op, typ) in primitive.ops.items()}
 
 ###############################################################################
 
-class Procedure:
+class Function:
 	""" A run-time object that can be applied with arguments. """
 	def apply(self, args: Sequence[LAZY_VALUE]) -> Any:
 		# It must be a LAZY_VALUE and not a syntax.ValExpr
@@ -171,7 +181,7 @@ class Procedure:
 		# For example, explicit lists.
 		raise NotImplementedError
 
-class Closure(Procedure):
+class Closure(Function):
 	""" The run-time manifestation of a sub-function: a callable value tied to its natal environment. """
 
 	def __init__(self, static_link:ENV, udf:syntax.UserFunction):
@@ -184,7 +194,7 @@ class Closure(Procedure):
 		inner_env = Activation.for_function(self._static_link, self._udf, args)
 		return evaluate(self._udf.expr, inner_env)
 
-class Primitive(Procedure):
+class Primitive(Function):
 	""" All parameters to primitive procedures are strict. Also a kind of value, like a closure. """
 	def __init__(self, fn: callable):
 		self._fn = fn
@@ -192,7 +202,7 @@ class Primitive(Procedure):
 	def apply(self, args: Sequence[LAZY_VALUE]) -> STRICT_VALUE:
 		return self._fn(*map(force, args))
 
-class Constructor(Procedure):
+class Constructor(Function):
 	def __init__(self, key:str, fields:list[str]):
 		self.key = key
 		self.fields = fields
@@ -210,29 +220,9 @@ class Constructor(Procedure):
 
 ###############################################################################
 
-class BoundMethod(Procedure):
-	def __init__(self, receiver, method_name):
-		self._receiver = receiver
-		self._method_name = method_name
-	
-	def apply(self, args: Sequence[LAZY_VALUE]) -> LAZY_VALUE:
-		"""
-		Treatment of arguments needs to depend on their type.
-		Functional args 
-		"""
-		return MessageAction(self._receiver, self._method_name, *(force(a) for a in args))
-	
-	def perform(self):
-		# Mild hack...
-		# A bound method "performed" as-such, with no arguments,
-		# produces a corresponding message (again, with no arguments)
-		# and performs that message.
-		self.apply(()).perform()
-
-###############################################################################
-
 class Action:
 	def perform(self):
+		""" Do something here and now in the current thread. """
 		raise NotImplementedError(type(self))
 
 class Nop(Action):
@@ -250,7 +240,7 @@ class CompoundAction(Action):
 			action = _strict(expr, self._dynamic_env)
 			action.perform()
 
-class MessageAction(Action):
+class BoundMessage(Action):
 	def __init__(self, receiver, method_name, *args):
 		self._receiver = receiver
 		self._method_name = method_name
@@ -259,14 +249,64 @@ class MessageAction(Action):
 	def perform(self):
 		self._receiver.accept_message(self._method_name, self._args)
 
+class TaskAction(Action):
+	def __init__(self, task:Task):
+		self._task = task
+	def perform(self):
+		MAIN_QUEUE.insert_task(self._task)
+
 ###############################################################################
 
-class AsyncTask(Task):
-	def __init__(self, thunk):
-		self._thunk = thunk
+class Message(Function):
+	""" Interface for things that, with arguments, become messages ready to send. """
+	def dispatch_with(self, *args):
+		self.apply(args).perform()
+
+class BoundMethod(Message, Action):
+	def __init__(self, receiver, method_name):
+		self._receiver = receiver
+		self._method_name = method_name
+
+	def apply(self, args: Sequence[LAZY_VALUE]) -> LAZY_VALUE:
+		return BoundMessage(self._receiver, self._method_name, *(force(a) for a in args))
+	
+	def perform(self):
+		""" Hack so that a single runtime class handles both parametric and non-parametric messages to actors """
+		self._receiver.accept_message(self._method_name, ())
+
+class ClosureMessage(Message):
+	def __init__(self, closure: Closure):
+		self._closure = closure
+
+	def apply(self, args: Sequence[LAZY_VALUE]) -> Any:
+		task = ParametricTask(self._closure, [force(a) for a in args])
+		return TaskAction(task)
+	
+###############################################################################
+
+class PlainTask(Task):
+	def __init__(self, action:Action):
+		self._action = action
 	def proceed(self):
-		action = force(self._thunk)
+		self._action.perform()
+
+class ParametricTask(Task):
+	def __init__(self, closure:Closure, args:Sequence[STRICT_VALUE]):
+		self._closure = closure
+		self._args = args
+	def proceed(self):
+		action = force(self._closure.apply(self._args))
+		assert isinstance(action, Action), type(action)
 		action.perform()
+
+class UserDefinedActor(Actor):
+	def __init__(self, vtable):
+		super().__init__()
+		self._vtable = vtable
+	def handle(self, message, args):
+		behavior = self._vtable[message]
+		if args: behavior.apply(args).perform()
+		else: behavior.perform()
 
 ###############################################################################
 

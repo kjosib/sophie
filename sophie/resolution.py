@@ -121,7 +121,7 @@ class TopDown(Visitor):
 		# word-agnostic until we know the type of expr.lhs.
 		self.visit(expr.lhs, env)
 	
-	def visit_BoundMethod(self, expr: syntax.BoundMethod, env):
+	def visit_BindMethod(self, expr: syntax.BindMethod, env):
 		# word-agnostic until we know the type of expr.receiver.
 		self.visit(expr.receiver, env)
 	
@@ -142,6 +142,9 @@ class TopDown(Visitor):
 	def visit_DoBlock(self, db: syntax.DoBlock, env):
 		for s in db.steps:
 			self.visit(s, env)
+	
+	def visit_AsTask(self, at: syntax.AsTask, env):
+		self.visit(at.sub, env)
 
 class _ResolutionPass(TopDown):
 	globals: NS

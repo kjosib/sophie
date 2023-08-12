@@ -156,19 +156,20 @@ class Actor(Task):
 	def __init__(self):
 		self._mutex = Lock()  # Protects the mailbox for this actor
 		self._mailbox = None
-		
-	def proceed(self):
+	
+	def batch_of_messages(self):
 		# Atomically harvest a batch of queued-up messages,
-		# thus to minimize the time holding the mutex:
+		# thus to minimize the time and frequency of holding the mutex:
 		self._mutex.acquire()
 		mailbox = self._mailbox
 		self._mailbox = None
 		self._mutex.release()
-		
-		# Do work:
-		for message in mailbox:
+		return mailbox
+	
+	def proceed(self):
+		for message in self.batch_of_messages():
 			self.handle(*message)
-
+	
 	def accept_message(self, method_name, args):
 		self._mutex.acquire()
 		if self._mailbox is None:

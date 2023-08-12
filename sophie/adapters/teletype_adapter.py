@@ -1,6 +1,6 @@
 import sys
 import random
-from ..runtime import iterate_list, force, Procedure, AsyncTask
+from ..runtime import iterate_list, force, Message
 from ..scheduler import NativeObjectProxy, MAIN_QUEUE
 
 NIL : dict
@@ -37,21 +37,12 @@ class Console:
 		sys.stdout.flush()
 
 	@staticmethod
-	def read(target:Procedure):
-		print(target)
-		message = target.apply([input()])
-		# FIXME: In principle, the target could be a bound-method,
-		#  in which case the "message" here would be for sure a MessageAction
-		#  instead of a thunk to an action. In such cases, it might be worth
-		#  delivering such a message directly rather than sending it around
-		#  the mulberry bush to get trivially forced.
-		MAIN_QUEUE.insert_task(AsyncTask(message))
+	def read(target:Message):
+		target.dispatch_with(input())
 
 	@staticmethod
-	def random(target:Procedure):
-		message = target.apply([random.random()])
-		# FIXME: Same issue as above.
-		MAIN_QUEUE.insert_task(AsyncTask(message))
+	def random(target:Message):
+		target.dispatch_with(random.random())
 
 console = NativeObjectProxy(Console())
 

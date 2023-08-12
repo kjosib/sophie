@@ -683,7 +683,7 @@ class DeductionEngine(Visitor):
 		assert isinstance(field_spec, syntax.FormalParameter), field_spec
 		return ManifestBuilder(parameters, lhs_type.type_args).visit(field_spec.type_expr)
 
-	def visit_BoundMethod(self, mr:syntax.BoundMethod, env:TYPE_ENV) -> SophieType:
+	def visit_BindMethod(self, mr:syntax.BindMethod, env:TYPE_ENV) -> SophieType:
 		lhs_type = self.visit(mr.receiver, env)
 		if lhs_type is ERROR: return ERROR
 		if isinstance(lhs_type, InterfaceType):
@@ -720,6 +720,10 @@ class DeductionEngine(Visitor):
 				self._report.bad_type(env, step, primitive.literal_act, step_type)
 				answer = ERROR
 		return answer
+	
+	def visit_AsTask(self, at:syntax.AsTask, env:TYPE_ENV) -> SophieType:
+		# TODO: Change this once message-types are a thing.
+		return self.visit(at.sub, env)
 
 def _hypothesis(st:Symbol, type_args:Sequence[SophieType]) -> SubType:
 	assert isinstance(st, syntax.SubTypeSpec)
