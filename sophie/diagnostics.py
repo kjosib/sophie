@@ -209,7 +209,7 @@ class Report:
 		problem = [Annotation(env.path(), expr.head(), complaint)]
 		self._issues.append(Pic(intro, problem+trace_stack(env)))
 
-	def bad_message(self, env:TYPE_ENV, expr:syntax.BoundMethod, agent_type:SophieType):
+	def bad_message(self, env:TYPE_ENV, expr:syntax.BindMethod, agent_type:SophieType):
 		intro = "This %s does not understand..."%agent_type
 		problem = [Annotation(env.path(), expr.method_name.head(), "this message")]
 		self._issues.append(Pic(intro, problem+trace_stack(env)))

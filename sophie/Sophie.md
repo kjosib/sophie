@@ -79,6 +79,7 @@ The commonality is as follows:
 ```
 generic(item)  -> reference optional(square_list(item))   :TypeCall
 arrow_of(item) -> round_list(item) '->' item              :ArrowSpec
+                | '&' optional(round_list(item))          :MessageSpec
 ```
 -----
 **Parameter Type Assumptions:**
@@ -192,7 +193,8 @@ observable outcomes, with just a few extra production rules.
 
 ```
 expr -> SKIP       :Skip
-      | expr '!' name       :BoundMethod
+      | '&' expr       :AsTask
+      | expr '!' name       :BindMethod
       | with_agents DO semicolon_list(expr) END     :DoBlock
 
 with_agents -> :empty | WITH semicolon_list(new_agent)
@@ -201,6 +203,7 @@ new_agent -> name ':=' expr   :NewAgent
 
 * The SKIP action does nothing, but means Sophie does not need single-branch conditionals.
   It can also have a place in case-expressions.
+* The ampersand (`&`) turns an action into a message.
 * The exclamation point for sending messages is attested in a few languages.
   I suspect there's benefit to distinguishing method/message-binding from field access.
 * The do-block expresses sequence, packaging several actions into one.
@@ -254,6 +257,7 @@ round_list(x) -> '(' comma_list(x) ')'
 
 ```
 %bogus UMINUS
+%nonassoc '&'
 %left '(' '[' '.'
 %right '^'
 %left '*' '/' '%' DIV MOD
@@ -271,7 +275,7 @@ This next bit tells the parser-generator how to tell which terminals have semant
 and therefore get passed to a production rule's action:
 ```
 %void_set UPPER
-%void '(' ')' '[' ']' '.' ',' ';' ':' '=' '@' '!'
+%void '(' ')' '[' ']' '.' ',' ';' ':' '=' '@' '!' '&'
 ```
 
 ## Definitions
