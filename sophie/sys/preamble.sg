@@ -64,8 +64,8 @@ type:
 
 	Console is agent:
 		echo(list[string]);
-		read((string)->act);
-		random((number)->act);
+		read(!(string));
+		random(!(number));
 	end;
 	
 define:

@@ -39,7 +39,7 @@ Here's an excerpt for that part::
         ...
     begin:
         console ! echo(intro);
-        console ! random(game);
+        console ! random(!game);
 
 Already we see a few new concepts at work.
 Let's work through this part from the bottom up.
@@ -54,11 +54,21 @@ Let's work through this part from the bottom up.
     So let's call it an *agent* instead. You can send an agent a message,
     and the agent can do something in response whenever the message arrives.
     Your program will not stop to wait for that response, but will continue computing.
+    Indeed you can have many agents operating concurrently,
+    and they will not step on each other's toes.
     This is what is meant by "asynchronous message-passing".
 
-    Syntax such as ``console ! echo(intro)`` means to send the message ``echo``,
+``console ! echo(intro)``
+    This means to send the message ``echo``,
     with single argument ``intro``, to the agent called ``console``.
     And to be clear, it means the *idea* of that action.
+
+    Here, ``console`` is the *receiver*. Any single receiver will handle its
+    own incoming messages in the order they arrive. And messages sent from
+    one agent to another will arrive in the order they were sent.
+    However, messages from *different* sources may arrive at the same
+    destination in any interleaving that respects the rules above.
+    (The ``begin:`` block is considered a single source.)
 
 Actions are values.
     You can pass them around to functions, hold them in data structures,
@@ -78,13 +88,29 @@ Actions are values.
     The ``random`` message asks the console to:
     
     1.  Pick a real number at random in the half-open range [0, 1).
-    2.  Send that number to by way of ``random``'s own argument.
+    2.  Send that number *via message* to ... somewhere. I'll explain.
 
-    In this example, that means ``game`` gets the number.
-    As you can see, ``game`` is just a function of one argument.
-    What may be less obvious here is that ``game`` is also expected
-    evaluate to some action of its own, but that's just how ``random``
-    uses its argument. It's not baked into the idea of message-passing.
+``game``
+    By now you know that ``game`` is a function which takes a single argument.
+    (In this case, that argument is a number that determines the goal of the game.)
+    The *result* of calling ``game`` is some *action* which can take place.
+    And in **Sophie**, the only way to make action happen is to send messages around.
+    In particular, we'll soon see how ``game(r)`` represents the *procedure* of
+    sending messages precisely orchestrated to implement a simple children's game.
+
+``!game``
+    The ``game`` function evaluates to the *procedure* to play the game.
+    But the ``console``'s ``random`` message does not expect a procedure.
+    It expects to send a message.
+
+    We can use that same mark ``!`` to construct *the message* to play the game.
+    That message, ``!game``, takes one parameter just like the ``game`` from which it is built.
+    Sending such a message would result in a game getting played.
+
+    This message has no *receiver*, so it will not synchronize on any particular agent.
+    Therefore in principle you could have many games operating at once.
+    That would rapidly get confusing for a game like this,
+    but sometimes such *concurrent processing* is just what the doctor ordered.
 
 Asking for Input: Sequence
 ...........................
@@ -96,7 +122,7 @@ It's job is to prompt for a guess and then interpret that guess as either too hi
         goal = int(r*100)+1;
         turn(score) = do
             console ! echo ["What is your guess? "];
-            console ! read(guess);
+            console ! read(!guess);
         end where
         ...
     ...

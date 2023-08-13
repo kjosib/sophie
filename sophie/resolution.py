@@ -391,9 +391,14 @@ class _WordResolver(_ResolutionPass):
 		for ms in i.spec:
 			assert isinstance(ms, syntax.MethodSpec)
 			self.visit(ms, i.param_space)
+	
 	def visit_MethodSpec(self, ms:syntax.MethodSpec, env:NS):
 		for tx in ms.type_exprs:
 			self.visit(tx, env)
+	
+	def visit_MessageSpec(self, ms:syntax.MessageSpec, env:NS):
+		for a in ms.type_exprs:
+			self.visit(a, env)
 	
 	def visit_TypeCall(self, tc:syntax.TypeCall, env:NS):
 		self.visit(tc.ref, env)
@@ -539,7 +544,11 @@ class _AliasChecker(Visitor):
 			assert isinstance(ms, syntax.MethodSpec)
 			for tx in ms.type_exprs:
 				self.visit(tx)
-	
+
+	def visit_MessageSpec(self, ms: syntax.MessageSpec):
+		for a in ms.type_exprs:
+			self.visit(a)
+
 	def visit_ExplicitTypeVariable(self, expr:syntax.ExplicitTypeVariable): pass
 	def visit_ImplicitTypeVariable(self, it:syntax.ImplicitTypeVariable): pass
 

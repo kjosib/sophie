@@ -75,6 +75,14 @@ class ArrowSpec(SimpleType):
 	def head(self) -> slice: return self._head
 	def can_construct(self) -> bool: return False
 
+class MessageSpec(SimpleType):
+	type_exprs: Sequence[ARGUMENT_TYPE]
+	def __init__(self, _head, type_exprs):
+		self._head = _head
+		self.type_exprs = type_exprs or ()
+	def head(self): return self._head
+	def can_construct(self) -> bool: return False
+
 class TypeCall(SimpleType):
 	def __init__(self, ref: Reference, arguments: Optional[Sequence[ARGUMENT_TYPE]] = ()):
 		assert isinstance(ref, Reference)
@@ -238,14 +246,17 @@ class FieldReference(ValExpr):
 	def head(self) -> slice: return self.field_name.head()
 
 class BindMethod(ValExpr):
-	def __init__(self, receiver: ValExpr, method_name: Nom):
+	def __init__(self, receiver: ValExpr, _bang, method_name: Nom):
 		self.receiver, self.method_name = receiver, method_name
+		self._head = slice(_bang.start, method_name.head().stop)
 	def __str__(self): return "(%s.%s)" % (self.receiver, self.method_name.text)
-	def head(self) -> slice: return self.method_name.head()
+	def head(self) -> slice: return self._head
 
 class AsTask(ValExpr):
-	def __init__(self, sub:ValExpr): self.sub = sub
-	def head(self) -> slice: return self.sub.head()
+	def __init__(self, head:slice, sub:ValExpr):
+		self._head = head
+		self.sub = sub
+	def head(self) -> slice: return self._head
 
 class BinExp(ValExpr):
 	def __init__(self, glyph: str, lhs: ValExpr, o:slice, rhs: ValExpr):

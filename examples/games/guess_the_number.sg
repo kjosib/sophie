@@ -6,7 +6,7 @@ game(r) = turn(1) where
     goal = int(r*100)+1;
     turn(score) = do
         console ! echo ["What is your guess? "];
-        console ! read(&guess);
+        console ! read(!guess);
     end where
         guess(g) = case val(g) as v of
             this -> consider(int(v.item));
@@ -27,5 +27,5 @@ end game;
 
 begin:
     console ! echo(intro);
-    console ! random(&game);
+    console ! random(!game);
 
