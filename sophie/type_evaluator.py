@@ -23,8 +23,8 @@ from .calculus import (
 	SophieType, TypeVisitor,
 	OpaqueType, ProductType, ArrowType, TypeVariable,
 	RecordType, SumType, SubType, TaggedRecord, EnumType,
-	UDFType, InterfaceType,
-	BOTTOM, ERROR,
+	UDFType, InterfaceType, MessageType, UserTaskType,
+	BOTTOM, ERROR, MESSAGE_READY_TO_SEND
 )
 
 class DependencyPass(TopDown):
@@ -193,6 +193,13 @@ class ManifestBuilder(Visitor):
 	
 	def visit_ArrowSpec(self, spec:syntax.ArrowSpec):
 		return ArrowType(self._make_product(spec.lhs), self.visit(spec.rhs))
+	
+	def visit_MessageSpec(self, ms:syntax.MessageSpec) -> SophieType:
+		if ms.type_exprs:
+			product = self._make_product(ms.type_exprs)
+			return MessageType(product).exemplar()
+		else:
+			return MESSAGE_READY_TO_SEND
 
 class Rewriter(TypeVisitor):
 	def __init__(self, gamma:dict):
@@ -302,6 +309,18 @@ class Binder(Visitor):
 	def visit_RecordType(self, formal: RecordType, actual: SophieType):
 		if isinstance(actual, RecordType) and formal.symbol is actual.symbol:
 			self.parallel(formal.type_args, actual.type_args)
+		else:
+			self.fail()
+	
+	def visit_MessageType(self, formal: MessageType, actual: SophieType):
+		if isinstance(actual, MessageType):
+			return self.visit(formal.arg, actual.arg)
+		elif isinstance(actual, UserTaskType):
+			if len(actual.udf_type.fn.params) != len(formal.arg.fields):
+				self.fail()
+			else:
+				result = self._engine.apply_UDF(actual.udf_type, formal.arg.fields, self._dynamic_link)
+				self.bind(primitive.literal_act, result)
 		else:
 			self.fail()
 
@@ -722,8 +741,17 @@ class DeductionEngine(Visitor):
 		return answer
 	
 	def visit_AsTask(self, at:syntax.AsTask, env:TYPE_ENV) -> SophieType:
-		# TODO: Change this once message-types are a thing.
-		return self.visit(at.sub, env)
+		def is_act(t): return t.number == primitive.literal_act.number
+		inner = self.visit(at.sub, env)
+		if is_act(inner):
+			return MESSAGE_READY_TO_SEND
+		elif isinstance(inner, ArrowType) and is_act(inner.res):
+			return MessageType(inner.arg).exemplar()
+		elif isinstance(inner, UDFType):
+			return UserTaskType(inner)
+		else:
+			self._report.bad_type(env, at.sub, "procedure", inner)
+			return ERROR
 
 def _hypothesis(st:Symbol, type_args:Sequence[SophieType]) -> SubType:
 	assert isinstance(st, syntax.SubTypeSpec)

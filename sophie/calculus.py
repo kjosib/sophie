@@ -124,6 +124,15 @@ class ArrowType(SophieType):
 		super().__init__(self.arg, self.res)
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_arrow(self)
 
+class MessageType(SophieType):
+	# Does not overload ArrowType because messages have *operational* semantics,
+	# while arrows do not.
+	def __init__(self, arg: ProductType):
+		self.arg = arg
+		super().__init__(self.arg)
+
+	def visit(self, visitor: "TypeVisitor"): return visitor.on_message(self)
+
 class UDFType(SophieType):
 	fn: syntax.UserFunction
 	static_env: TYPE_ENV
@@ -138,6 +147,14 @@ class UDFType(SophieType):
 		#       Only DeductionEngine.visit_Lookup creates these, so it could provide the capture.
 		super().__init__(object())
 
+class UserTaskType(SophieType):
+	""" The type of a task-ified user-defined (parametric) function. """
+	def __init__(self, udf_type:UDFType):
+		assert udf_type.fn.params
+		self.udf_type = udf_type.exemplar()
+		super().__init__(self.udf_type)
+	def visit(self, visitor: "TypeVisitor"): return visitor.on_user_task(self)
+
 class InterfaceType(SophieType):
 	def __init__(self, symbol:syntax.Interface, type_args: Iterable[SophieType]):
 		assert type(symbol) is syntax.Interface
@@ -150,12 +167,12 @@ class InterfaceType(SophieType):
 class _Bottom(SophieType):
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_bottom()
 
-BOTTOM = _Bottom(None)
-
 class _Error(SophieType):
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_error_type()
 
+BOTTOM = _Bottom(None)
 ERROR = _Error(None)
+MESSAGE_READY_TO_SEND = MessageType(ProductType(()).exemplar())
 
 ###################
 #
@@ -171,6 +188,8 @@ class TypeVisitor:
 	def on_product(self, p:ProductType): raise NotImplementedError(type(self))
 	def on_udf(self, f:UDFType): raise NotImplementedError(type(self))
 	def on_interface(self, a:InterfaceType): raise NotImplementedError(type(self))
+	def on_message(self, m:MessageType): raise NotImplementedError(type(self))
+	def on_user_task(self, t:UserTaskType): raise NotImplementedError(type(self))
 	def on_bottom(self): raise NotImplementedError(type(self))
 	def on_error_type(self): raise NotImplementedError(type(self))
 
@@ -206,6 +225,10 @@ class Render(TypeVisitor):
 		return "<%s/%d>"%(f.fn.nom.text, len(f.fn.params))
 	def on_interface(self, a:InterfaceType):
 		return "<agent:%s>"%a.symbol.nom.text
+	def on_message(self, m: MessageType):
+		return "!" if m.arg is None else "!"+m.arg.visit(self)
+	def on_user_task(self, t: UserTaskType):
+		return "!" + t.udf_type.visit(self)
 	def on_bottom(self):
 		return "?"
 	def on_error_type(self):

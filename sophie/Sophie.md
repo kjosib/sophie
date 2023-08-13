@@ -79,7 +79,7 @@ The commonality is as follows:
 ```
 generic(item)  -> reference optional(square_list(item))   :TypeCall
 arrow_of(item) -> round_list(item) '->' item              :ArrowSpec
-                | '&' optional(round_list(item))          :MessageSpec
+                | '!' optional(round_list(item))          :MessageSpec
 ```
 -----
 **Parameter Type Assumptions:**
@@ -193,7 +193,7 @@ observable outcomes, with just a few extra production rules.
 
 ```
 expr -> SKIP       :Skip
-      | '&' expr       :AsTask
+      | '!' expr       :AsTask
       | expr '!' name       :BindMethod
       | with_agents DO semicolon_list(expr) END     :DoBlock
 
@@ -203,9 +203,9 @@ new_agent -> name ':=' expr   :NewAgent
 
 * The SKIP action does nothing, but means Sophie does not need single-branch conditionals.
   It can also have a place in case-expressions.
-* The ampersand (`&`) turns an action into a message.
-* The exclamation point for sending messages is attested in a few languages.
+* The exclamation point (a.k.a. "bang`!`" operator) for sending messages is attested in a few languages.
   I suspect there's benefit to distinguishing method/message-binding from field access.
+* If there's no left-hand side on the bang operator, then we can assume the "message" is to call a procedure asynchronously.
 * The do-block expresses sequence, packaging several actions into one.
 
 One sort of action remains: To create a new instance of some agent-class.
@@ -257,7 +257,7 @@ round_list(x) -> '(' comma_list(x) ')'
 
 ```
 %bogus UMINUS
-%nonassoc '&'
+%nonassoc  '!'
 %left '(' '[' '.'
 %right '^'
 %left '*' '/' '%' DIV MOD
@@ -266,8 +266,6 @@ round_list(x) -> '(' comma_list(x) ')'
 %left NOT
 %left AND OR
 
-%nonassoc  '!'
-
 %right '->' IF ELSE
 ```
 
@@ -275,7 +273,7 @@ This next bit tells the parser-generator how to tell which terminals have semant
 and therefore get passed to a production rule's action:
 ```
 %void_set UPPER
-%void '(' ')' '[' ']' '.' ',' ';' ':' '=' '@' '!' '&'
+%void '(' ')' '[' ']' '.' ',' ';' ':' '=' '@'
 ```
 
 ## Definitions
