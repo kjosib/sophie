@@ -71,7 +71,6 @@ class ThreadPoolScheduler:
 	
 	def _all_idle(self):
 		self.main_thread.insert_task(ALL_DONE)
-		#self._all_done.release()
 
 	def _more_busy(self):
 		self._nr_busy += 1
