@@ -20,10 +20,14 @@ It also appears that, once initialized, you can operate the display from a diffe
 Right now PyGame appears to hold the GIL more than it might, but this is far from relevant.
 
 """
+import os
+os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
 import sys, pygame
+from typing import Optional
+
 import pygame.gfxdraw
-from ..runtime import iterate_list, force, Function
-from ..scheduler import Actor, NativeObjectProxy, MAIN_QUEUE
+from ..runtime import iterate_list, force, Message, Action
+from ..scheduler import NativeObjectProxy, MAIN_QUEUE
 
 def sophie_init():
 	return {
@@ -55,6 +59,17 @@ def run_game(env, screen):
 		
 		pygame.display.flip()
 
+def rect(x,y): return {"x":x, "y":y}
+def mouse_event(event): return {
+	"pos":rect(*event.pos),
+	"rel":rect(*event.rel),
+	"left":event.buttons[0],
+	"middle":event.buttons[1],
+	"right":event.buttons[2],
+	"is_touch":event.touch,
+}
+def button_event(event): return {"pos":rect(*event.pos), "button":event.button, "is_touch":event.touch}
+def key_event(event): return {"unicode":event.unicode, "key":event.key, "mods":event.mod, "scancode":event.scancode}
 
 class GameLoop:
 	"""
@@ -66,38 +81,61 @@ class GameLoop:
 	The alt-F4 quit-key combination comes across as a quit event, though.
 	"""
 	def __init__(self):
-		self._on_quit = None
-		self._on_mouse = None
-		self._on_button_down = None
-		self._on_button_up = None
-		self._on_key_down = None
-		self._on_key_up = None
-		self._on_tick = None
+		self._on_quit:Optional[Action] = None
+		self._on_mouse:Optional[Message] = None
+		self._on_button_down:Optional[Message] = None
+		self._on_button_up:Optional[Message] = None
+		self._on_key_down:Optional[Message] = None
+		self._on_key_up:Optional[Message] = None
+		self._on_tick:Optional[Message] = None
 	pass
+	
+	def on_quit(self, action:Action): self._on_quit = action
+	def on_mouse(self, message:Message): self._on_mouse = message
+	def on_button_down(self, message:Message): self._on_button_down = message
+	def on_button_up(self, message:Message): self._on_button_up = message
+	def on_key_down(self, message:Message): self._on_key_down = message
+	def on_key_up(self, message:Message): self._on_key_up = message
+	def on_tick(self, message:Message): self._on_tick = message
 
 	def play(self, size, fps):
 		pygame.init()
 		width, height = force(size['x']), force(size['y'])
 		display = pygame.display.set_mode((width, height))
+		display_actor = NativeObjectProxy(SurfaceProxy(display))
 
 		clock = pygame.time.Clock()
 		while True:
 			for event in pygame.event.get():
-				# Give Sophie code a chance to update the model based on an event.
 				if event.type == pygame.QUIT:
+					if self._on_quit is not None:
+						self._on_quit.perform()
 					return
+				elif event.type == pygame.MOUSEMOTION and self._on_mouse is not None:
+					self._on_mouse.dispatch_with(mouse_event(event))
+				elif event.type == pygame.MOUSEBUTTONDOWN and self._on_button_down is not None:
+					self._on_button_down.dispatch_with(button_event(event))
+				elif event.type == pygame.MOUSEBUTTONUP and self._on_button_down is not None:
+					self._on_button_up.dispatch_with(button_event(event))
+				elif event.type == pygame.KEYDOWN and self._on_key_down is not None:
+					self._on_key_down.dispatch_with(key_event(event))
+				elif event.type == pygame.KEYUP and self._on_key_up is not None:
+					self._on_key_up.dispatch_with(key_event(event))
 
 			clock.tick(fps)
 			if self._on_tick is not None:
-				self._on_tick.dispatch_with(display)
+				self._on_tick.dispatch_with(display_actor)
+			pygame.display.flip()
 			
 		pass
 		
 
-class Display(Actor):
-	""" For now, wraps parts of gfxdraw because gfxdraw releases the gil. """
+class SurfaceProxy:
+	""" Wrap parts of gfxdraw because gfxdraw releases the gil. """
+	def __init__(self, surface):
+		self._surface = surface
 	pass
 
-game_loop = NativeObjectProxy(GameLoop())
-game_loop.TASK_QUEUE = MAIN_QUEUE.main_thread
-display = NativeObjectProxy(Display())
+events = NativeObjectProxy(GameLoop())
+events.TASK_QUEUE = MAIN_QUEUE.main_thread
+

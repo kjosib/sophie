@@ -5,13 +5,34 @@
 # For now, it's just a spike.
 
 import:
-    foreign "sophie.adapters.game_adapter"();
+    foreign "sophie.adapters.game_adapter"() where
+        events : GameLoop;
+    end;
 
 type:
     screen is (size:rect, background:color);
     color is (red:number, green:number, blue:number);
     rect is (x:number, y:number);
     polar is (magnitude:number, angle:number);  # Angle in radians, presumably.
+
+    GameLoop is agent:
+        play(rect, number);
+        on_quit(!);
+        on_mouse(!(mouse_event));
+        on_button_down(!(button_event));
+        on_button_up(!(button_event));
+        on_key_down(!(key_event));
+        on_key_up(!(key_event));
+    end;
+    
+    mouse_event is (
+        pos : rect, rel : rect,
+        left : flag, middle : flag, right : flag,
+        is_touch : flag,
+    );
+
+    button_event is (pos:rect, button:number, is_touch:flag);
+    key_event is (unicode:string, key:number, mods:number, scancode:number);
 
 assume:
     r, r1, r2 : rect;
