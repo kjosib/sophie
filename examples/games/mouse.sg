@@ -2,14 +2,19 @@
 # The simplest might be to print mouse events.
 
 import:
-sys."game" as game (events, rect);
+sys."game" as game (events, rect, color, fill);
 
 define:
     print_mouse_event(e) = do
-        console!echo["mouse ", str(e.pos.x), ",", str(e.pos.y), EOL];
+        console!echo ["mouse ", str(e.pos.x), ",", str(e.pos.y), EOL];
+    end;
+    
+    go_green(display) = do
+        display ! draw [ fill(color(0,$99,0)) ];
     end;
 
 begin:
     events ! on_mouse( !print_mouse_event );
+    events ! on_tick( !go_green );
     events ! play( rect(800, 600), 60);
 end.
