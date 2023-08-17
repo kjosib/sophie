@@ -23,6 +23,7 @@ type:
         on_button_up(!(button_event));
         on_key_down(!(key_event));
         on_key_up(!(key_event));
+        on_tick(!(display));
     end;
     
     mouse_event is (
@@ -33,6 +34,18 @@ type:
 
     button_event is (pos:rect, button:number, is_touch:flag);
     key_event is (unicode:string, key:number, mods:number, scancode:number);
+    
+    display is agent:
+        draw(list[pic]);
+        # Maybe eventually some messages for setting screen mode, or grabs, or whatnot.
+    end;
+    
+    pic is case:
+        fill(color:color);
+        # Soon more things you can draw on a surface.
+        # Eventually add (native) functions to create intermediate surfaces.
+        # Ideally, memoization takes care of not reloading images too frequently.
+    esac;
 
 assume:
     r, r1, r2 : rect;

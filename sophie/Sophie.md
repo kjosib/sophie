@@ -293,6 +293,7 @@ As with the parser, the scan-actions are given by `:words`.
 An action consisting of the `|` vertical-bar character means to use the identical action as the following rule.
 ```
 {wholeNumber}           :integer
+\${hex}+                :hexadecimal
 {real}                  :real
 [{alpha}_]{word}*       :word
 \"[^"\v]*\"             |

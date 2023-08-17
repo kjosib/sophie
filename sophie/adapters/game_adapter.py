@@ -24,8 +24,8 @@ import os
 os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
 import sys, pygame
 from typing import Optional
+from pygame import gfxdraw
 
-import pygame.gfxdraw
 from ..runtime import iterate_list, force, Message, Action
 from ..scheduler import NativeObjectProxy, MAIN_QUEUE
 
@@ -102,7 +102,7 @@ class GameLoop:
 		pygame.init()
 		width, height = force(size['x']), force(size['y'])
 		display = pygame.display.set_mode((width, height))
-		display_actor = NativeObjectProxy(SurfaceProxy(display))
+		display_actor = NativeObjectProxy(DisplayProxy(display))
 
 		clock = pygame.time.Clock()
 		while True:
@@ -125,16 +125,23 @@ class GameLoop:
 			clock.tick(fps)
 			if self._on_tick is not None:
 				self._on_tick.dispatch_with(display_actor)
-			pygame.display.flip()
-			
 		pass
 		
 
-class SurfaceProxy:
-	""" Wrap parts of gfxdraw because gfxdraw releases the gil. """
-	def __init__(self, surface):
-		self._surface = surface
-	pass
+class DisplayProxy:
+	
+	def __init__(self, display):
+		self._display = display
+	
+	def draw(self, pic):
+		for step in iterate_list(pic):
+			tag = step.pop("")
+			getattr(self, "_"+tag)(*map(force, step.values()))
+		pygame.display.flip()
+	
+	def _fill(self, color):
+		r,g,b = force(color["red"]), force(color["green"]), force(color["blue"])
+		self._display.fill((r,g,b))
 
 events = NativeObjectProxy(GameLoop())
 events.TASK_QUEUE = MAIN_QUEUE.main_thread

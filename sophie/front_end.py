@@ -17,34 +17,53 @@ class SophieParseError(ParseError):
 
 _tables = make_tables(Path(__file__).parent/"Sophie.md")
 _parse_table = _tables['parser']
+RESERVED = frozenset(t for t in _parse_table["terminals"] if t.isupper() and t.isalpha())
 
 class SophieParser(TypicalApplication):
-	RESERVED = frozenset(t for t in _parse_table["terminals"] if t.isupper() and t.isalpha())
 	
 	def scan_ignore(self, yy: IterableScanner): pass
-	def scan_punctuation(self, yy: IterableScanner):
+
+	@staticmethod
+	def scan_punctuation(yy: IterableScanner):
 		punctuation = sys.intern(yy.match())
 		yy.token(punctuation, yy.slice())
-	def scan_integer(self, yy: IterableScanner): yy.token("integer", syntax.Literal(int(yy.match()), yy.slice()))
-	def scan_real(self, yy: IterableScanner): yy.token("real", syntax.Literal(float(yy.match()), yy.slice()))
-	def scan_short_string(self, yy: IterableScanner): yy.token("short_string", syntax.Literal(yy.match()[1:-1], yy.slice()))
 	
-	def scan_word(self, yy: IterableScanner):
+	@staticmethod
+	def scan_integer(yy: IterableScanner): yy.token("integer", syntax.Literal(int(yy.match()), yy.slice()))
+	
+	@staticmethod
+	def scan_hexadecimal(yy: IterableScanner):
+		yy.token("integer", syntax.Literal(int(yy.match()[1:], 16), yy.slice()))
+	
+	@staticmethod
+	def scan_real(yy: IterableScanner): yy.token("real", syntax.Literal(float(yy.match()), yy.slice()))
+	
+	@staticmethod
+	def scan_short_string(yy: IterableScanner): yy.token("short_string", syntax.Literal(yy.match()[1:-1], yy.slice()))
+	
+	@staticmethod
+	def scan_word(yy: IterableScanner):
 		upper = yy.match().upper()
-		if upper in self.RESERVED: yy.token(upper, yy.slice())
+		if upper in RESERVED: yy.token(upper, yy.slice())
 		else: yy.token("name", syntax.Nom(sys.intern(yy.match()), yy.slice()))
 	
-	def scan_relop(self, yy: IterableScanner, op:str):
+	@staticmethod
+	def scan_relop(yy: IterableScanner, op:str):
 		yy.token("relop", op)
 	
-	def parse_nothing(self): return None
-	def parse_empty(self): return ()
-	def parse_first(self, item): return [item]
-	def parse_more(self, some, another):
+	@staticmethod
+	def parse_nothing(): return None
+	@staticmethod
+	def parse_empty(): return ()
+	@staticmethod
+	def parse_first(item): return [item]
+	@staticmethod
+	def parse_more(some, another):
 		some.append(another)
 		return some
 	
-	def default_parse(self, ctor, *args):
+	@staticmethod
+	def default_parse(ctor, *args):
 		return getattr(syntax, ctor)(*args)
 		
 	def unexpected_token(self, kind, semantic, pds):
@@ -129,6 +148,7 @@ _hint("BEGIN : semicolon_list(expr) expr ● <END>", "You need a semicolon after
 _hint("expr ● \"", "Seems to be missing some sort of operator before the string that starts here.")
 _hint("TYPE : ??? name ● =", "A type-name IS something, but a function = something.")
 _hint("TYPE : ??? name type_parameters ● =", "A type-name IS something, but a function = something.")
+_hint("CASE : semicolon_list(subtype) ● END", "Do you mean ESAC here?")
 
 assert _best_hint("export_section import_section TYPE : name square_list(name) IS".split(), 'OPAQUE')
 
