@@ -5,13 +5,8 @@ import:
 sys."game" as game (events, rect, color, fill);
 
 define:
-    print_mouse_event(e) = do
-        console!echo ["mouse ", str(e.pos.x), ",", str(e.pos.y), EOL];
-    end;
-    
-    go_green(display) = do
-        display ! draw [ fill(color(0,$99,0)) ];
-    end;
+    print_mouse_event(e) = console!echo ["mouse ", str(e.pos.x), ",", str(e.pos.y), EOL];
+    go_green(display) = display ! draw [ fill(color(0,$99,0)) ];
 
 begin:
     events ! on_mouse( !print_mouse_event );
