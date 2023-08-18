@@ -88,7 +88,7 @@ def _eval_call(expr:syntax.Call, dynamic_env:ENV):
 def _eval_cond(expr:syntax.Cond, dynamic_env:ENV):
 	if_part = _strict(expr.if_part, dynamic_env)
 	sequel = expr.then_part if if_part else expr.else_part
-	return delay(dynamic_env, sequel)
+	return evaluate(sequel, dynamic_env)
 
 def _eval_field_ref(expr:syntax.FieldReference, dynamic_env:ENV):
 	lhs = _strict(expr.lhs, dynamic_env)
@@ -114,7 +114,7 @@ def _eval_match_expr(expr:syntax.MatchExpr, dynamic_env:ENV):
 		branch = expr.otherwise
 		if branch is None:
 			raise RuntimeError("Confused by tag %r; should not be possible now that type-checking works."%tag)
-	return delay(dynamic_env, branch)
+	return evaluate(branch, dynamic_env)
 
 def _eval_do_block(expr:syntax.DoBlock, dynamic_env:ENV):
 	return CompoundAction(expr.steps, dynamic_env)
