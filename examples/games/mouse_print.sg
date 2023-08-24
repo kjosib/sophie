@@ -1,0 +1,15 @@
+# How can we read the mouse and respond to it?
+# The simplest might be to print mouse events.
+
+import:
+sys."game" as game (events, rect, color, fill);
+
+define:
+    print_mouse_event(e) = console!echo ["mouse ", str(e.pos.x), ",", str(e.pos.y), EOL];
+    go_green(display) = display ! draw [ fill(color(0,$99,0)) ];
+
+begin:
+    events ! on_mouse( !print_mouse_event );
+    events ! on_tick( !go_green );
+    events ! play( rect(800, 600), 60);
+end.

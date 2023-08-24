@@ -34,7 +34,7 @@ class ExampleSmokeTests(unittest.TestCase):
 				_good(examples, "turtle/"+name)
 
 	def test_game_examples_compile(self):
-		for name in ["guess_the_number", "99 bottles", "bouncing_ball"]:
+		for name in ["guess_the_number", "99 bottles", "bouncing_ball", "mouse_print", "mouse"]:
 			with self.subTest(name):
 				_good(examples, "games/"+name)
 

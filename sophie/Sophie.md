@@ -32,7 +32,7 @@ assume_section  -> ASSUME ':' semicolon_list(assumption)       | :empty
 define_section  -> DEFINE ':' semicolon_list(top_level)        | :empty
 main_section    -> BEGIN ':' semicolon_list(expr)              | :empty
 
-top_level -> function | actor
+top_level -> function | agent_definition
 ```
 
 Since I'd like Sophie to support a unit/module system,
@@ -195,10 +195,11 @@ observable outcomes, with just a few extra production rules.
 expr -> SKIP       :Skip
       | '!' expr       :AsTask
       | expr '!' name       :BindMethod
+      | name ':=' expr          :AssignField
       | with_agents DO semicolon_list(expr) END     :DoBlock
 
-with_agents -> :empty | WITH semicolon_list(new_agent)
-new_agent -> name ':=' expr   :NewAgent
+with_agents -> :empty | CAST semicolon_list(new_agent)
+new_agent -> name IS expr   :NewAgent
 ```
 
 * The SKIP action does nothing, but means Sophie does not need single-branch conditionals.
@@ -219,6 +220,25 @@ Thus, agents are created in procedural context, where it is perfectly fine to ha
 
 *Semantic Note:*
 Evidently the type system will need to distinguish between *agent-instance* and *agent-class.*
+
+-----
+
+**User-Defined Agent**
+
+On balance an actor-like thing (`agent`, in Sophie parlance) has state and behavior.
+For simplicity, let us *declare* that state with the same syntax as a record.
+The chief difference is that agent state is mutable (and so cannot be shared).
+
+There may be cause for stateless agents from time to time, so I'll make the state optional.
+```
+agent_definition -> AGENT name optional(round_list(field_dfn)) AS semicolon_list(behavior) END name  :UserAgent
+behavior -> TO name formals IS expr   :Behavior
+```
+The name gets repeated at the end of an `agent` definition.
+My motivation for this decision is the same as with functions that have subordinate `where` clauses.
+
+At least for now, I'll not entertain nesting amongst agents or behaviors.
+They're self-contained ... such as they are.
 
 -----
 **Foreign Function Interface**
@@ -265,7 +285,7 @@ round_list(x) -> '(' comma_list(x) ')'
 %left '<' '<=' '==' '!=' '>=' '>'
 %left NOT
 %left AND OR
-
+%nonassoc ':='
 %right '->' IF ELSE
 ```
 
@@ -273,7 +293,7 @@ This next bit tells the parser-generator how to tell which terminals have semant
 and therefore get passed to a production rule's action:
 ```
 %void_set UPPER
-%void '(' ')' '[' ']' '.' ',' ';' ':' '=' '@'
+%void '(' ')' '[' ']' '.' ',' ';' ':' '=' '@' ':='
 ```
 
 ## Definitions

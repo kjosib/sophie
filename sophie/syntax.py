@@ -209,15 +209,50 @@ class UserFunction(Term):
 		self.result_type_expr = expr_type
 		self.expr = expr
 		if where:
-			_bookend(nom, where.end_name)
+			_bookend(nom, where.coda)
 			self.where = where.sub_fns
 		else:
 			self.where = ()
 
-
 class WhereClause(NamedTuple):
 	sub_fns: Sequence[UserFunction]
-	end_name: Nom
+	coda: Nom
+
+class UserAgent(Term):
+	source_path: Path
+	field_space: NS
+	message_space: NS
+	def has_value_domain(self): return True
+	def head(self) -> slice: return self.nom.head()
+	def __init__(
+		self,
+		nom: Nom,
+		fields: Optional[Sequence[FormalParameter]],
+		behaviors: Sequence["Behavior"],
+		coda: Nom,
+	):
+		super().__init__(nom)
+		self.fields = fields or ()
+		self.behaviors = behaviors
+		_bookend(nom, coda)
+
+class Behavior(Term):
+	source_path: Path
+	namespace: NS
+	def has_value_domain(self): return True
+	def head(self) -> slice: return self.nom.head()
+	def __repr__(self):
+		p = ", ".join(map(str, self.params))
+		return "{to %s(%s)}" % (self.nom.text, p)
+	def __init__(
+		self,
+		nom: Nom,
+		params: Sequence[FormalParameter],
+		expr: ValExpr,
+	):
+		super().__init__(nom)
+		self.params = params or ()
+		self.expr = expr
 
 class Literal(ValExpr):
 	def __init__(self, value: Any, a_slice: slice):
@@ -346,7 +381,7 @@ class Alternative(Symbol):
 		self._head = _head
 		self.sub_expr = sub_expr
 		if where:
-			_bookend(pattern, where.end_name)
+			_bookend(pattern, where.coda)
 			self.where = where.sub_fns
 		else:
 			self.where = ()
@@ -393,6 +428,11 @@ class DoBlock(ValExpr):
 	def __init__(self, agents:list[NewAgent], steps:list[ValExpr]):
 		self.agents = agents
 		self.steps = steps
+
+class AssignField(ValExpr):
+	def __init__(self, nom:Nom, expr:ValExpr):
+		self.nom = nom
+		self.expr = expr
 
 class ImportSymbol(NamedTuple):
 	yonder : Nom
@@ -446,4 +486,5 @@ class Module:
 		self.outer_functions = functions
 		self.main = main
 	
-	def head(self): return slice(0,0)
+	@staticmethod
+	def head(): return slice(0,0)

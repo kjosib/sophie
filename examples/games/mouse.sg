@@ -1,15 +1,52 @@
-# How can we read the mouse and respond to it?
-# The simplest might be to print mouse events.
+# I want to encapsulate state in a reasonable way.
+# This illustrates a possibility.
+
+# The motivating example is to portray crossed lines that intersect at the mouse cursor.
+# That means carrying state from the mouse-move event through to the clock-tick event.
+
+# Because the fields on an agent/actor are mutable, it places constraints on laziness.
+# We see this sharply in the `to tick` behavior.
 
 import:
-sys."game" as game (events, rect, color, fill);
+sys."game" as game (events, rect, color, fill, white, hlin, vlin);
 
 define:
-    print_mouse_event(e) = console!echo ["mouse ", str(e.pos.x), ",", str(e.pos.y), EOL];
-    go_green(display) = display ! draw [ fill(color(0,$99,0)) ];
+    agent mouse_chaser( pos:rect ) as
+    
+        # Defined thus, presumably `mouse_chaser` is best understood as a concrete class.
+        # The constructor arguments are just a `rect` called `pos` locally.
+    
+        to mouse(e) is do
+            console ! echo ["mouse ", str(e.pos.x), ",", str(e.pos.y), EOL];
+            
+            pos := e.pos;   # Looks like assignment in Pascal.
+                            # Should there be a sigil for this/self/my?
+                            # OR should this simply return the subsequent state?
+        end;
+        
+        to tick(display) is display ! draw [
+            fill(color(0,$99,0)),   # Apple ][ style hexadecimal with dollar-sign.
+            
+            hlin(0, 599, pos.y, white),  # The `pos` must be evaluated strictly,
+            vlin(0, 799, pos.x, white),  # along with parent expressions,
+                                         # since it and they are volatile.
+        ];
+        
+    end mouse_chaser;
+    
+        # Defined thus, presumably `mouse_chaser` is best understood as a concrete class.
+        # The constructor 
+    
+    initial_state = mouse_chaser(rect(-1,-1));
+    
+    # This makes `initial_state` a more-specific template, not an actor in itself.
 
 begin:
-    events ! on_mouse( !print_mouse_event );
-    events ! on_tick( !go_green );
+    cast  # in order of appearance:
+        mc is initial_state;
+    do
+        events ! on_mouse(mc ! mouse);
+        events ! on_tick(mc ! tick);
+    end;
     events ! play( rect(800, 600), 60);
 end.

@@ -248,6 +248,22 @@ class _WordDefiner(_ResolutionPass):
 			self.visit(sub_fn, inner)
 		self.visit(udf.expr, inner)
 
+	def visit_UserAgent(self, uda:syntax.UserAgent, env:NS):
+		uda.source_path = self._source_path
+		self.roadmap.note_udf(uda)
+		self._install(env, uda)
+		field_space = uda.field_space = env.new_child(uda)
+		for f in uda.fields:
+			self.visit(f, field_space)
+		message_space = uda.message_space = NS(place=uda)
+		for behavior in uda.behaviors:
+			assert isinstance(behavior, syntax.Behavior)
+			self._install(message_space, behavior)
+			inner = behavior.namespace = field_space.new_child(behavior)
+			for param in behavior.params:
+				self.visit(param, inner)
+			self.visit(behavior.expr, inner)
+	
 	def visit_FormalParameter(self, fp:syntax.FormalParameter, env:NS):
 		self._install(env, fp)
 		if fp.type_expr is not None:
@@ -258,6 +274,9 @@ class _WordDefiner(_ResolutionPass):
 			self._install(env, syntax.TypeParameter(gt.nom))
 
 	def visit_Lookup(self, l:syntax.Lookup, env:NS): pass
+
+	def visit_AssignField(self, af:syntax.AssignField, env:NS):
+		return self.visit(af.expr, env)
 
 	def visit_MatchExpr(self, mx:syntax.MatchExpr, env:NS):
 		self.roadmap.note_match(mx)
