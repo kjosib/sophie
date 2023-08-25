@@ -1,6 +1,3 @@
-# I want to encapsulate state in a reasonable way.
-# This illustrates a possibility.
-
 # The motivating example is to portray crossed lines that intersect at the mouse cursor.
 # That means carrying state from the mouse-move event through to the clock-tick event.
 
@@ -18,18 +15,15 @@ define:
     
         to mouse(e) is do
             console ! echo ["mouse ", str(e.pos.x), ",", str(e.pos.y), EOL];
-            
-            pos := e.pos;   # Looks like assignment in Pascal.
-                            # Should there be a sigil for this/self/my?
-                            # OR should this simply return the subsequent state?
+            my pos := e.pos;  # Assignment should not look like equality.
         end;
         
         to tick(display) is display ! draw [
             fill(color(0,$99,0)),   # Apple ][ style hexadecimal with dollar-sign.
             
-            hlin(0, 599, pos.y, white),  # The `pos` must be evaluated strictly,
-            vlin(0, 799, pos.x, white),  # along with parent expressions,
-                                         # since it and they are volatile.
+            hlin(0, 599, self.pos.y, white),  # The `pos` must be evaluated strictly,
+            vlin(0, 799, self.pos.x, white),  # along with parent expressions,
+                                              # since it and they are volatile.
         ];
         
     end mouse_chaser;

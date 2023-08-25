@@ -28,7 +28,7 @@ class RoadMap:
 	module_scopes : dict[syntax.Module, NS]
 	import_alias : dict[syntax.Module, NS]
 	each_module : list[syntax.Module]
-	each_udf : list[syntax.UserFunction]
+	each_udf : list[Union[syntax.UserFunction, syntax.UserAgent]]
 	each_match : list[syntax.MatchExpr]
 	import_map : dict[syntax.ImportModule, syntax.Module]
 
@@ -138,10 +138,6 @@ class TopDown(Visitor):
 	def visit_ExplicitList(self, expr: syntax.ExplicitList, env):
 		for e in expr.elts:
 			self.visit(e, env)
-	
-	def visit_DoBlock(self, db: syntax.DoBlock, env):
-		for s in db.steps:
-			self.visit(s, env)
 	
 	def visit_AsTask(self, at: syntax.AsTask, env):
 		self.visit(at.sub, env)
@@ -259,7 +255,8 @@ class _WordDefiner(_ResolutionPass):
 		for behavior in uda.behaviors:
 			assert isinstance(behavior, syntax.Behavior)
 			self._install(message_space, behavior)
-			inner = behavior.namespace = field_space.new_child(behavior)
+			inner = behavior.namespace = env.new_child(behavior)
+			inner['SELF'] = uda
 			for param in behavior.params:
 				self.visit(param, inner)
 			self.visit(behavior.expr, inner)
@@ -274,7 +271,19 @@ class _WordDefiner(_ResolutionPass):
 			self._install(env, syntax.TypeParameter(gt.nom))
 
 	def visit_Lookup(self, l:syntax.Lookup, env:NS): pass
-
+	
+	def visit_DoBlock(self, db: syntax.DoBlock, env:NS):
+		if db.agents:
+			inner = env.new_child(db)
+			for new_agent in db.agents:
+				self.visit(new_agent.expr, env)
+				self._install(inner, new_agent)
+		else:
+			inner = env
+		db.namespace = inner
+		for s in db.steps:
+			self.visit(s, inner)
+	
 	def visit_AssignField(self, af:syntax.AssignField, env:NS):
 		return self.visit(af.expr, env)
 
@@ -432,6 +441,18 @@ class _WordResolver(_ResolutionPass):
 			self.visit(sym.result_type_expr, sym.namespace)
 		self.visit(sym.expr, sym.namespace)
 
+	def visit_UserAgent(self, uda:syntax.UserAgent):
+		for f in uda.fields:
+			self.visit(f.type_expr, uda.field_space)
+		for b in uda.behaviors:
+			self.visit(b, uda.field_space)
+	
+	def visit_Behavior(self, sym:syntax.Behavior, env:NS):
+		for param in sym.params:
+			if param.type_expr is not None:
+				self.visit(param.type_expr, sym.namespace)
+		self.visit(sym.expr, sym.namespace)
+
 	def visit_MatchExpr(self, mx:syntax.MatchExpr, env:NS):
 		self.visit(mx.subject.expr, env)
 		if mx.hint is not None:
@@ -448,6 +469,22 @@ class _WordResolver(_ResolutionPass):
 		dfn = lu.ref.dfn
 		if isinstance(dfn, syntax.TypeAlias) or not dfn.has_value_domain():
 			self.dubious_constructors.append(lu.ref)
+	
+	def visit_DoBlock(self, db: syntax.DoBlock, env:NS):
+		for new_agent in db.agents:
+			self.visit(new_agent.expr, env)
+		for s in db.steps:
+			self.visit(s, db.namespace)
+
+	def visit_AssignField(self, af:syntax.AssignField, env:NS):
+		try:
+			uda = env['SELF']
+		except NoSuchSymbol:
+			self.report.can_only_assign_within_behavior(af)
+		else:
+			assert isinstance(uda, syntax.UserAgent)
+			self._lookup(af.nom, uda.field_space)
+		return self.visit(af.expr, env)
 	
 	def visit_ImportForeign(self, d:syntax.ImportForeign):
 		for ref in d.linkage or ():
@@ -542,8 +579,7 @@ class _AliasChecker(Visitor):
 		self.visit(r.spec)
 	
 	def visit_RecordSpec(self, expr: syntax.RecordSpec):
-		for f in expr.fields:
-			self.visit(f)
+		self._tour(expr.fields)
 	
 	def visit_FormalParameter(self, param: syntax.FormalParameter):
 		if param.type_expr is not None:
@@ -572,8 +608,16 @@ class _AliasChecker(Visitor):
 	def visit_ImplicitTypeVariable(self, it:syntax.ImplicitTypeVariable): pass
 
 	def visit_UserFunction(self, sym:syntax.UserFunction):
-		for p in sym.params: self.visit(p)
-		if sym.result_type_expr: self.visit(sym.result_type_expr)
+		self._tour(sym.params)
+		if sym.result_type_expr:
+			self.visit(sym.result_type_expr)
+
+	def visit_UserAgent(self, sym:syntax.UserAgent):
+		self._tour(sym.fields)
+		self._tour(sym.behaviors)
+	
+	def visit_Behavior(self, b:syntax.Behavior):
+		self._tour(b.params)
 
 	def visit_ImportForeign(self, d:syntax.ImportForeign):
 		for group in d.groups:

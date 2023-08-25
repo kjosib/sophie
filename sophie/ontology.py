@@ -1,4 +1,3 @@
-from typing import Sequence
 from boozetools.support.symtab import NameSpace
 
 class Nom:

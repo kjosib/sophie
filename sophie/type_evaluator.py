@@ -70,7 +70,7 @@ class DependencyPass(TopDown):
 
 	def _walk_children(self, children: Sequence[syntax.UserFunction], parent):
 		for child in children: self._prepare(child, parent)
-		for child in children: self.visit_UserFunction(child, parent)
+		for child in children: self.visit(child, parent)
 
 	def _insert(self, param:syntax.FormalParameter, env:Symbol):
 		depends = self.depends[env]
@@ -147,6 +147,14 @@ class DependencyPass(TopDown):
 			self.visit(alt.sub_expr, mx.subject)
 		if mx.otherwise is not None:
 			self.visit(mx.otherwise, mx.subject)
+
+	def visit_DoBlock(self, db: syntax.DoBlock, env:Symbol):
+		for new_agent in db.agents:
+			self.visit(new_agent.expr, env)
+		for s in db.steps:
+			self.visit(s, env)
+
+
 
 class ArityError(Exception):
 	pass

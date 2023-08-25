@@ -44,6 +44,7 @@ import_symbol ->  name alias  :ImportSymbol
 alias -> AS name | :nothing
 
 reference -> name     :PlainReference
+  | .SELF              :SelfReference
   | name '@' name     :QualifiedReference
 ```
 
@@ -195,7 +196,7 @@ observable outcomes, with just a few extra production rules.
 expr -> SKIP       :Skip
       | '!' expr       :AsTask
       | expr '!' name       :BindMethod
-      | name ':=' expr          :AssignField
+      | MY name ':=' expr      :AssignField
       | with_agents DO semicolon_list(expr) END     :DoBlock
 
 with_agents -> :empty | CAST semicolon_list(new_agent)
