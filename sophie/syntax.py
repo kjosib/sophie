@@ -60,6 +60,10 @@ class QualifiedReference(Reference):
 	def head(self) -> slice:
 		return slice(self.nom.head().start, self.space.head().stop)
 
+def SelfReference(aSlice):
+	return PlainReference(Nom("SELF", aSlice))
+
+
 ARGUMENT_TYPE = Union[SimpleType, "ImplicitTypeVariable", "ExplicitTypeVariable"]
 
 class ArrowSpec(SimpleType):
@@ -425,6 +429,8 @@ class NewAgent(Symbol):
 	def has_value_domain(self) -> bool: return True
 
 class DoBlock(ValExpr):
+	namespace: NS  # WordDefiner fills
+
 	def __init__(self, agents:list[NewAgent], steps:list[ValExpr]):
 		self.agents = agents
 		self.steps = steps

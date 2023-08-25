@@ -42,6 +42,8 @@ type:
     
     pic is case:
         fill(color:color);
+        hlin(x1:number, x2:number, y:number, color:color);
+        vlin(x:number, y1:number, y2:number, color:color);
         # Soon more things you can draw on a surface.
         # Eventually add (native) functions to create intermediate surfaces.
         # Ideally, memoization takes care of not reloading images too frequently.
