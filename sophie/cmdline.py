@@ -21,6 +21,8 @@ Documentation: https://sophie.readthedocs.io/en/latest/
 import sys, argparse
 from pathlib import Path
 
+EXPERIMENT = "to skip the type checker"  # nothing
+
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 parser = argparse.ArgumentParser(
@@ -29,7 +31,7 @@ parser = argparse.ArgumentParser(
 )
 parser.add_argument("program", help="try examples/turtle.sg for example.")
 parser.add_argument('-c', "--check", action="count", help="Check the program verbosely but do not actually execute the program.")
-parser.add_argument('-x', "--experimental", action="store_true", help="Opt into experimental code, which is presently nothing.")
+parser.add_argument('-x', "--experimental", action="store_true", help="Opt into experiment-mode, which is presently %s."%EXPERIMENT)
 
 def run(args):
 	from .diagnostics import Report
@@ -43,11 +45,12 @@ def run(args):
 		report.complain_to_console()
 		return 1
 	assert report.ok()
-	DeductionEngine(roadmap, report)
-	if report.sick():
-		report.complain_to_console()
-		return 1
-	elif args.check:
+	if not args.experimental:
+		DeductionEngine(roadmap, report)
+		if report.sick():
+			report.complain_to_console()
+			return 1
+	if args.check:
 		print("Looks plausible to me.", file=sys.stderr)
 	else:
 		run_program(roadmap)
