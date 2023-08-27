@@ -81,6 +81,8 @@ def _prepare(env:Frame, namespace:ontology.NS):
 			env.assign(dfn, _native_object(dfn))
 		elif isinstance(dfn, syntax.UserFunction):
 			env.declare(dfn)
+		elif isinstance(dfn, syntax.UserAgent):
+			env.declare(dfn)
 		elif type(dfn) in _ignore_these:
 			pass
 		else:

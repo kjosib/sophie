@@ -18,9 +18,10 @@ The design goals, *in priority order,* are:
 7. A modular import system, probably with explicit exports.
 8. Strong type-correctness (without requiring type-annotations) so run-time troubles are few and far between.
 9. Foreign Function Interface.
-10. Multimethods. Better yet, related packages of multimethods. Possibly with default generic implementations.
-11. Asynchronous message-passing concurrency. Erlang is the inspiration here, but Sophie's messages are type-safe.
-12. Other nice things to have.
+10. Asynchronous message-passing concurrency. Erlang is the inspiration here, but Sophie's messages are type-safe.
+11. Multimethods. Better yet, related packages of multimethods. Possibly with default generic implementations.
+12. High-performance tensor math a'la numpy.
+13. Other nice things to have.
 
 When all is said and done, I'd like Sophie to be a viable alternative for learning (or deepening one's grasp of) comp-sci.
 The call-by-need pure-functional design gives Sophie a very different flavor from your average introductory language,

@@ -276,45 +276,6 @@ Also, some ansi color would be nice.
 I stumbled on a nice Python library for this sort of thing,
 but I forgot to write down the reference.
 
-Concurrency
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-I'm sold on the virtues of the *actor-model* of concurrency roughly as Erlang exemplifies it.
-However, Sophie will need a few adjustments to mix with pure-lazy-functional.
-
-* The *spawn-process* operation is fundamentally a nondeterministic action with environmental side-effects.
-  (It invents a different *PID* each time.) It cannot be a (pure) function, so it should not look like one.
-  It's effectively an I/O operation in its own right. You cannot have a (pure) function which, when called,
-  does something, because you do not get a concept of *when called* ~~ except in the case of actors.
-  Actors have a (local) time-line, so the *syntax to construct an action* needs to support spawning.
-
-* Sophie's current simplistic interpreter won't get preemption,
-  but an event-driven model makes a decent *(and reproducible)* proxy for exploring language semantics.
-  Later, we can *have nice things* if Sophie plays by the right rules.
-
-I don't want to include any implicit meta-information along with the messages on channels.
-If you need a time, accept a clock as part of an input. A behavior-function should have no way to tell
-whether it's connected to real resources or test doubles.
-
-The model is that a process receives one event at a time and handles that event before getting the next.
-There is no such thing as "simultaneous" when more than one input channel is involved.
-Message delivery is best-effort, and semantically call-by-copy.
-(Referential transparency minimizes *physical* copying.)
-
-This all suggests a run-time responsible for scheduling computation to ready processes.
-It also suggests room for drivers or adapters suited to different operating-system services.
-
-Sophie needs some sensible syntax for declaring, defining, spawning, and combining processes.
-(They look a lot like functions from a distance, but the differences are in the details.)
-A *tree-of-supervisors* concept may fall out of the *spawn* syntax and semantics.
-
-Briefly (and with much waving of hands) an actor is approximately a function from *input-message* to *action*.
-An *action* clearly includes the next state of the actor, which can either be *finished* or another actor.
-An *action* also must be able to send messages.
-It's nice if those messages are statically typed, but I anticipate corner-cases.
-
-One approach to static-typed spawn is to make the spawn-operation
-
 Arrays and Dictionaries
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
