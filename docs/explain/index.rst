@@ -13,8 +13,9 @@ help you understand what **Sophie** is *specified* to do with your code.
     :maxdepth: 2
     :caption: Contents:
 
-    reasons
+    actor
     goals
     future
     foreign
+    reasons
 

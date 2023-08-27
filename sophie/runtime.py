@@ -300,9 +300,12 @@ class ParametricTask(Task):
 		action.perform()
 
 class UserDefinedActor(Actor):
-	def __init__(self, vtable):
+	
+	def __init__(self, vtable:dict, private_state:dict):
 		super().__init__()
 		self._vtable = vtable
+		self._private_state = private_state
+	
 	def handle(self, message, args):
 		behavior = self._vtable[message]
 		if args: behavior.apply(args).perform()
