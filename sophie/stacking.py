@@ -36,7 +36,7 @@ class Frame(Generic[T]):
 		return value
 	def fetch(self, key:Symbol) -> T:
 		item = self._bindings[key]
-		if item is PLACE_HOLDER: raise KeyError(item)
+		if item is PLACE_HOLDER: raise KeyError(key)
 		else: return item
 
 class RootFrame(Frame):
@@ -85,3 +85,7 @@ class Activation(Frame):
 		for udf in module.outer_functions:
 			ar.declare(udf)
 		return ar
+
+	@staticmethod
+	def for_do_block(static_link: Frame[T]) -> "Activation[T]":
+		return Activation(static_link, static_link.breadcrumb)
