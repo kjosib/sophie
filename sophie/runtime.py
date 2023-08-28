@@ -117,7 +117,7 @@ def _eval_match_expr(expr:syntax.MatchExpr, dynamic_env:ENV):
 	return evaluate(branch, dynamic_env)
 
 def _eval_do_block(expr:syntax.DoBlock, dynamic_env:ENV):
-	return CompoundAction(expr.steps, dynamic_env)
+	return CompoundAction(expr, dynamic_env)
 
 def _eval_bind_method(expr:syntax.BindMethod, dynamic_env:ENV):
 	return BoundMethod(_strict(expr.receiver, dynamic_env), expr.method_name.text)
@@ -229,13 +229,21 @@ class Nop(Action):
 	def perform(self): pass
 
 class CompoundAction(Action):
-	def __init__(self, steps:Sequence[syntax.ValExpr], dynamic_env:ENV):
-		self._steps = steps
+	def __init__(self, block:syntax.DoBlock, dynamic_env:ENV):
+		self._block = block
 		self._dynamic_env = dynamic_env
 	def perform(self):
+		agents = self._block.agents
+		if agents:
+			env = Activation.for_do_block(self._dynamic_env)
+			for na in agents:
+				assert isinstance(na, syntax.NewAgent)
+				template = _strict(na.expr, self._dynamic_env)
+				env.assign(na, template.instantiate())
+		else:
+			env = self._dynamic_env
 		# TODO: Solve the tail-recursion problem.
-		env = self._dynamic_env
-		for expr in self._steps:
+		for expr in self._block.steps:
 			env.pc = expr
 			action = _strict(expr, self._dynamic_env)
 			action.perform()

@@ -78,6 +78,21 @@ directly to a suitable template that just doesn't define any special state.
 But if the actor expects private state, then we must bind the name to something
 akin to a record-constructor. When called with arguments, it produces a template.
 
+Executive Adjustments
+-----------------------
+There is a function ``_prepare`` in ``executive.py`` which must be adjusted.
+Previously it only *declares* a placeholder slot for ``UserAgent`` symbols.
+It should rather *assign* either class or template as appropriate.
+This could in principle also be solved in ``runtime.py`` : ``_eval_lookup``,
+but I'd rather deal with it in the same place as record-constructors.
+
+Early on I'd considered allowing actor-templates to be defined anywhere,
+rather than only as top-level declarations. If I'd done that,
+then adjusting ``_eval_lookup`` would be more appropriate,
+and also actors would require a static-scope pointer.
+
+You can make a case for doing it either way, but right now, this is the way.
+
 Strictness and Volatility
 --------------------------
 
