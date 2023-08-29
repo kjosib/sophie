@@ -435,9 +435,9 @@ class DoBlock(ValExpr):
 		self.agents = agents
 		self.steps = steps
 
-class AssignField(ValExpr):
+class AssignField(Reference):
 	def __init__(self, nom:Nom, expr:ValExpr):
-		self.nom = nom
+		super().__init__(nom)
 		self.expr = expr
 
 class ImportSymbol(NamedTuple):

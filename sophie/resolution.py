@@ -483,7 +483,7 @@ class _WordResolver(_ResolutionPass):
 			self.report.can_only_assign_within_behavior(af)
 		else:
 			assert isinstance(uda, syntax.UserAgent)
-			self._lookup(af.nom, uda.field_space)
+			af.dfn = self._lookup(af.nom, uda.field_space)
 		return self.visit(af.expr, env)
 	
 	def visit_ImportForeign(self, d:syntax.ImportForeign):
