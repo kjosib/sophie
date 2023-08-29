@@ -1,6 +1,7 @@
 import traceback
 from typing import Any, Union, Sequence, Optional
 from . import syntax, primitive
+from .ontology import SELF
 from .stacking import Frame, Activation
 from .scheduler import MAIN_QUEUE, Task, Actor
 
@@ -10,6 +11,7 @@ STRICT_VALUE = Union[
 ]
 LAZY_VALUE = Union[STRICT_VALUE, "Thunk"]
 ENV = Frame[LAZY_VALUE]
+VTABLE = object()
 
 ###############################################################################
 
@@ -94,7 +96,10 @@ def _eval_field_ref(expr:syntax.FieldReference, dynamic_env:ENV):
 	lhs = _strict(expr.lhs, dynamic_env)
 	key = expr.field_name.text
 	if isinstance(lhs, dict):
-		return lhs[key]
+		try: return lhs[key]
+		except KeyError:
+			print(lhs)
+			raise
 	else:
 		return getattr(lhs, key)
 
@@ -218,6 +223,29 @@ class Constructor(Function):
 			structure[field] = arg
 		return structure
 
+class ActorClass(Function):
+	def __init__(self, global_link:ENV, uda:syntax.UserAgent):
+		self._global_link = global_link
+		self._uda = uda
+		
+	def apply(self, args: Sequence[LAZY_VALUE]) -> "ActorTemplate":
+		assert len(args) == len(self._uda.fields)
+		return ActorTemplate(self._global_link, self._uda, args)
+
+
+class ActorTemplate:
+	def __init__(self, global_link:ENV, uda:syntax.UserAgent, args: Sequence[LAZY_VALUE]):
+		self._global_link = global_link
+		self._uda = uda
+		self._args = args
+	
+	def instantiate(self):
+		private_state = dict(zip(self._uda.field_names(), map(force, self._args)))
+		private_state[VTABLE] = self._uda.message_space.local
+		frame = Activation(self._global_link, self._uda)
+		frame.assign(SELF, private_state)
+		return UserDefinedActor(frame)
+
 ###############################################################################
 
 class Action:
@@ -245,7 +273,7 @@ class CompoundAction(Action):
 		# TODO: Solve the tail-recursion problem.
 		for expr in self._block.steps:
 			env.pc = expr
-			action = _strict(expr, self._dynamic_env)
+			action = _strict(expr, env)
 			action.perform()
 
 class BoundMessage(Action):
@@ -309,15 +337,16 @@ class ParametricTask(Task):
 
 class UserDefinedActor(Actor):
 	
-	def __init__(self, vtable:dict, private_state:dict):
+	def __init__(self, frame:ENV):
 		super().__init__()
-		self._vtable = vtable
-		self._private_state = private_state
+		self._frame = frame
 	
 	def handle(self, message, args):
-		behavior = self._vtable[message]
-		if args: behavior.apply(args).perform()
-		else: behavior.perform()
+		state = self._frame.fetch(SELF)
+		vtable = state[VTABLE]
+		behavior = vtable[message]
+		assert isinstance(behavior, syntax.Behavior)
+		_strict(behavior.expr, Activation.for_behavior(self._frame, behavior, args)).perform()
 
 ###############################################################################
 

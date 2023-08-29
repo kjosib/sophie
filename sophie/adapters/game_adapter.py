@@ -142,6 +142,15 @@ class DisplayProxy:
 	def _fill(self, color):
 		r,g,b = force(color["red"]), force(color["green"]), force(color["blue"])
 		self._display.fill((r,g,b))
+	
+	def _hlin(self, x1, x2, y, color):
+		r, g, b = force(color["red"]), force(color["green"]), force(color["blue"])
+		gfxdraw.hline(self._display, force(x1), force(x2), force(y), (r,g,b))
+		
+	def _vlin(self, x, y1, y2, color):
+		r, g, b = force(color["red"]), force(color["green"]), force(color["blue"])
+		gfxdraw.hline(self._display, force(x), force(y1), force(y2), (r,g,b))
+		
 
 events = NativeObjectProxy(GameLoop())
 events.TASK_QUEUE = MAIN_QUEUE.main_thread

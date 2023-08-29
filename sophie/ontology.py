@@ -41,3 +41,5 @@ class Reference(Expr):
 	dfn:Symbol   # Should happen during WordResolver pass.
 	def __init__(self, nom:Nom): self.nom = nom
 
+
+SELF = Term(Nom("SELF", None))

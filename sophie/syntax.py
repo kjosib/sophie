@@ -240,6 +240,10 @@ class UserAgent(Term):
 		self.behaviors = behaviors
 		_bookend(nom, coda)
 
+	def field_names(self):
+		return [f.nom.text for f in self.fields]
+
+
 class Behavior(Term):
 	source_path: Path
 	namespace: NS
