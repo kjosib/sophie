@@ -12,7 +12,7 @@ from boozetools.support.foundation import Visitor, strongly_connected_components
 from boozetools.support.symtab import NoSuchSymbol, SymbolAlreadyExists
 from . import syntax, primitive
 from .diagnostics import Report
-from .ontology import NS, Symbol
+from .ontology import NS, Symbol, SELF
 from .modularity import Program, SophieParseError, SophieImportError
 
 class Yuck(Exception):
@@ -256,7 +256,7 @@ class _WordDefiner(_ResolutionPass):
 			assert isinstance(behavior, syntax.Behavior)
 			self._install(message_space, behavior)
 			inner = behavior.namespace = env.new_child(behavior)
-			inner['SELF'] = uda
+			inner['SELF'] = SELF
 			for param in behavior.params:
 				self.visit(param, inner)
 			self.visit(behavior.expr, inner)
@@ -365,6 +365,7 @@ class _WordResolver(_ResolutionPass):
 	"""
 	
 	dubious_constructors: list[syntax.Reference]
+	_current_uda = None
 
 	def visit_Module(self, module:syntax.Module):
 		self.dubious_constructors = []
@@ -444,8 +445,10 @@ class _WordResolver(_ResolutionPass):
 	def visit_UserAgent(self, uda:syntax.UserAgent):
 		for f in uda.fields:
 			self.visit(f.type_expr, uda.field_space)
+		self._current_uda = uda
 		for b in uda.behaviors:
 			self.visit(b, uda.field_space)
+		self._current_uda = None
 	
 	def visit_Behavior(self, sym:syntax.Behavior, env:NS):
 		for param in sym.params:
@@ -477,13 +480,11 @@ class _WordResolver(_ResolutionPass):
 			self.visit(s, db.namespace)
 
 	def visit_AssignField(self, af:syntax.AssignField, env:NS):
-		try:
-			uda = env['SELF']
-		except NoSuchSymbol:
+		if self._current_uda is None:
 			self.report.can_only_assign_within_behavior(af)
+			af.dfn = Bogon(af.nom)
 		else:
-			assert isinstance(uda, syntax.UserAgent)
-			af.dfn = self._lookup(af.nom, uda.field_space)
+			af.dfn = self._lookup(af.nom, self._current_uda.field_space)
 		return self.visit(af.expr, env)
 	
 	def visit_ImportForeign(self, d:syntax.ImportForeign):

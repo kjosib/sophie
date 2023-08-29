@@ -14,7 +14,7 @@ the upcoming message-passing semantics.
 from typing import TypeVar, Generic, Union
 from pathlib import Path
 from .ontology import Symbol
-from .syntax import UserFunction, ValExpr, Subject, Module
+from .syntax import UserFunction, Behavior, ValExpr, Subject, Module
 
 CRUMB = Union[Symbol, Module]
 
@@ -89,3 +89,11 @@ class Activation(Frame):
 	@staticmethod
 	def for_do_block(static_link: Frame[T]) -> "Activation[T]":
 		return Activation(static_link, static_link.breadcrumb)
+
+	@staticmethod
+	def for_behavior(static_link: Frame[T], b:Behavior, arguments) -> "Activation[T]":
+		assert len(b.params) == len(arguments)
+		ar = Activation(static_link, b)
+		ar._bindings.update(zip(b.params, arguments))
+		return ar
+

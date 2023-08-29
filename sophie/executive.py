@@ -8,7 +8,7 @@ from . import syntax, primitive, runtime, ontology
 from .stacking import Frame, RootFrame, Activation
 from .runtime import (
 	force, _strict, Constructor, Primitive, Thunk,
-	Action
+	Action, ActorClass, ActorTemplate
 )
 from .resolution import RoadMap
 from .scheduler import MAIN_QUEUE
@@ -82,7 +82,7 @@ def _prepare(env:Frame, namespace:ontology.NS):
 		elif isinstance(dfn, syntax.UserFunction):
 			env.declare(dfn)
 		elif isinstance(dfn, syntax.UserAgent):
-			env.declare(dfn)
+			env.assign(dfn, ActorClass(env, dfn) if dfn.fields else ActorTemplate(env, dfn, ()))
 		elif type(dfn) in _ignore_these:
 			pass
 		else:
