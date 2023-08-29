@@ -38,6 +38,13 @@ class DependencyPass(TopDown):
 	The nature of the algorithm is a transitive-closure / least-fixpoint operation.
 	Preparation is by means of a tree-walk.
 	
+	To understand how this works (and why) start by reading the code for visit_PlainReference.
+	In short, the `env` symbol is the type of the thing which depends,
+	while the type of a formal-parameter is the thing upon which it depends.
+	
+	For behaviors, naively the final type is always "act", but that assumes no errors.
+	It's still necessary to verify that the input types are compatible with the code and state.
+	
 	Incidentally:
 	Related analysis could determine the deepest non-local needed for a function,
 	which could possibly allow some functions to run at a shallower static-depth
@@ -68,7 +75,7 @@ class DependencyPass(TopDown):
 		self._outer[sym] = set()
 		self._outflows[sym] = set()
 
-	def _walk_children(self, children: Sequence[syntax.UserFunction], parent):
+	def _walk_children(self, children: Sequence[Symbol], parent):
 		for child in children: self._prepare(child, parent)
 		for child in children: self.visit(child, parent)
 
@@ -101,15 +108,17 @@ class DependencyPass(TopDown):
 	def _is_in_scope(self, param:syntax.FormalParameter, env:Symbol):
 		if env is None:
 			return False
-		if isinstance(env, syntax.UserFunction):
+		if isinstance(env, (syntax.UserFunction, syntax.Behavior)):
 			return param in env.params or self._is_in_scope(param, self._parent[env])
 		if isinstance(env, syntax.Subject):
 			return self._is_in_scope(param, self._parent[env])
-		assert False, type(env)
+		if isinstance(env, syntax.UserAgent):
+			return param in env.fields or self._is_in_scope(param, self._parent[env])
+		assert False, (param, env)
 
 	@staticmethod
 	def _is_non_local(param:syntax.FormalParameter, env:Symbol):
-		if isinstance(env, syntax.UserFunction):
+		if isinstance(env, (syntax.UserFunction, syntax.Behavior)):
 			return param not in env.params
 		if isinstance(env, syntax.Subject):
 			return True
@@ -121,6 +130,14 @@ class DependencyPass(TopDown):
 		self._parent[udf] = env
 		self._walk_children(udf.where, udf)
 		self.visit(udf.expr, udf)
+	
+	def visit_Behavior(self, b:syntax.Behavior, env:syntax.UserAgent):
+		self._parent[b] = env
+		self.visit(b.expr, b)
+	
+	def visit_UserAgent(self, uda:syntax.UserAgent, env):
+		assert env is None
+		self._walk_children(uda.behaviors, uda)
 
 	def visit_Lookup(self, lu: syntax.Lookup, env):
 		self.visit(lu.ref, env)
@@ -134,7 +151,13 @@ class DependencyPass(TopDown):
 			self._insert(dfn, env)
 		elif self._is_relevant(dfn):
 			self._outflows[dfn].add(env)
-			
+	
+	def visit_AssignField(self, af:syntax.AssignField, env:Symbol):
+		dfn = af.dfn
+		assert isinstance(dfn, syntax.FormalParameter)
+		self._insert(dfn, env)
+		self.visit(af.expr, env)
+	
 	def visit_QualifiedReference(self, ref:syntax.QualifiedReference, env:Symbol):
 		pass
 
@@ -150,6 +173,7 @@ class DependencyPass(TopDown):
 
 	def visit_DoBlock(self, db: syntax.DoBlock, env:Symbol):
 		for new_agent in db.agents:
+			self._parent[new_agent] = env
 			self.visit(new_agent.expr, env)
 		for s in db.steps:
 			self.visit(s, env)
@@ -734,6 +758,7 @@ class DeductionEngine(Visitor):
 	
 	def visit_DoBlock(self, do:syntax.DoBlock, env:TYPE_ENV) -> SophieType:
 		# A bit verbose to pick up all errors, not just the first.
+		# FIXME: Make a scope to contain new-agents.
 		answer = primitive.literal_act
 		for step in do.steps:
 			env.pc = step
