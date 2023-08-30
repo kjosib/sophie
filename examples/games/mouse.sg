@@ -28,9 +28,6 @@ define:
         
     end mouse_chaser;
     
-        # Defined thus, presumably `mouse_chaser` is best understood as a concrete class.
-        # The constructor 
-    
     initial_state = mouse_chaser(rect(-1,-1));
     
     # This makes `initial_state` a more-specific template, not an actor in itself.
