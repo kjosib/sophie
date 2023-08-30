@@ -443,6 +443,8 @@ class AssignField(Reference):
 	def __init__(self, nom:Nom, expr:ValExpr):
 		super().__init__(nom)
 		self.expr = expr
+	def head(self) -> slice:
+		return self.nom.head()
 
 class ImportSymbol(NamedTuple):
 	yonder : Nom

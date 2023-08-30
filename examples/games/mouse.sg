@@ -21,8 +21,8 @@ define:
         to tick(display) is display ! draw [
             fill(color(0,$99,0)),   # Apple ][ style hexadecimal with dollar-sign.
             
-            hlin(0, 599, self.pos.y, white),  # The `pos` must be evaluated strictly,
-            vlin(0, 799, self.pos.x, white),  # along with parent expressions,
+            hlin(0, 799, self.pos.y, white),  # The `pos` must be evaluated strictly,
+            vlin(self.pos.x, 0, 599, white),  # along with parent expressions,
                                               # since it and they are volatile.
         ];
         

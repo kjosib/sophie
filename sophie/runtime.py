@@ -136,6 +136,10 @@ def _eval_as_task(expr:syntax.AsTask, dynamic_env:ENV):
 		assert not isinstance(sub, BoundMethod)
 		return PlainTask(sub)
 
+def _eval_assign_field(expr:syntax.AssignField, dynamic_env:ENV):
+	state = dynamic_env.chase(SELF).fetch(SELF)
+	return AssignAction(state, expr.nom.key(), evaluate(expr.expr, dynamic_env))
+
 ###############################################################################
 
 def _snap_type_alias(alias:syntax.TypeAlias, global_env:ENV):
@@ -256,6 +260,14 @@ class Action:
 class Nop(Action):
 	def perform(self): pass
 
+class AssignAction(Action):
+	def __init__(self, state:dict[str,STRICT_VALUE], field_name:str, new_value:LAZY_VALUE):
+		self._state = state
+		self._field_name = field_name
+		self._new_value = new_value
+	def perform(self):
+		self._state[self._field_name] = force(self._new_value)
+
 class CompoundAction(Action):
 	def __init__(self, block:syntax.DoBlock, dynamic_env:ENV):
 		self._block = block
@@ -346,7 +358,8 @@ class UserDefinedActor(Actor):
 		vtable = state[VTABLE]
 		behavior = vtable[message]
 		assert isinstance(behavior, syntax.Behavior)
-		_strict(behavior.expr, Activation.for_behavior(self._frame, behavior, args)).perform()
+		frame = Activation.for_behavior(self._frame, behavior, args)
+		_strict(behavior.expr, frame).perform()
 
 ###############################################################################
 
