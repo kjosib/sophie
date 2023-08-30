@@ -13,7 +13,7 @@ the upcoming message-passing semantics.
 
 from typing import TypeVar, Generic, Union
 from pathlib import Path
-from .ontology import Symbol
+from .ontology import Symbol, SELF
 from .syntax import UserFunction, Behavior, ValExpr, Subject, Module
 
 CRUMB = Union[Symbol, Module]

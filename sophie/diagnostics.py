@@ -138,6 +138,10 @@ class Report:
 		where = [g.head() for g in guilty]
 		self.error("Defining Types", where, admonition)
 	
+	def can_only_assign_within_behavior(self, af:syntax.AssignField):
+		intro = "You can only assign to state within an actor's behaviors."
+		self._issues.append(Pic(intro, [Annotation(self._path, af.head())]))
+	
 	# Methods the Alias-checker calls
 	def these_are_not_types(self, non_types:Sequence[syntax.TypeCall]):
 		intro = "Words that get used like types, but refer to something else."

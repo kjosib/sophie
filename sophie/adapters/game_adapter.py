@@ -149,7 +149,7 @@ class DisplayProxy:
 		
 	def _vlin(self, x, y1, y2, color):
 		r, g, b = force(color["red"]), force(color["green"]), force(color["blue"])
-		gfxdraw.hline(self._display, force(x), force(y1), force(y2), (r,g,b))
+		gfxdraw.vline(self._display, force(x), force(y1), force(y2), (r,g,b))
 		
 
 events = NativeObjectProxy(GameLoop())
