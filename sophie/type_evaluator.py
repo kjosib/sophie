@@ -24,7 +24,8 @@ from .calculus import (
 	OpaqueType, ProductType, ArrowType, TypeVariable,
 	RecordType, SumType, SubType, TaggedRecord, EnumType,
 	UDFType, InterfaceType, MessageType, UserTaskType,
-	BOTTOM, ERROR, MESSAGE_READY_TO_SEND
+	ParametricTemplateType, ConcreteTemplateType,
+	BOTTOM, ERROR, MESSAGE_READY_TO_SEND, EMPTY_PRODUCT
 )
 
 class DependencyPass(TopDown):
@@ -64,6 +65,7 @@ class DependencyPass(TopDown):
 		
 	def visit_Module(self, module: syntax.Module):
 		self._walk_children(module.outer_functions, None)
+		self._walk_children(module.agent_defs, None)
 		for expr in module.main:
 			self.visit(expr, None)
 		self._flow_dependencies()
@@ -177,7 +179,6 @@ class DependencyPass(TopDown):
 			self.visit(new_agent.expr, env)
 		for s in db.steps:
 			self.visit(s, env)
-
 
 
 class ArityError(Exception):
@@ -307,11 +308,11 @@ class Binder(Visitor):
 			self.gamma = save_gamma
 			self.bind(formal.res, result)
 		elif isinstance(actual, UDFType):
-			if len(actual.fn.params) != len(formal.arg.fields):
+			if actual.expected_arity() != len(formal.arg.fields):
 				self.fail()
 			else:
 				# TODO: Check types against FormalParameter contracts.
-				result = self._engine.apply_UDF(actual, formal.arg.fields, self._dynamic_link)
+				result = self._engine.apply_UDF(actual, formal.arg.fields)
 				self.bind(formal.res, result)
 		else:
 			self.fail()
@@ -348,10 +349,10 @@ class Binder(Visitor):
 		if isinstance(actual, MessageType):
 			return self.visit(formal.arg, actual.arg)
 		elif isinstance(actual, UserTaskType):
-			if len(actual.udf_type.fn.params) != len(formal.arg.fields):
+			if actual.expected_arity() != len(formal.arg.fields):
 				self.fail()
 			else:
-				result = self._engine.apply_UDF(actual.udf_type, formal.arg.fields, self._dynamic_link)
+				result = self._engine.apply_UDF(actual.udf_type, formal.arg.fields)
 				self.bind(primitive.literal_act, result)
 		else:
 			self.fail()
@@ -478,6 +479,7 @@ class DeductionEngine(Visitor):
 		for td in module.types: self.visit(td)
 		for fi in module.foreign: self.visit(fi)
 		local = Activation.for_module(self._root, module)
+		for uda in module.agent_defs: self.visit(uda)
 		for expr in module.main:
 			self._report.trace(" -->", expr)
 			result = self.visit(expr, local)
@@ -519,7 +521,16 @@ class DeductionEngine(Visitor):
 	def visit_Interface(self, i:syntax.Interface):
 		type_args = [TypeVariable() for _ in i.type_params]
 		self._types[i] = InterfaceType(i, type_args)
-
+	
+	def visit_UserAgent(self, uda:syntax.UserAgent):
+		if uda.fields:
+			# This needs to provide something similar to a UDFType,
+			# but which will behave enough like a function to produce an agent template.
+			self._constructors[uda] = ParametricTemplateType(uda)
+		else:
+			# In this case, we have a (stateless) template ready to go.
+			self._constructors[uda] = ConcreteTemplateType(uda, EMPTY_PRODUCT)
+	
 	###############################################################################
 
 	def visit_ImportForeign(self, d:syntax.ImportForeign):
@@ -535,12 +546,9 @@ class DeductionEngine(Visitor):
 	def visit_Literal(expr: syntax.Literal, env:TYPE_ENV) -> SophieType:
 		return _literal_type_map[type(expr.value)]
 	
-	def apply_UDF(self, fn_type:UDFType, arg_types:Sequence[SophieType], env:TYPE_ENV) -> SophieType:
-		fn = fn_type.fn
-		arity = len(fn.params)
-		if arity != len(arg_types): raise ArityError
-		inner = Activation.for_function(fn_type.static_env, fn, arg_types)
-		return self.exec_UDF(fn, inner)
+	def apply_UDF(self, fn_type: UDFType, arg_types: Sequence[SophieType]) -> SophieType:
+		inner = Activation.for_function(fn_type.static_env, fn_type.fn, arg_types)
+		return self.exec_UDF(fn_type.fn, inner)
 		
 	def exec_UDF(self, fn:syntax.UserFunction, env:TYPE_ENV):
 		# The part where memoization must happen.
@@ -574,41 +582,42 @@ class DeductionEngine(Visitor):
 					
 		return self._memo[memo_key]
 	
-	def _call_site(self, site: syntax.ValExpr, fn_type, args:Sequence[ValExpr], env:TYPE_ENV) -> SophieType:
+	def _call_site(self, site: syntax.ValExpr, callee_type, args:Sequence[ValExpr], env:TYPE_ENV) -> SophieType:
 		arg_types = [self.visit(a, env) for a in args]
 		if ERROR in arg_types:
 			return ERROR
 
 		env.pc = site
-
-		if isinstance(fn_type, ArrowType):
-			assert isinstance(fn_type.arg, ProductType)  # Maybe not forever, but now.
-			arity = len(fn_type.arg.fields)
-			if arity != len(args):
-				self._report.wrong_arity(env, site, arity, args)
-				return ERROR
+		if callee_type.expected_arity() != len(args):
+			self._report.wrong_arity(env, site, callee_type.expected_arity(), args)
+			return ERROR
+		
+		if isinstance(callee_type, ArrowType):
 			
 			binder = Binder(self, env)
-			for expr, need, got in zip(args, fn_type.arg.fields, arg_types):
+			for expr, need, got in zip(args, callee_type.arg.fields, arg_types):
 				binder.bind(need, got)
 				if not binder.ok:
 					self._report.bad_type(env, expr, need, got)
 					return ERROR
 
 			# 2. Return the arrow's result-type rewritten using the bindings thus found.
-			return fn_type.res.visit(Rewriter(binder.gamma))
+			return callee_type.res.visit(Rewriter(binder.gamma))
 		
-		elif isinstance(fn_type, UDFType):
-			try:
-				result = self.apply_UDF(fn_type, arg_types, env)
-				# self._report.trace("     ", fn_type, tuple(arg_types), '-->', result)
-				return result
-			except ArityError:
-				self._report.wrong_arity(env, site, len(fn_type.fn.params), args)
-				return ERROR
-			
+		elif isinstance(callee_type, UDFType):
+			return self.apply_UDF(callee_type, arg_types)
+		
+		elif isinstance(callee_type, ParametricTemplateType):
+			return ConcreteTemplateType(callee_type.uda, ProductType(arg_types))
+		
 		else:
-			raise NotImplementedError(type(fn_type))
+			raise NotImplementedError(type(callee_type))
+	
+	def _instantiate(self, template_type:SophieType) -> SophieType:
+		# Expect template_type to have the appropriate kind.
+		# For now that means a template for a user-defined agent.
+		# Maybe one day system-defined (FFI) templates might exist.
+		raise NotImplementedError(template_type)
 	
 	def visit_Call(self, site: syntax.Call, env: TYPE_ENV) -> SophieType:
 		fn_type = self.visit(site.fn_exp, env)
@@ -626,7 +635,7 @@ class DeductionEngine(Visitor):
 		
 	def visit_Lookup(self, lu:syntax.Lookup, env:TYPE_ENV) -> SophieType:
 		target = lu.ref.dfn
-		if isinstance(target, (syntax.TypeDeclaration, syntax.SubTypeSpec)):
+		if isinstance(target, (syntax.TypeDeclaration, syntax.SubTypeSpec, syntax.UserAgent)):
 			return self._constructors[target]  # Must succeed because of resolution.check_constructors
 		if isinstance(target, syntax.FFI_Alias):
 			return self._ffi[target]
@@ -639,7 +648,7 @@ class DeductionEngine(Visitor):
 				inner = Activation.for_function(static_env, target, ())
 				return self.exec_UDF(target, inner)
 		else:
-			assert isinstance(target, (syntax.FormalParameter, syntax.Subject))
+			assert isinstance(target, (syntax.FormalParameter, syntax.Subject, syntax.NewAgent)), type(target)
 			return static_env.fetch(target)
 		
 	def visit_ExplicitList(self, el:syntax.ExplicitList, env:TYPE_ENV) -> SumType:
@@ -758,8 +767,15 @@ class DeductionEngine(Visitor):
 	
 	def visit_DoBlock(self, do:syntax.DoBlock, env:TYPE_ENV) -> SophieType:
 		# A bit verbose to pick up all errors, not just the first.
-		# FIXME: Make a scope to contain new-agents.
 		answer = primitive.literal_act
+		# 1. Make a scope to contain new-agents:
+		inner = Activation.for_do_block(env)
+		for na in do.agents:
+			assert isinstance(na, syntax.NewAgent)
+			template_type = self.visit(na.expr, env)
+			agent_type = self._instantiate(template_type)
+			inner.assign(na, agent_type)
+		# 2. Judge types of step in the new scope:
 		for step in do.steps:
 			env.pc = step
 			step_type = self.visit(step, env)

@@ -489,13 +489,20 @@ class Module:
 	imports: list[ImportModule]
 	foreign: list[ImportForeign]
 	source_path: Path  # Module loader fills this.
+	outer_functions: list[UserFunction]
+	agent_defs: list[UserAgent]
 
-	def __init__(self, exports:list, imports:list[ImportDirective], types:list[TypeDeclaration], assumption:list[Assumption], functions:list[UserFunction], main:list):
+	def __init__(self, exports:list, imports:list[ImportDirective], types:list[TypeDeclaration], assumption:list[Assumption], top_levels:list, main:list):
 		self.exports = exports
 		self.imports = [i for i in imports if isinstance(i, ImportModule)]
 		self.foreign = [i for i in imports if isinstance(i, ImportForeign)]
 		self.types = types
-		self.outer_functions = functions
+		self.outer_functions = []
+		self.agent_defs = []
+		for item in top_levels:
+			if isinstance(item, UserFunction): self.outer_functions.append(item)
+			elif isinstance(item, UserAgent): self.agent_defs.append(item)
+			else: assert False, type(item)
 		self.main = main
 	
 	@staticmethod

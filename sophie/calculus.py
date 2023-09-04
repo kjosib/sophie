@@ -42,6 +42,7 @@ _type_numbering_subsystem = EquivalenceClassifier()
 class SophieType:
 	"""Value objects so they can play well with the classifier"""
 	def visit(self, visitor:"TypeVisitor"): raise NotImplementedError(type(self))
+	def expected_arity(self) -> int: raise NotImplementedError(type(self))
 
 	def __init__(self, *key):
 		self._key = key
@@ -60,6 +61,7 @@ class TypeVariable(SophieType):
 	def __init__(self):
 		super().__init__(len(_type_numbering_subsystem.catalog))
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_variable(self)
+	def expected_arity(self) -> int: return -1  # Not callable
 
 class OpaqueType(SophieType):
 	def __init__(self, symbol:syntax.Opaque):
@@ -67,6 +69,7 @@ class OpaqueType(SophieType):
 		self.symbol = symbol
 		super().__init__(symbol)
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_opaque(self)
+	def expected_arity(self) -> int: return -1  # Not callable
 
 class RecordType(SophieType):
 	def __init__(self, r:syntax.Record, type_args: Iterable[SophieType]):
@@ -76,6 +79,7 @@ class RecordType(SophieType):
 		assert len(self.type_args) == len(r.type_params)
 		super().__init__(self.symbol, *(a.number for a in self.type_args))
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_record(self)
+	def expected_arity(self) -> int: return -1  # Not callable. (There's a constructor arrow made.)
 
 class SumType(SophieType):
 	""" Either a record directly, or a variant-type. Details are in the symbol table. """
@@ -89,9 +93,11 @@ class SumType(SophieType):
 		assert len(self.type_args) == len(variant.type_params)
 		super().__init__(self.variant, *(a.number for a in self.type_args))
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_sum(self)
+	def expected_arity(self) -> int: return -1  # Not callable directly.
 
 class SubType(SophieType):
 	st : syntax.SubTypeSpec
+	def expected_arity(self) -> int: return -1  # Not callable. (There's a constructor arrow made.)
 
 class EnumType(SubType):
 	def __init__(self, st: syntax.SubTypeSpec):
@@ -117,12 +123,14 @@ class ProductType(SophieType):
 		self.fields = tuple(p.exemplar() for p in fields)
 		super().__init__(*(p.number for p in self.fields))
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_product(self)
-	
+	def expected_arity(self) -> int: return -1  # Not callable
+
 class ArrowType(SophieType):
 	def __init__(self, arg: ProductType, res: SophieType):
 		self.arg, self.res = arg.exemplar(), res.exemplar()
 		super().__init__(self.arg, self.res)
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_arrow(self)
+	def expected_arity(self) -> int: return len(self.arg.fields)
 
 class MessageType(SophieType):
 	# Does not overload ArrowType because messages have *operational* semantics,
@@ -130,13 +138,14 @@ class MessageType(SophieType):
 	def __init__(self, arg: ProductType):
 		self.arg = arg
 		super().__init__(self.arg)
-
 	def visit(self, visitor: "TypeVisitor"): return visitor.on_message(self)
+	def expected_arity(self) -> int: return -1  # Not callable; sendable.
 
 class UDFType(SophieType):
 	fn: syntax.UserFunction
 	static_env: TYPE_ENV
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_udf(self)
+	def expected_arity(self) -> int: return len(self.fn.params)
 	def __init__(self, fn:syntax.UserFunction, static_env:TYPE_ENV):
 		self.fn = fn
 		self.static_env = static_env
@@ -154,6 +163,7 @@ class UserTaskType(SophieType):
 		self.udf_type = udf_type.exemplar()
 		super().__init__(self.udf_type)
 	def visit(self, visitor: "TypeVisitor"): return visitor.on_user_task(self)
+	def expected_arity(self) -> int: return self.udf_type.expected_arity()
 
 class InterfaceType(SophieType):
 	def __init__(self, symbol:syntax.Interface, type_args: Iterable[SophieType]):
@@ -163,6 +173,25 @@ class InterfaceType(SophieType):
 		assert len(self.type_args) == len(symbol.type_params)
 		super().__init__(self.symbol, *(a.number for a in self.type_args))
 	def visit(self, visitor: "TypeVisitor"): return visitor.on_interface(self)
+	def expected_arity(self) -> int: return -1  # Not callable
+
+class ParametricTemplateType(SophieType):
+	def __init__(self, uda:syntax.UserAgent):
+		self.uda = uda
+		super().__init__(uda)
+	def visit(self, visitor:"TypeVisitor"): return visitor.on_parametric_template(self)
+	def expected_arity(self) -> int: return len(self.uda.fields)
+
+class ConcreteTemplateType(SophieType):
+	def __init__(self, uda:syntax.UserAgent, args:ProductType):
+		self.uda = uda
+		self.args = args
+		super().__init__(uda, args)
+	def visit(self, visitor:"TypeVisitor"): return visitor.on_concrete_template(self)
+	def expected_arity(self) -> int: return -1  # Not callable; instantiable.
+
+class UDAType(SophieType):
+	pass
 
 class _Bottom(SophieType):
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_bottom()
@@ -173,6 +202,7 @@ class _Error(SophieType):
 BOTTOM = _Bottom(None)
 ERROR = _Error(None)
 MESSAGE_READY_TO_SEND = MessageType(ProductType(()).exemplar())
+EMPTY_PRODUCT = ProductType(())
 
 ###################
 #
@@ -187,7 +217,10 @@ class TypeVisitor:
 	def on_arrow(self, a:ArrowType): raise NotImplementedError(type(self))
 	def on_product(self, p:ProductType): raise NotImplementedError(type(self))
 	def on_udf(self, f:UDFType): raise NotImplementedError(type(self))
-	def on_interface(self, a:InterfaceType): raise NotImplementedError(type(self))
+	def on_interface(self, it:InterfaceType): raise NotImplementedError(type(self))
+	def on_parametric_template(self, t:ParametricTemplateType): raise NotImplementedError(type(self))
+	def on_concrete_template(self, t:ConcreteTemplateType): raise NotImplementedError(type(self))
+	def on_uda(self, a:UDAType): raise NotImplementedError(type(self))
 	def on_message(self, m:MessageType): raise NotImplementedError(type(self))
 	def on_user_task(self, t:UserTaskType): raise NotImplementedError(type(self))
 	def on_bottom(self): raise NotImplementedError(type(self))
@@ -223,8 +256,14 @@ class Render(TypeVisitor):
 		return "(%s)"%(",".join(t.visit(self) for t in p.fields))
 	def on_udf(self, f: UDFType):
 		return "<%s/%d>"%(f.fn.nom.text, len(f.fn.params))
-	def on_interface(self, a:InterfaceType):
-		return "<agent:%s>"%a.symbol.nom.text
+	def on_interface(self, it:InterfaceType):
+		return "<interface:%s>"%it.symbol.nom.text
+	def on_parametric_template(self, t: ParametricTemplateType):
+		return "<template:%s/%d>"%(t.uda.nom.text, t.expected_arity())
+	def on_concrete_template(self, t: ConcreteTemplateType):
+		return "<template:%s%s>"%(t.uda.nom.text, t.args.visit(self))
+	def on_uda(self, a: UDAType):
+		return "<agent?>"
 	def on_message(self, m: MessageType):
 		return "!" if m.arg is None else "!"+m.arg.visit(self)
 	def on_user_task(self, t: UserTaskType):

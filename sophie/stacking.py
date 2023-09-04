@@ -84,6 +84,8 @@ class Activation(Frame):
 		ar = Activation(static_link, module)
 		for udf in module.outer_functions:
 			ar.declare(udf)
+		for uda in module.agent_defs:
+			ar.declare(uda)
 		return ar
 
 	@staticmethod
