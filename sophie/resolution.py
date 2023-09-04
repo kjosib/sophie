@@ -28,7 +28,8 @@ class RoadMap:
 	module_scopes : dict[syntax.Module, NS]
 	import_alias : dict[syntax.Module, NS]
 	each_module : list[syntax.Module]
-	each_udf : list[Union[syntax.UserFunction, syntax.UserAgent]]
+	each_udf : list[syntax.UserFunction]
+	each_uda : list[syntax.UserAgent]
 	each_match : list[syntax.MatchExpr]
 	import_map : dict[syntax.ImportModule, syntax.Module]
 
@@ -37,10 +38,8 @@ class RoadMap:
 		self.import_alias = {}
 		self.each_module = []
 		self.each_udf = []
+		self.each_uda = []
 		self.each_match = []
-
-		self.note_udf = self.each_udf.append
-		self.note_match = self.each_match.append
 
 		def register(parent, module):
 			assert isinstance(module, syntax.Module)
@@ -170,8 +169,11 @@ class _WordDefiner(_ResolutionPass):
 		for d in module.imports: self.visit_ImportModule(d)
 		for td in module.types: self.visit(td)
 		for d in module.foreign: self.visit_ImportForeign(d)
-		for fn in module.outer_functions:  # Can't iterate all-functions yet; must build it first.
+		# Can't iterate all-functions yet; must build it first.
+		for fn in module.outer_functions:
 			self.visit(fn, self.globals)
+		for uda in module.agent_defs:
+			self.visit(uda, self.globals)
 		for expr in module.main:  # Might need to define some case-match symbols here.
 			self.visit(expr, self.globals)
 		pass
@@ -233,7 +235,7 @@ class _WordDefiner(_ResolutionPass):
 
 	def visit_UserFunction(self, udf:syntax.UserFunction, env:NS):
 		udf.source_path = self._source_path
-		self.roadmap.note_udf(udf)
+		self.roadmap.each_udf.append(udf)
 		self._install(env, udf)
 		inner = udf.namespace = env.new_child(udf)
 		for param in udf.params:
@@ -246,7 +248,7 @@ class _WordDefiner(_ResolutionPass):
 
 	def visit_UserAgent(self, uda:syntax.UserAgent, env:NS):
 		uda.source_path = self._source_path
-		self.roadmap.note_udf(uda)
+		self.roadmap.each_uda.append(uda)
 		self._install(env, uda)
 		field_space = uda.field_space = env.new_child(uda)
 		for f in uda.fields:
@@ -288,7 +290,7 @@ class _WordDefiner(_ResolutionPass):
 		return self.visit(af.expr, env)
 
 	def visit_MatchExpr(self, mx:syntax.MatchExpr, env:NS):
-		self.roadmap.note_match(mx)
+		self.roadmap.each_match.append(mx)
 		self.visit(mx.subject.expr, env)
 		inner = mx.namespace = env.new_child(mx)
 		self._install(inner, mx.subject)
@@ -372,6 +374,8 @@ class _WordResolver(_ResolutionPass):
 		for td in module.types:
 			self.visit(td)
 		for item in module.foreign:
+			self.visit(item)
+		for item in self.roadmap.each_uda:
 			self.visit(item)
 		for item in self.roadmap.each_udf:
 			self.visit(item)
@@ -519,6 +523,7 @@ class _AliasChecker(Visitor):
 		self.graph = {td:[] for td in module.types}
 		self._tour(module.types)
 		self._tour(module.foreign)
+		self._tour(self.roadmap.each_uda)
 		self._tour(self.roadmap.each_udf)
 		if self.non_types:
 			self.report.these_are_not_types(self.non_types)

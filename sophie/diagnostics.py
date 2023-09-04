@@ -201,9 +201,12 @@ class Report:
 		self._issues.append(Pic("Here's how that happens:", trace_stack(env)))
 	
 	def wrong_arity(self, env:TYPE_ENV, site:syntax.ValExpr, arity:int, args:Sequence[syntax.ValExpr]):
-		plural = '' if arity == 1 else 's'
-		pattern = "This function takes %d argument%s, but got %d instead."
-		intro = pattern % (arity, plural, len(args))
+		if arity < 0:
+			intro = "This is not callable."
+		else:
+			plural = '' if arity == 1 else 's'
+			pattern = "This function takes %d argument%s, but got %d instead."
+			intro = pattern % (arity, plural, len(args))
 		problem = [Annotation(env.path(), site.head(), "Here")]
 		self._issues.append(Pic(intro, problem+trace_stack(env)))
 
