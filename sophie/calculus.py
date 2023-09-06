@@ -133,9 +133,8 @@ class ArrowType(SophieType):
 	def expected_arity(self) -> int: return len(self.arg.fields)
 
 class MessageType(SophieType):
-	# Does not overload ArrowType because messages have *operational* semantics,
-	# while arrows do not.
 	def __init__(self, arg: ProductType):
+		assert arg.fields
 		self.arg = arg
 		super().__init__(self.arg)
 	def visit(self, visitor: "TypeVisitor"): return visitor.on_message(self)
@@ -175,23 +174,32 @@ class InterfaceType(SophieType):
 	def visit(self, visitor: "TypeVisitor"): return visitor.on_interface(self)
 	def expected_arity(self) -> int: return -1  # Not callable
 
-class ParametricTemplateType(SophieType):
-	def __init__(self, uda:syntax.UserAgent):
-		self.uda = uda
-		super().__init__(uda)
-	def visit(self, visitor:"TypeVisitor"): return visitor.on_parametric_template(self)
-	def expected_arity(self) -> int: return len(self.uda.fields)
-
-class ConcreteTemplateType(SophieType):
+class _AgentDerived(SophieType):
 	def __init__(self, uda:syntax.UserAgent, args:ProductType):
 		self.uda = uda
 		self.args = args
 		super().__init__(uda, args)
+
+class ParametricTemplateType(_AgentDerived):
+	def visit(self, visitor:"TypeVisitor"): return visitor.on_parametric_template(self)
+	def expected_arity(self) -> int: return len(self.uda.fields)
+
+class ConcreteTemplateType(_AgentDerived):
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_concrete_template(self)
 	def expected_arity(self) -> int: return -1  # Not callable; instantiable.
 
-class UDAType(SophieType):
-	pass
+class UDAType(_AgentDerived):
+	def visit(self, visitor:"TypeVisitor"): return visitor.on_uda(self)
+	def expected_arity(self) -> int: return -1  # Not callable; instantiable.
+
+class BehaviorType(SophieType):
+	def __init__(self, agent:UDAType, behavior:syntax.Behavior):
+		self.agent = agent
+		self.behavior = behavior
+		super().__init__(agent, behavior)
+	def visit(self, visitor:"TypeVisitor"): return visitor.on_behavior(self)
+	def expected_arity(self) -> int: return len(self.behavior.params)
+
 
 class _Bottom(SophieType):
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_bottom()
@@ -201,7 +209,6 @@ class _Error(SophieType):
 
 BOTTOM = _Bottom(None)
 ERROR = _Error(None)
-MESSAGE_READY_TO_SEND = MessageType(ProductType(()).exemplar())
 EMPTY_PRODUCT = ProductType(())
 
 ###################
@@ -223,6 +230,7 @@ class TypeVisitor:
 	def on_uda(self, a:UDAType): raise NotImplementedError(type(self))
 	def on_message(self, m:MessageType): raise NotImplementedError(type(self))
 	def on_user_task(self, t:UserTaskType): raise NotImplementedError(type(self))
+	def on_behavior(self, t:BehaviorType): raise NotImplementedError(type(self))
 	def on_bottom(self): raise NotImplementedError(type(self))
 	def on_error_type(self): raise NotImplementedError(type(self))
 
@@ -255,7 +263,7 @@ class Render(TypeVisitor):
 	def on_product(self, p: ProductType):
 		return "(%s)"%(",".join(t.visit(self) for t in p.fields))
 	def on_udf(self, f: UDFType):
-		return "<%s/%d>"%(f.fn.nom.text, len(f.fn.params))
+		return "<%s/%d>"%(f.fn.nom.text, f.expected_arity())
 	def on_interface(self, it:InterfaceType):
 		return "<interface:%s>"%it.symbol.nom.text
 	def on_parametric_template(self, t: ParametricTemplateType):
@@ -263,11 +271,13 @@ class Render(TypeVisitor):
 	def on_concrete_template(self, t: ConcreteTemplateType):
 		return "<template:%s%s>"%(t.uda.nom.text, t.args.visit(self))
 	def on_uda(self, a: UDAType):
-		return "<agent?>"
+		return "<agent:%s%s>"%(a.uda.nom.text, a.args.visit(self))
 	def on_message(self, m: MessageType):
-		return "!" if m.arg is None else "!"+m.arg.visit(self)
+		return "<message:%s>"%m.arg.visit(self)
 	def on_user_task(self, t: UserTaskType):
-		return "!" + t.udf_type.visit(self)
+		return "<task:%s>"%t.udf_type.visit(self)
+	def on_behavior(self, t: BehaviorType):
+		return "<%s:%s/%d>"%(t.agent.uda.nom.text, t.behavior.nom.text, t.expected_arity())
 	def on_bottom(self):
 		return "?"
 	def on_error_type(self):

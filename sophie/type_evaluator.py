@@ -23,9 +23,9 @@ from .calculus import (
 	SophieType, TypeVisitor,
 	OpaqueType, ProductType, ArrowType, TypeVariable,
 	RecordType, SumType, SubType, TaggedRecord, EnumType,
-	UDFType, InterfaceType, MessageType, UserTaskType,
-	ParametricTemplateType, ConcreteTemplateType,
-	BOTTOM, ERROR, MESSAGE_READY_TO_SEND, EMPTY_PRODUCT
+	UDFType, UDAType, InterfaceType, MessageType, UserTaskType,
+	ParametricTemplateType, ConcreteTemplateType, BehaviorType,
+	BOTTOM, ERROR, EMPTY_PRODUCT
 )
 
 class DependencyPass(TopDown):
@@ -232,7 +232,15 @@ class ManifestBuilder(Visitor):
 			product = self._make_product(ms.type_exprs)
 			return MessageType(product).exemplar()
 		else:
-			return MESSAGE_READY_TO_SEND
+			return primitive.literal_msg
+		
+	def visit_UserAgent(self, uda:syntax.UserAgent):
+		if uda.fields:
+			product = self._make_product(field.type_expr for field in uda.fields)
+			return ParametricTemplateType(uda, product)
+		else:
+			# In this case, we have a (stateless) template ready to go.
+			return ConcreteTemplateType(uda, EMPTY_PRODUCT)
 
 class Rewriter(TypeVisitor):
 	def __init__(self, gamma:dict):
@@ -251,6 +259,8 @@ class Rewriter(TypeVisitor):
 		return ArrowType(a.arg.visit(self), a.res.visit(self))
 	def on_product(self, p: ProductType):
 		return ProductType([f.visit(self) for f in p.fields])
+	def on_message(self, m: MessageType):
+		return MessageType(m.arg.visit(self))
 
 class Binder(Visitor):
 	"""
@@ -262,9 +272,11 @@ class Binder(Visitor):
 		self.ok = True
 		self._engine = engine
 		self._dynamic_link = env
+		self.why = None
 		
-	def fail(self):
+	def fail(self, why:str):
 		self.ok = False
+		self.why = why
 	
 	def bind(self, formal: SophieType, actual: SophieType):
 		if actual in (BOTTOM, ERROR) or formal.number == actual.number:
@@ -277,7 +289,7 @@ class Binder(Visitor):
 			union_finder = UnionFinder(self.gamma[formal])
 			union_finder.unify_with(actual)
 			if union_finder.died:
-				self.fail()
+				self.fail("Unable to unify %s with %s"%(self.gamma[formal], actual))
 			else:
 				self.gamma[formal] = union_finder.result()
 		else:
@@ -289,9 +301,9 @@ class Binder(Visitor):
 	
 	def visit_ProductType(self, formal: ProductType, actual: SophieType):
 		if not isinstance(actual, ProductType):
-			return self.fail()
+			return self.fail("%s has not the product nature."%actual)
 		if len(formal.fields) != len(actual.fields):
-			return self.fail()
+			return self.fail("%s and %s have not the same arity."%(formal, actual))
 		self.parallel(formal.fields, actual.fields)
 		
 	def visit_ArrowType(self, formal: ArrowType, actual: SophieType):
@@ -309,53 +321,67 @@ class Binder(Visitor):
 			self.bind(formal.res, result)
 		elif isinstance(actual, UDFType):
 			if actual.expected_arity() != len(formal.arg.fields):
-				self.fail()
+				self.fail("Arity mismatch between formal function and user-defined function.")
 			else:
 				# TODO: Check types against FormalParameter contracts.
 				result = self._engine.apply_UDF(actual, formal.arg.fields)
 				self.bind(formal.res, result)
 		else:
-			self.fail()
+			self.fail("Using a %s where some sort of function is needed."%actual)
 	
 	def visit_OpaqueType(self, formal: OpaqueType, actual: SophieType):
-		self.fail()
+		self.fail("Opaque type %s is not %s"%(formal, actual))
 	
 	def visit_SumType(self, formal: SumType, actual: SophieType):
 		if isinstance(actual, SumType):
 			if formal.variant is actual.variant:
 				self.parallel(formal.type_args, actual.type_args)
 			else:
-				self.fail()
+				self.fail("Variant %s is not variant %s"%(formal.variant, actual.variant))
 		elif isinstance(actual, TaggedRecord):
 			if formal.variant is actual.st.variant:
 				self.parallel(formal.type_args, actual.type_args)
 			else:
-				self.fail()
+				self.fail("Variant %s is not variant %s"%(formal.variant, actual.st.variant))
 		elif isinstance(actual, EnumType):
 			if formal.variant is actual.st.variant:
 				pass
 			else:
-				self.fail()
+				self.fail("Variant %s is not variant %s"%(formal.variant, actual.st.variant))
 		else:
-			self.fail()
+			self.fail("%s is a variant, but %s is not a subtype of any variant."%(formal, actual))
 	
 	def visit_RecordType(self, formal: RecordType, actual: SophieType):
 		if isinstance(actual, RecordType) and formal.symbol is actual.symbol:
 			self.parallel(formal.type_args, actual.type_args)
 		else:
-			self.fail()
+			self.fail("Record %s is not %s"%(formal, actual))
 	
 	def visit_MessageType(self, formal: MessageType, actual: SophieType):
 		if isinstance(actual, MessageType):
 			return self.visit(formal.arg, actual.arg)
 		elif isinstance(actual, UserTaskType):
-			if actual.expected_arity() != len(formal.arg.fields):
-				self.fail()
-			else:
+			if actual.expected_arity() == len(formal.arg.fields):
 				result = self._engine.apply_UDF(actual.udf_type, formal.arg.fields)
-				self.bind(primitive.literal_act, result)
+				# At this point, either an act or another message will be acceptable.
+				if not quacks_like_an_action(result):
+					self.fail("%s does not an action make."%result)
+			else:
+				self.fail("%s has different arity from %s"%(formal, actual))
+		elif isinstance(actual, BehaviorType):
+			if actual.expected_arity() == len(formal.arg.fields):
+				result = self._engine.apply_behavior(actual, formal.arg.fields)
+				# At this point, either an act or another message will be acceptable.
+				if not quacks_like_an_action(result):
+					self.fail("%s does not an action make."%result)
+			else:
+				self.fail("%s has different arity from %s"%(formal, actual))
 		else:
-			self.fail()
+			self.fail("Not sure how to use a %s as a %s"%(actual, formal))
+
+def quacks_like_an_action(result:SophieType) -> bool:
+	assert isinstance(result, SophieType), result
+	return result in (primitive.literal_act, primitive.literal_msg)
 
 class UnionFinder(Visitor):
 	def __init__(self, prototype: SophieType):
@@ -523,13 +549,8 @@ class DeductionEngine(Visitor):
 		self._types[i] = InterfaceType(i, type_args)
 	
 	def visit_UserAgent(self, uda:syntax.UserAgent):
-		if uda.fields:
-			# This needs to provide something similar to a UDFType,
-			# but which will behave enough like a function to produce an agent template.
-			self._constructors[uda] = ParametricTemplateType(uda)
-		else:
-			# In this case, we have a (stateless) template ready to go.
-			self._constructors[uda] = ConcreteTemplateType(uda, EMPTY_PRODUCT)
+		builder = ManifestBuilder([], [])
+		self._constructors[uda] = builder.visit(uda)
 	
 	###############################################################################
 
@@ -549,7 +570,23 @@ class DeductionEngine(Visitor):
 	def apply_UDF(self, fn_type: UDFType, arg_types: Sequence[SophieType]) -> SophieType:
 		inner = Activation.for_function(fn_type.static_env, fn_type.fn, arg_types)
 		return self.exec_UDF(fn_type.fn, inner)
+	
+	def apply_behavior(self, behavior:BehaviorType, arg_types: Sequence[SophieType]) -> SophieType:
+		# Build the proper type environment parallel to what the runtime does:
+		# a "SELF" dictionary containing the types given to the UDA constructor,
+		# and then bindings for behavior parameters.
 		
+		# Build the memo key, similar to what's going on with exec_UDF.
+		
+		# If already in recursion on this key, assume the best.
+		
+		# Otherwise:
+			# Enter recursion
+			# Evaluate the expression
+			# Exit recursion
+			# Demand that it quacks like a duck
+		raise NotImplementedError
+	
 	def exec_UDF(self, fn:syntax.UserFunction, env:TYPE_ENV):
 		# The part where memoization must happen.
 		memo_symbols = self._deps_pass.depends[fn]
@@ -583,41 +620,43 @@ class DeductionEngine(Visitor):
 		return self._memo[memo_key]
 	
 	def _call_site(self, site: syntax.ValExpr, callee_type, args:Sequence[ValExpr], env:TYPE_ENV) -> SophieType:
-		arg_types = [self.visit(a, env) for a in args]
-		if ERROR in arg_types:
+		actual_types = [self.visit(a, env) for a in args]
+		if ERROR in actual_types:
 			return ERROR
-
+		
+		def bind_formals(formal_types:Sequence[SophieType]) -> Binder:
+			b = Binder(self, env)
+			for expr, need, got in zip(args, formal_types, actual_types):
+				b.bind(need, got)
+				if not b.ok:
+					self._report.bad_type(env, expr, need, got, b.why)
+					break
+			return b
+		
 		env.pc = site
 		if callee_type.expected_arity() != len(args):
 			self._report.wrong_arity(env, site, callee_type.expected_arity(), args)
 			return ERROR
 		
 		if isinstance(callee_type, ArrowType):
-			
-			binder = Binder(self, env)
-			for expr, need, got in zip(args, callee_type.arg.fields, arg_types):
-				binder.bind(need, got)
-				if not binder.ok:
-					self._report.bad_type(env, expr, need, got)
-					return ERROR
-
-			# 2. Return the arrow's result-type rewritten using the bindings thus found.
-			return callee_type.res.visit(Rewriter(binder.gamma))
+			binder = bind_formals(callee_type.arg.fields)
+			if binder.ok:
+				return callee_type.res.visit(Rewriter(binder.gamma))
+			else:
+				return ERROR
 		
 		elif isinstance(callee_type, UDFType):
-			return self.apply_UDF(callee_type, arg_types)
+			return self.apply_UDF(callee_type, actual_types)
 		
 		elif isinstance(callee_type, ParametricTemplateType):
-			return ConcreteTemplateType(callee_type.uda, ProductType(arg_types))
+			binder = bind_formals(callee_type.args.fields)
+			if binder.ok:
+				return ConcreteTemplateType(callee_type.uda, ProductType(actual_types))
+			else:
+				return ERROR
 		
 		else:
 			raise NotImplementedError(type(callee_type))
-	
-	def _instantiate(self, template_type:SophieType) -> SophieType:
-		# Expect template_type to have the appropriate kind.
-		# For now that means a template for a user-defined agent.
-		# Maybe one day system-defined (FFI) templates might exist.
-		raise NotImplementedError(template_type)
 	
 	def visit_Call(self, site: syntax.Call, env: TYPE_ENV) -> SophieType:
 		fn_type = self.visit(site.fn_exp, env)
@@ -668,7 +707,7 @@ class DeductionEngine(Visitor):
 		if_part_type = self.visit(cond.if_part, env)
 		if if_part_type is ERROR: return ERROR
 		if if_part_type != primitive.literal_flag:
-			self._report.bad_type(env, cond.if_part, primitive.literal_flag, if_part_type)
+			self._report.bad_type(env, cond.if_part, primitive.literal_flag, if_part_type, "There is no implicit Boolean conversion.")
 			return ERROR
 		union_find = UnionFinder(self.visit(cond.then_part, env))
 		union_find.unify_with(self.visit(cond.else_part, env))
@@ -683,7 +722,7 @@ class DeductionEngine(Visitor):
 			for alt in mx.alternatives:
 				subtype_symbol = mx.namespace[alt.nom.key()]
 				inner = Activation.for_subject(env, mx.subject)
-				inner.assign(mx.subject,  _hypothesis(subtype_symbol, type_args))
+				inner.assign(mx.subject, _hypothesis(subtype_symbol, type_args))
 				for subfn in alt.where: inner.declare(subfn)
 				union_find.unify_with(self.visit(alt.sub_expr, inner))
 				if union_find.died:
@@ -715,7 +754,7 @@ class DeductionEngine(Visitor):
 			return self.visit(branch, env)
 		
 		else:
-			self._report.bad_type(env, mx.subject.expr, mx.variant, subject_type)
+			self._report.bad_type(env, mx.subject.expr, mx.variant, subject_type, "Square Peg; Round Hole.")
 			return ERROR
 
 	def visit_FieldReference(self, fr:syntax.FieldReference, env:TYPE_ENV) -> SophieType:
@@ -758,9 +797,22 @@ class DeductionEngine(Visitor):
 				builder = ManifestBuilder(parameters, lhs_type.type_args)
 				if ms.type_exprs:
 					args = ProductType(builder.visit(tx) for tx in ms.type_exprs)
-					return ArrowType(args, primitive.literal_act)
+					return ArrowType(args, primitive.literal_msg)
 				else:
 					return primitive.literal_act
+		elif isinstance(lhs_type, UDAType):
+			try:
+				behavior = lhs_type.uda.message_space[mr.method_name.key()]
+			except KeyError:
+				self._report.bad_message(env, mr, lhs_type)
+				return ERROR
+			else:
+				assert isinstance(behavior, syntax.Behavior)
+				result = BehaviorType(lhs_type, behavior).exemplar()
+				if behavior.params:
+					return result
+				else:
+					return self.apply_behavior(result, ())
 		else:
 			self._report.bad_message(env, mr, lhs_type)
 			return ERROR
@@ -773,19 +825,24 @@ class DeductionEngine(Visitor):
 		for na in do.agents:
 			assert isinstance(na, syntax.NewAgent)
 			template_type = self.visit(na.expr, env)
-			agent_type = self._instantiate(template_type)
+			if isinstance(template_type, ConcreteTemplateType):
+				agent_type = UDAType(template_type.uda, template_type.args)
+			else:
+				self._report.bad_type(env, na.expr, "Agent Template", template_type, "Casting call will repeat next Thursday.")
+				agent_type = ERROR
+				answer = ERROR
 			inner.assign(na, agent_type)
 		# 2. Judge types of step in the new scope:
 		for step in do.steps:
-			env.pc = step
-			step_type = self.visit(step, env)
+			inner.pc = step
+			step_type = self.visit(step, inner)
 			assert isinstance(step_type, SophieType)
 			if step_type is ERROR: answer = ERROR
 			elif step_type is BOTTOM:
 				if answer is not ERROR:
 					answer = BOTTOM
-			elif step_type != primitive.literal_act:
-				self._report.bad_type(env, step, primitive.literal_act, step_type)
+			elif not quacks_like_an_action(step_type):
+				self._report.bad_type(inner, step, primitive.literal_act, step_type, "Only actions can be steps in a process.")
 				answer = ERROR
 		return answer
 	
@@ -793,13 +850,13 @@ class DeductionEngine(Visitor):
 		def is_act(t): return t.number == primitive.literal_act.number
 		inner = self.visit(at.sub, env)
 		if is_act(inner):
-			return MESSAGE_READY_TO_SEND
+			return primitive.literal_msg
 		elif isinstance(inner, ArrowType) and is_act(inner.res):
 			return MessageType(inner.arg).exemplar()
 		elif isinstance(inner, UDFType):
 			return UserTaskType(inner)
 		else:
-			self._report.bad_type(env, at.sub, "procedure", inner)
+			self._report.bad_type(env, at.sub, "procedure", inner, "Concurrent tasks cannot return a value.")
 			return ERROR
 
 def _hypothesis(st:Symbol, type_args:Sequence[SophieType]) -> SubType:
