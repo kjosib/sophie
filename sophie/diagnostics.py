@@ -210,11 +210,11 @@ class Report:
 		problem = [Annotation(env.path(), site.head(), "Here")]
 		self._issues.append(Pic(intro, problem+trace_stack(env)))
 
-	def bad_type(self, env:TYPE_ENV, expr:syntax.ValExpr, need, got):
+	def bad_type(self, env: TYPE_ENV, expr: syntax.ValExpr, need, got, why):
 		intro = "Type-checking found a problem. Here's how it happens:"
 		complaint = "This %s needs to be a(n) %s."%(got, need)
 		problem = [Annotation(env.path(), expr.head(), complaint)]
-		self._issues.append(Pic(intro, problem+trace_stack(env)))
+		self._issues.append(Pic(intro, problem+trace_stack(env), (why,)))
 
 	def bad_message(self, env:TYPE_ENV, expr:syntax.BindMethod, agent_type:SophieType):
 		intro = "This %s does not understand..."%agent_type
