@@ -215,6 +215,11 @@ class Report:
 		complaint = "This %s needs to be a(n) %s."%(got, need)
 		problem = [Annotation(env.path(), expr.head(), complaint)]
 		self._issues.append(Pic(intro, problem+trace_stack(env), (why,)))
+	
+	def does_not_express_behavior(self, env: TYPE_ENV, behavior:syntax.Behavior, got):
+		intro = "This definition express %s instead of behavior"%got
+		problem = [Annotation(env.path(), behavior.head())]
+		self._issues.append(Pic(intro, problem+trace_stack(env)))
 
 	def bad_message(self, env:TYPE_ENV, expr:syntax.BindMethod, agent_type:SophieType):
 		intro = "This %s does not understand..."%agent_type
@@ -225,14 +230,19 @@ class Report:
 		field = fr.field_name.text
 		intro = "Type-checking found an unsuitable source for field '%s' access."%field
 		complaint = "%s has no fields; in particular not '%s'."%(lhs_type, field)
-		problem = [Annotation(env.path(), fr.lhs.head(), complaint)]
+		problem = [Annotation(env.path(), fr.head(), complaint)]
 		self._issues.append(Pic(intro, problem+trace_stack(env)))
-		
+	
+	def no_telepathy_allowed(self, env:TYPE_ENV, fr:syntax.FieldReference, lhs_type):
+		intro = "You cannot read the private state of actor %s."%lhs_type
+		problem = [Annotation(env.path(), fr.head())]
+		self._issues.append(Pic(intro, problem+trace_stack(env)))
+	
 	def record_lacks_field(self, env:TYPE_ENV, fr:syntax.FieldReference, lhs_type:SophieType):
 		field = fr.field_name.text
 		intro = "Type-checking found an unsuitable source for field '%s' access."%field
 		complaint = "Type '%s' has fields, but not one called '%s'."%(lhs_type, field)
-		problem = [Annotation(env.path(), fr.lhs.head(), complaint)]
+		problem = [Annotation(env.path(), fr.head(), complaint)]
 		self._issues.append(Pic(intro, problem+trace_stack(env)))
 	
 	def ill_founded_function(self, env:TYPE_ENV, udf:syntax.UserFunction):

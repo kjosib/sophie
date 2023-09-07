@@ -348,15 +348,13 @@ class ParametricTask(Task):
 		action.perform()
 
 class UserDefinedActor(Actor):
-	
 	def __init__(self, frame:ENV):
 		super().__init__()
 		self._frame = frame
 	
 	def handle(self, message, args):
 		state = self._frame.fetch(SELF)
-		vtable = state[VTABLE]
-		behavior = vtable[message]
+		behavior = state[VTABLE][message]
 		assert isinstance(behavior, syntax.Behavior)
 		frame = Activation.for_behavior(self._frame, behavior, args)
 		_strict(behavior.expr, frame).perform()

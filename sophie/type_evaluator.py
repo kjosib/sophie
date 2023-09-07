@@ -13,7 +13,7 @@ The tricky bit is (mutually) recursive functions.
 """
 from typing import Iterable, Sequence
 from boozetools.support.foundation import Visitor
-from .ontology import Symbol
+from .ontology import Symbol, SELF
 from . import syntax, primitive, diagnostics
 from .resolution import RoadMap, TopDown
 from .stacking import RootFrame, Activation
@@ -234,13 +234,13 @@ class ManifestBuilder(Visitor):
 		else:
 			return primitive.literal_msg
 		
-	def visit_UserAgent(self, uda:syntax.UserAgent):
+	def make_agent_template(self, uda:syntax.UserAgent, module_scope:TYPE_ENV):
 		if uda.fields:
 			product = self._make_product(field.type_expr for field in uda.fields)
-			return ParametricTemplateType(uda, product)
+			return ParametricTemplateType(uda, product, module_scope)
 		else:
 			# In this case, we have a (stateless) template ready to go.
-			return ConcreteTemplateType(uda, EMPTY_PRODUCT)
+			return ConcreteTemplateType(uda, EMPTY_PRODUCT, module_scope)
 
 class Rewriter(TypeVisitor):
 	def __init__(self, gamma:dict):
@@ -364,7 +364,7 @@ class Binder(Visitor):
 			if actual.expected_arity() == len(formal.arg.fields):
 				result = self._engine.apply_UDF(actual.udf_type, formal.arg.fields)
 				# At this point, either an act or another message will be acceptable.
-				if not quacks_like_an_action(result):
+				if not _quacks_like_an_action(result):
 					self.fail("%s does not an action make."%result)
 			else:
 				self.fail("%s has different arity from %s"%(formal, actual))
@@ -372,16 +372,17 @@ class Binder(Visitor):
 			if actual.expected_arity() == len(formal.arg.fields):
 				result = self._engine.apply_behavior(actual, formal.arg.fields)
 				# At this point, either an act or another message will be acceptable.
-				if not quacks_like_an_action(result):
+				if not _quacks_like_an_action(result):
 					self.fail("%s does not an action make."%result)
 			else:
 				self.fail("%s has different arity from %s"%(formal, actual))
 		else:
 			self.fail("Not sure how to use a %s as a %s"%(actual, formal))
 
-def quacks_like_an_action(result:SophieType) -> bool:
+def _quacks_like_an_action(result:SophieType) -> bool:
 	assert isinstance(result, SophieType), result
-	return result in (primitive.literal_act, primitive.literal_msg)
+	# Let ERROR quack to stop cascades of messages.
+	return result in (primitive.literal_act, primitive.literal_msg, ERROR)
 
 class UnionFinder(Visitor):
 	def __init__(self, prototype: SophieType):
@@ -505,7 +506,9 @@ class DeductionEngine(Visitor):
 		for td in module.types: self.visit(td)
 		for fi in module.foreign: self.visit(fi)
 		local = Activation.for_module(self._root, module)
-		for uda in module.agent_defs: self.visit(uda)
+		builder = ManifestBuilder([], [])
+		for uda in module.agent_defs:
+			self._constructors[uda] = builder.make_agent_template(uda, local)
 		for expr in module.main:
 			self._report.trace(" -->", expr)
 			result = self.visit(expr, local)
@@ -548,10 +551,6 @@ class DeductionEngine(Visitor):
 		type_args = [TypeVariable() for _ in i.type_params]
 		self._types[i] = InterfaceType(i, type_args)
 	
-	def visit_UserAgent(self, uda:syntax.UserAgent):
-		builder = ManifestBuilder([], [])
-		self._constructors[uda] = builder.visit(uda)
-	
 	###############################################################################
 
 	def visit_ImportForeign(self, d:syntax.ImportForeign):
@@ -568,34 +567,40 @@ class DeductionEngine(Visitor):
 		return _literal_type_map[type(expr.value)]
 	
 	def apply_UDF(self, fn_type: UDFType, arg_types: Sequence[SophieType]) -> SophieType:
-		inner = Activation.for_function(fn_type.static_env, fn_type.fn, arg_types)
+		inner = Activation.for_function(fn_type.static_link, fn_type.fn, arg_types)
 		return self.exec_UDF(fn_type.fn, inner)
 	
-	def apply_behavior(self, behavior:BehaviorType, arg_types: Sequence[SophieType]) -> SophieType:
-		# Build the proper type environment parallel to what the runtime does:
-		# a "SELF" dictionary containing the types given to the UDA constructor,
-		# and then bindings for behavior parameters.
-		
-		# Build the memo key, similar to what's going on with exec_UDF.
-		
-		# If already in recursion on this key, assume the best.
-		
-		# Otherwise:
-			# Enter recursion
-			# Evaluate the expression
-			# Exit recursion
-			# Demand that it quacks like a duck
-		raise NotImplementedError
+	def apply_behavior(self, bt:BehaviorType, arg_types: Sequence[SophieType]) -> SophieType:
+		env = Activation.for_behavior(bt.uda_type.frame, bt.behavior, arg_types)
+		memo_key = self._memo_key(bt.behavior, env)
+		if memo_key in self._memo:
+			return self._memo[memo_key]
+		elif memo_key in self._recursion:
+			return primitive.literal_msg
+		else:
+			self._recursion[memo_key] = False
+			got = self._memo[memo_key] = self.visit(bt.behavior.expr, env)
+			self._recursion.pop(memo_key)
+			if _quacks_like_an_action(got):
+				return primitive.literal_act
+			else:
+				self._report.does_not_express_behavior(env, bt.behavior, got)
+				return ERROR
 	
-	def exec_UDF(self, fn:syntax.UserFunction, env:TYPE_ENV):
-		# The part where memoization must happen.
-		memo_symbols = self._deps_pass.depends[fn]
+	def _memo_key(self, symbol:Symbol, env:TYPE_ENV):
+		# This definitely works for functions.
+		# Things are a bit more sketchy on the behavior side.
+		memo_symbols = self._deps_pass.depends[symbol]
 		assert all(isinstance(s, syntax.FormalParameter) for s in memo_symbols)
 		memo_types = tuple(
 			env.chase(p).fetch(p)  # .number
 			for p in memo_symbols
 		)
-		memo_key = fn, memo_types
+		return symbol, memo_types
+	
+	def exec_UDF(self, fn:syntax.UserFunction, env:TYPE_ENV):
+		# The part where memoization must happen.
+		memo_key = self._memo_key(fn, env)
 		if memo_key in self._memo:
 			return self._memo[memo_key]
 		elif memo_key in self._recursion:
@@ -651,7 +656,7 @@ class DeductionEngine(Visitor):
 		elif isinstance(callee_type, ParametricTemplateType):
 			binder = bind_formals(callee_type.args.fields)
 			if binder.ok:
-				return ConcreteTemplateType(callee_type.uda, ProductType(actual_types))
+				return ConcreteTemplateType(callee_type.uda, ProductType(actual_types), callee_type.frame)
 			else:
 				return ERROR
 		
@@ -687,7 +692,7 @@ class DeductionEngine(Visitor):
 				inner = Activation.for_function(static_env, target, ())
 				return self.exec_UDF(target, inner)
 		else:
-			assert isinstance(target, (syntax.FormalParameter, syntax.Subject, syntax.NewAgent)), type(target)
+			assert target is SELF or isinstance(target, (syntax.FormalParameter, syntax.Subject, syntax.NewAgent)), type(target)
 			return static_env.fetch(target)
 		
 	def visit_ExplicitList(self, el:syntax.ExplicitList, env:TYPE_ENV) -> SumType:
@@ -757,9 +762,29 @@ class DeductionEngine(Visitor):
 			self._report.bad_type(env, mx.subject.expr, mx.variant, subject_type, "Square Peg; Round Hole.")
 			return ERROR
 
+	def visit_AssignField(self, af:syntax.AssignField, env:TYPE_ENV) -> SophieType:
+		field_type = env.chase(af.dfn).fetch(af.dfn)
+		expr_type = self.visit(af.expr, env)
+		if expr_type == field_type or expr_type is ERROR:
+			return primitive.literal_act
+		else:
+			self._report.bad_type(env, af.expr, field_type, expr_type, "Assignment must match field type exactly.")
+			return ERROR
+	
 	def visit_FieldReference(self, fr:syntax.FieldReference, env:TYPE_ENV) -> SophieType:
 		lhs_type = self.visit(fr.lhs, env)
-		if isinstance(lhs_type, RecordType):
+		if isinstance(lhs_type, UDAType):
+			if _is_a_self_reference(fr.lhs):
+				try: symbol = lhs_type.uda.field_space[fr.field_name.key()]
+				except KeyError:
+					self._report.record_lacks_field(env, fr, lhs_type)
+					return ERROR
+				else:
+					return lhs_type.frame.fetch(symbol)
+			else:
+				self._report.no_telepathy_allowed(env, fr, lhs_type)
+				return ERROR
+		elif isinstance(lhs_type, RecordType):
 			spec = lhs_type.symbol.spec
 			parameters = lhs_type.symbol.type_params
 		elif isinstance(lhs_type, TaggedRecord):
@@ -824,11 +849,15 @@ class DeductionEngine(Visitor):
 		inner = Activation.for_do_block(env)
 		for na in do.agents:
 			assert isinstance(na, syntax.NewAgent)
-			template_type = self.visit(na.expr, env)
-			if isinstance(template_type, ConcreteTemplateType):
-				agent_type = UDAType(template_type.uda, template_type.args)
+			tt = self.visit(na.expr, env)
+			if isinstance(tt, ConcreteTemplateType):
+				frame = Activation(tt.frame, tt.uda)
+				agent_type = UDAType(tt.uda, tt.args, frame)
+				frame.assign(SELF, agent_type)
+				for f, t in zip(tt.uda.fields, tt.args.fields):
+					frame.assign(f, t)
 			else:
-				self._report.bad_type(env, na.expr, "Agent Template", template_type, "Casting call will repeat next Thursday.")
+				self._report.bad_type(env, na.expr, "Agent Template", tt, "Casting call will repeat next Thursday.")
 				agent_type = ERROR
 				answer = ERROR
 			inner.assign(na, agent_type)
@@ -841,7 +870,7 @@ class DeductionEngine(Visitor):
 			elif step_type is BOTTOM:
 				if answer is not ERROR:
 					answer = BOTTOM
-			elif not quacks_like_an_action(step_type):
+			elif not _quacks_like_an_action(step_type):
 				self._report.bad_type(inner, step, primitive.literal_act, step_type, "Only actions can be steps in a process.")
 				answer = ERROR
 		return answer
@@ -867,3 +896,5 @@ def _hypothesis(st:Symbol, type_args:Sequence[SophieType]) -> SubType:
 	if isinstance(body, syntax.RecordSpec):
 		return TaggedRecord(st, type_args)
 
+def _is_a_self_reference(expr:ValExpr) -> bool:
+	return isinstance(expr, syntax.Lookup) and expr.ref.dfn is SELF
