@@ -32,7 +32,7 @@ Things on Deck
 
 The next increment will probably focus on one of:
 
-* PyGame bindings with sample applications. Perhaps some simple mouse interaction would be a nice start.
+* More PyGame bindings with sample applications.
 * Stack-trace for domain-errors (e.g. division by zero) at runtime.
 * Better semantics for *tagged-value* variants.
 
