@@ -142,12 +142,12 @@ class MessageType(SophieType):
 
 class UDFType(SophieType):
 	fn: syntax.UserFunction
-	static_env: TYPE_ENV
+	static_link: TYPE_ENV
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_udf(self)
 	def expected_arity(self) -> int: return len(self.fn.params)
-	def __init__(self, fn:syntax.UserFunction, static_env:TYPE_ENV):
+	def __init__(self, fn:syntax.UserFunction, static_link:TYPE_ENV):
 		self.fn = fn
-		self.static_env = static_env
+		self.static_link = static_link
 		# NB: The uniqueness notion here is excessive, but there's a plan to deal with that.
 		#     Whatever instantiates a nested function must enter it in the static scope without duplication.
 		#     Performance hacking may make for an even better cache than that.
@@ -175,9 +175,12 @@ class InterfaceType(SophieType):
 	def expected_arity(self) -> int: return -1  # Not callable
 
 class _AgentDerived(SophieType):
-	def __init__(self, uda:syntax.UserAgent, args:ProductType):
+	def __init__(self, uda:syntax.UserAgent, args:ProductType, frame:TYPE_ENV):
 		self.uda = uda
 		self.args = args
+		# By definition the static link for a template is its own module's global scope.
+		# For a UDAType the proper static link should be an extension with a SELF link.
+		self.frame = frame
 		super().__init__(uda, args)
 
 class ParametricTemplateType(_AgentDerived):
@@ -193,10 +196,10 @@ class UDAType(_AgentDerived):
 	def expected_arity(self) -> int: return -1  # Not callable; instantiable.
 
 class BehaviorType(SophieType):
-	def __init__(self, agent:UDAType, behavior:syntax.Behavior):
-		self.agent = agent
+	def __init__(self, uda_type:UDAType, behavior:syntax.Behavior):
+		self.uda_type = uda_type
 		self.behavior = behavior
-		super().__init__(agent, behavior)
+		super().__init__(uda_type, behavior)
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_behavior(self)
 	def expected_arity(self) -> int: return len(self.behavior.params)
 
@@ -277,7 +280,7 @@ class Render(TypeVisitor):
 	def on_user_task(self, t: UserTaskType):
 		return "<task:%s>"%t.udf_type.visit(self)
 	def on_behavior(self, t: BehaviorType):
-		return "<%s:%s/%d>"%(t.agent.uda.nom.text, t.behavior.nom.text, t.expected_arity())
+		return "<%s:%s/%d>"%(t.uda_type.uda.nom.text, t.behavior.nom.text, t.expected_arity())
 	def on_bottom(self):
 		return "?"
 	def on_error_type(self):
