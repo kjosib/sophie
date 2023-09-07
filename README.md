@@ -38,9 +38,9 @@ and then take notes on how things go.
 
 Some things are going well:
 
-* Sophie has type-safe asynchronous message-passing concurrency. Sort of. (A type-safe message-queue and console-agent work.)
-* Sophie has Turtle-graphics! (See [here](https://github.com/kjosib/sophie/blob/main/examples/turtle.sg) for examples.)
-* Sophie is interactive! See [this guessing game](https://github.com/kjosib/sophie/blob/main/examples/guess_the_number.sg) as an example.
+* Sophie has type-safe asynchronous message-passing concurrency.
+* Sophie has Turtle-graphics! (See [here](https://github.com/kjosib/sophie/blob/main/examples/turtle/turtle.sg) for examples.)
+* Sophie is interactive! See [this guessing game](https://github.com/kjosib/sophie/blob/main/examples/games/guess_the_number.sg) as an example.
 * The new type-checker gives excellent feedback and cannot be fooled. Through abstract interpretation it completely rules out *type* errors.
   (Domain errors, such as division by zero, are still possible.)
 * The module system got an upgrade: there is now a notion of a system-package and the beginnings of a standard library.
@@ -50,8 +50,7 @@ Some things are going well:
 
 Some things are in progress:
 
-* The ability to create new agents under program control
-* SDL bindings (via PyGame for now)
+* SDL bindings (via PyGame for now). See for example this [graphical mouse-chaser](https://github.com/kjosib/sophie/blob/main/examples/games/mouse.sg).
 
 Certain things are not started yet:
 
