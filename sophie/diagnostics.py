@@ -303,7 +303,7 @@ class Pic:
 def _fetch(path) -> SourceText:
 	if path is None:
 		return SourceText("")
-	with open(path) as fh:
+	with open(path, "r", encoding="utf-8") as fh:
 		return SourceText(fh.read(), filename=str(path))
 
 class Redefined:
