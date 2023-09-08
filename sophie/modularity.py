@@ -49,7 +49,7 @@ class Program:
 		def load_module(abs_path: Path, cause: Optional[Expr]):
 			report.info("Loading", abs_path)
 			try:
-				with open(abs_path, "r") as fh:
+				with open(abs_path, "r", encoding="utf-8") as fh:
 					text = fh.read()
 			except FileNotFoundError:
 				report.no_such_file(abs_path, cause)
