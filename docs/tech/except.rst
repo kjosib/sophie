@@ -3,8 +3,8 @@ Division by Zero and Other Stories
 
 Sophie's type checker is now fully adequate to rule out *type* errors of all kinds,
 but not *value* errors. Problem is, at the time of this writing, the evaluator crashes
-if native code raises a Python exception. Also at the moment, although type errors are reliably
-detected and reported, it may not necessarily be obvious how that type error comes to be.
+if native code raises a Python exception. Except in concurrent code, "crash" means
+"print a stack trace and keep on trucking".
 
 Here's the plan:
 
