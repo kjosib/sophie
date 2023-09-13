@@ -25,7 +25,7 @@ start -> module_definition
 
 module_definition -> export_section import_section typedef_section assume_section define_section main_section :Module
 
-export_section  -> EXPORT ':' comma_list(name) ';'             | :empty
+export_section  -> EXPORT ':' comma_list(name)                 | :empty
 import_section  -> IMPORT ':' semicolon_list(import_directive) | :empty
 typedef_section -> TYPE ':' semicolon_list(type_decl)          | :empty
 assume_section  -> ASSUME ':' semicolon_list(assumption)       | :empty

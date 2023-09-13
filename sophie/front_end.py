@@ -2,7 +2,7 @@
 """
 import sys
 from pathlib import Path
-from typing import Union, Optional
+from typing import Union
 
 from boozetools.macroparse.runtime import TypicalApplication, make_tables
 from boozetools.scanning.engine import IterableScanner
@@ -149,6 +149,9 @@ _hint("expr ● \"", "Seems to be missing some sort of operator before the strin
 _hint("TYPE : ??? name ● =", "A type-name IS something, but a function = something.")
 _hint("TYPE : ??? name type_parameters ● =", "A type-name IS something, but a function = something.")
 _hint("CASE : semicolon_list(subtype) ● END", "Do you mean ESAC here?")
+_hint("semicolon_list(alternative) ELSE ● ->", "This doesn't take an arrow. Just ELSE is enough.")
+_hint("CASE semicolon_list(when_clause) ● ESAC", "CASE-WHEN needs an ELSE clause.")
+_hint("ELSE expr ● ???", "Probably a missing semicolon just before here.")
 
 assert _best_hint("export_section import_section TYPE : name square_list(name) IS".split(), 'OPAQUE')
 

@@ -544,15 +544,15 @@ class _AliasChecker(Visitor):
 			module.types = alias_order
 	pass
 
-	def _tour(self, them):
+	def _tour(self, them, *args):
 		for item in them:
-			self.visit(item)
+			self.visit(item, *args)
 	
 	def visit_TypeAlias(self, ta:syntax.TypeAlias):
 		self.graph[ta].append(ta.body)
-		self.visit(ta.body)
+		self.visit(ta.body, False)
 	
-	def visit_TypeCall(self, tc:syntax.TypeCall):
+	def visit_TypeCall(self, tc:syntax.TypeCall, allow_elide:bool):
 		assert tc not in self.graph
 		self.graph[tc] = edges = list(tc.arguments)
 		referent = tc.ref.dfn
@@ -567,9 +567,11 @@ class _AliasChecker(Visitor):
 		# a. Do we have the correct arity?
 		arg_arity = len(tc.arguments)
 		if arg_arity != param_arity:
-			self.report.wrong_type_arity(tc, arg_arity, param_arity)
-		for arg in tc.arguments:
-			self.visit(arg)
+			if arg_arity == 0 and allow_elide:
+				pass
+			else:
+				self.report.wrong_type_arity(tc, arg_arity, param_arity)
+		self._tour(tc.arguments, allow_elide)
 
 	def visit_Variant(self, v: syntax.Variant):
 		# A variant cannot participate in an aliasing cycle because it is a nominal type.
@@ -585,49 +587,46 @@ class _AliasChecker(Visitor):
 		self.visit(r.spec)
 	
 	def visit_RecordSpec(self, expr: syntax.RecordSpec):
-		self._tour(expr.fields)
+		self._tour(expr.fields, False)
 	
-	def visit_FormalParameter(self, param: syntax.FormalParameter):
+	def visit_FormalParameter(self, param: syntax.FormalParameter, allow_elide:bool):
 		if param.type_expr is not None:
-			self.visit(param.type_expr)
+			self.visit(param.type_expr, allow_elide)
 	
-	def visit_ArrowSpec(self, expr:syntax.ArrowSpec):
+	def visit_ArrowSpec(self, expr:syntax.ArrowSpec, allow_elide:bool):
 		assert expr not in self.graph
 		self.graph[expr] = list(expr.lhs)
-		for p in expr.lhs:
-			self.visit(p)
+		self._tour(expr.lhs, allow_elide)
 		if expr.rhs is not None:
 			self.graph[expr].append(expr.rhs)
-			self.visit(expr.rhs)
+			self.visit(expr.rhs, allow_elide)
 
 	def visit_Interface(self, i:syntax.Interface):
 		for ms in i.spec:
 			assert isinstance(ms, syntax.MethodSpec)
-			for tx in ms.type_exprs:
-				self.visit(tx)
+			self._tour(ms.type_exprs, False)
 
-	def visit_MessageSpec(self, ms: syntax.MessageSpec):
-		for a in ms.type_exprs:
-			self.visit(a)
+	def visit_MessageSpec(self, ms: syntax.MessageSpec, allow_elide:bool):
+		self._tour(ms.type_exprs, allow_elide)
 
 	def visit_ExplicitTypeVariable(self, expr:syntax.ExplicitTypeVariable): pass
 	def visit_ImplicitTypeVariable(self, it:syntax.ImplicitTypeVariable): pass
 
 	def visit_UserFunction(self, sym:syntax.UserFunction):
-		self._tour(sym.params)
+		self._tour(sym.params, True)
 		if sym.result_type_expr:
-			self.visit(sym.result_type_expr)
+			self.visit(sym.result_type_expr, True)
 
 	def visit_UserAgent(self, sym:syntax.UserAgent):
-		self._tour(sym.fields)
+		self._tour(sym.fields, True)
 		self._tour(sym.behaviors)
 	
 	def visit_Behavior(self, b:syntax.Behavior):
-		self._tour(b.params)
+		self._tour(b.params, True)
 
 	def visit_ImportForeign(self, d:syntax.ImportForeign):
 		for group in d.groups:
-			self.visit(group.type_expr)
+			self.visit(group.type_expr, False)
 
 def check_constructors(dubious_constructors:list[syntax.Reference], report:Report):
 	bogons = [ref.head() for ref in dubious_constructors if not ref.dfn.has_value_domain()]
