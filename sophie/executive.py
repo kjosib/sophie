@@ -25,7 +25,7 @@ def run_program(roadmap:RoadMap):
 	root = _dynamic_root(preamble_scope)
 	result = None
 	for module in roadmap.each_module:
-		env = Activation(root, module)
+		env = Activation.for_module(root, module)
 		_prepare(env, roadmap.module_scopes[module])
 		for d in module.foreign:
 			if d.linkage is not None:

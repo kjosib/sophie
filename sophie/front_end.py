@@ -152,6 +152,28 @@ _hint("CASE : semicolon_list(subtype) ● END", "Do you mean ESAC here?")
 _hint("semicolon_list(alternative) ELSE ● ->", "This doesn't take an arrow. Just ELSE is enough.")
 _hint("CASE semicolon_list(when_clause) ● ESAC", "CASE-WHEN needs an ELSE clause.")
 _hint("ELSE expr ● ???", "Probably a missing semicolon just before here.")
+_hint("expr ● ,", "Not sure, but might be some stray parentheses nearby.")
+_hint("( ● )", """
+	Gentle breezes formed
+	emptiness parenthesized.
+	The birds are singing.
+""")
+_hint("name formals : name ● (", """
+	If you are trying to declare the type of this function,
+		then you want [square brackets] here, not (parentheses).
+	If you are giving the value of this function (by reference to another function),
+		then the colon before this name needs to be an equals = sign.
+""")
+_hint("CASE subject hint OF ● ESAC", """
+	Two roads diverged in a wood, and I --
+	I got distracted, didn't I?
+""")
+_hint("name formals annotation = ● ;", """
+	Sometimes the absence of value is the greatest value.
+	You cannot lose what you do not possess.
+	But this is a computer program.
+""")
+_hint("name formals : name ● ???", "It seems to cut off after perhaps a type-annotation?")
 
 assert _best_hint("export_section import_section TYPE : name square_list(name) IS".split(), 'OPAQUE')
 

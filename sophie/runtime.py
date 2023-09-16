@@ -63,7 +63,7 @@ def _eval_lookup(expr:syntax.Lookup, dynamic_env:ENV):
 			if sym.params:
 				value = Closure(static_env, sym)
 			else:
-				inner = Activation.for_function(static_env, sym, ())
+				inner = Activation.for_function(static_env, dynamic_env, sym, ())
 				value = delay(inner, sym.expr)
 		elif isinstance(sym, syntax.TypeAlias):
 			value = _snap_type_alias(sym, static_env)
@@ -85,7 +85,7 @@ def _eval_shortcut_exp(expr:syntax.ShortCutExp, dynamic_env:ENV):
 def _eval_call(expr:syntax.Call, dynamic_env:ENV):
 	procedure = _strict(expr.fn_exp, dynamic_env)
 	thunks = tuple(delay(dynamic_env, a) for a in expr.args)
-	return procedure.apply(thunks)
+	return procedure.apply(thunks, dynamic_env)
 
 def _eval_cond(expr:syntax.Cond, dynamic_env:ENV):
 	if_part = _strict(expr.if_part, dynamic_env)
@@ -107,22 +107,28 @@ def _eval_explicit_list(expr:syntax.ExplicitList, dynamic_env:ENV):
 	tail = NIL
 	for sx in reversed(expr.elts):
 		head = delay(dynamic_env, sx)
-		tail = CONS.apply((head, tail))
+		tail = CONS.apply((head, tail), dynamic_env)
 	return tail
 
 def _eval_match_expr(expr:syntax.MatchExpr, dynamic_env:ENV):
 	subject = dynamic_env.assign(expr.subject, _strict(expr.subject.expr, dynamic_env))
 	tag = subject[""]
 	try:
-		branch = expr.dispatch[tag]
+		alternative = expr.dispatch[tag]
 	except KeyError:
 		branch = expr.otherwise
-		if branch is None:
-			raise RuntimeError("Confused by tag %r; should not be possible now that type-checking works."%tag)
-	return evaluate(branch, dynamic_env)
+		assert branch is not None, tag
+		return evaluate(branch, dynamic_env)
+	else:
+		for sub_fn in alternative.where:
+			dynamic_env.declare(sub_fn)
+		return evaluate(alternative.sub_expr, dynamic_env)
 
 def _eval_do_block(expr:syntax.DoBlock, dynamic_env:ENV):
 	return CompoundAction(expr, dynamic_env)
+
+def _eval_skip(expr:syntax.Skip, dynamic_env:ENV):
+	return Nop()
 
 def _eval_bind_method(expr:syntax.BindMethod, dynamic_env:ENV):
 	return BoundMethod(_strict(expr.receiver, dynamic_env), expr.method_name.text)
@@ -183,7 +189,7 @@ OPS = {glyph:op for glyph, (op, typ) in primitive.ops.items()}
 
 class Function:
 	""" A run-time object that can be applied with arguments. """
-	def apply(self, args: Sequence[LAZY_VALUE]) -> Any:
+	def apply(self, args: Sequence[LAZY_VALUE], dynamic_env:ENV) -> Any:
 		# It must be a LAZY_VALUE and not a syntax.ValExpr
 		# lest various internal things fail to work,
 		# which things to not tie back to specific syntax objects.
@@ -199,8 +205,8 @@ class Closure(Function):
 	
 	def _name(self): return self._udf.nom.text
 
-	def apply(self, args: Sequence[LAZY_VALUE]) -> LAZY_VALUE:
-		inner_env = Activation.for_function(self._static_link, self._udf, args)
+	def apply(self, args: Sequence[LAZY_VALUE], dynamic_env:ENV) -> LAZY_VALUE:
+		inner_env = Activation.for_function(self._static_link, dynamic_env, self._udf, args)
 		return evaluate(self._udf.expr, inner_env)
 
 class Primitive(Function):
@@ -208,7 +214,7 @@ class Primitive(Function):
 	def __init__(self, fn: callable):
 		self._fn = fn
 	
-	def apply(self, args: Sequence[LAZY_VALUE]) -> STRICT_VALUE:
+	def apply(self, args: Sequence[LAZY_VALUE], dynamic_env:ENV) -> STRICT_VALUE:
 		return self._fn(*map(force, args))
 
 class Constructor(Function):
@@ -216,7 +222,7 @@ class Constructor(Function):
 		self.key = key
 		self.fields = fields
 	
-	def apply(self, args: Sequence[LAZY_VALUE]) -> Any:
+	def apply(self, args: Sequence[LAZY_VALUE], dynamic_env:ENV) -> Any:
 		# TODO: It would be well to handle tagged values as Python pairs.
 		#  This way any value could be tagged, and various case-matching
 		#  things could work more nicely (and completely).
@@ -232,7 +238,7 @@ class ActorClass(Function):
 		self._global_link = global_link
 		self._uda = uda
 		
-	def apply(self, args: Sequence[LAZY_VALUE]) -> "ActorTemplate":
+	def apply(self, args: Sequence[LAZY_VALUE], dynamic_env:ENV) -> "ActorTemplate":
 		assert len(args) == len(self._uda.fields)
 		return ActorTemplate(self._global_link, self._uda, args)
 
@@ -243,10 +249,10 @@ class ActorTemplate:
 		self._uda = uda
 		self._args = args
 	
-	def instantiate(self):
+	def instantiate(self, dynamic_link:ENV):
 		private_state = dict(zip(self._uda.field_names(), map(force, self._args)))
 		private_state[VTABLE] = self._uda.message_space.local
-		frame = Activation(self._global_link, self._uda)
+		frame = Activation(self._global_link, dynamic_link, self._uda)
 		frame.assign(SELF, private_state)
 		return UserDefinedActor(frame)
 
@@ -315,7 +321,7 @@ class BoundMethod(Message, Action):
 		self._receiver = receiver
 		self._method_name = method_name
 
-	def apply(self, args: Sequence[LAZY_VALUE]) -> LAZY_VALUE:
+	def apply(self, args: Sequence[LAZY_VALUE], dynamic_env:ENV) -> LAZY_VALUE:
 		return BoundMessage(self._receiver, self._method_name, *(force(a) for a in args))
 	
 	def perform(self):
@@ -326,7 +332,7 @@ class ClosureMessage(Message):
 	def __init__(self, closure: Closure):
 		self._closure = closure
 
-	def apply(self, args: Sequence[LAZY_VALUE]) -> Any:
+	def apply(self, args: Sequence[LAZY_VALUE], dynamic_env:ENV) -> Any:
 		task = ParametricTask(self._closure, [force(a) for a in args])
 		return TaskAction(task)
 	

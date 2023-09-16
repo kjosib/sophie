@@ -42,6 +42,7 @@ class ExampleSmokeTests(unittest.TestCase):
 		for name in [
 			"hello_actors",
 			"hello_world",
+			"algorithm",
 			"tutorial/patron",
 			"tutorial/simple_calculations",
 			"tutorial/explicit_list_construction",

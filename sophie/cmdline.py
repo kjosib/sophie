@@ -34,22 +34,28 @@ parser.add_argument('-c', "--check", action="count", help="Check the program ver
 parser.add_argument('-x', "--experimental", action="store_true", help="Opt into experiment-mode, which is presently %s."%EXPERIMENT)
 
 def run(args):
-	from .diagnostics import Report
+	from .diagnostics import Report, TooManyIssues
 	from .resolution import RoadMap, Yuck
 	from .type_evaluator import DeductionEngine
 	from .executive import run_program
 	report = Report(verbose=args.check)
-	try: roadmap = RoadMap(Path.cwd() / args.program, report)
-	except Yuck:
-		assert report.sick()
-		report.complain_to_console()
-		return 1
-	assert report.ok()
-	if not args.experimental:
-		DeductionEngine(roadmap, report)
-		if report.sick():
+	try:
+		try: roadmap = RoadMap(Path.cwd() / args.program, report)
+		except Yuck:
+			assert report.sick()
 			report.complain_to_console()
 			return 1
+		assert report.ok()
+		if not args.experimental:
+			DeductionEngine(roadmap, report)
+			if report.sick():
+				report.complain_to_console()
+				return 1
+	except TooManyIssues:
+		report.complain_to_console()
+		print(" *"*35, file=sys.stderr)
+		print("Giving up after a few issues. One crisis at a time, eh?", file=sys.stderr)
+		return 1
 	if args.check:
 		print("Looks plausible to me.", file=sys.stderr)
 	else:
