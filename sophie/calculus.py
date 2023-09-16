@@ -284,7 +284,7 @@ class Render(TypeVisitor):
 	def on_bottom(self):
 		return "?"
 	def on_error_type(self):
-		return "-/-"
+		return "-/error/-"
 	
 def _name_variable(n):
 	name = ""

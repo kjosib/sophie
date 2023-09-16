@@ -19,7 +19,6 @@ class MismatchedBookendsError(SemanticError):
 		super().__init__(head, coda)
 
 class TypeParameter(Symbol):
-	static_depth = 0
 	def __init__(self, nom:Nom):
 		super().__init__(nom)
 	def head(self) -> slice:
@@ -28,7 +27,6 @@ class TypeParameter(Symbol):
 		return False
 
 class TypeDeclaration(Symbol):
-	static_depth = 0
 	param_space: NS   # Will address the type parameters. Word-definer fills this.
 	type_params: tuple[TypeParameter, ...]
 	
@@ -170,7 +168,6 @@ class Interface(TypeDeclaration):
 class SubTypeSpec(Symbol):
 	body: Optional[Union[RecordSpec, TypeCall, ArrowSpec]]
 	variant: Variant
-	static_depth = 0
 	# To clarify: The SubType here describes a *tagged* value, not the type of the value so tagged.
 	# One can tag any kind of value; even a function. Therefore yes, you can always
 	# treat a (tagged) subtype as a function. At least, once everything works right.
@@ -199,7 +196,7 @@ class UserFunction(Term):
 	def head(self) -> slice: return self.nom.head()
 	def __repr__(self):
 		p = ", ".join(map(str, self.params))
-		return "{fn:%s(%s)}" % (self.nom.text, p)
+		return "{fn|%s(%s)}" % (self.nom.text, p)
 	def __init__(
 			self,
 			nom: Nom,
@@ -301,6 +298,11 @@ class AsTask(ValExpr):
 		self.sub = sub
 	def head(self) -> slice: return self._head
 
+class Skip(ValExpr):
+	def __init__(self, head: slice):
+		self._head = head
+	def head(self) -> slice: return self._head
+
 class BinExp(ValExpr):
 	def __init__(self, glyph: str, lhs: ValExpr, o:slice, rhs: ValExpr):
 		self.glyph, self.lhs, self.rhs = glyph, lhs, rhs
@@ -376,7 +378,7 @@ class ExplicitList(ValExpr):
 			assert isinstance(e, ValExpr), e
 		self.elts = elts
 	def head(self) -> slice:
-		raise AssertionError
+		return slice(self.elts[0].head().start, self.elts[-1].head().stop)
 
 class Alternative(Symbol):
 	sub_expr: ValExpr
@@ -384,7 +386,7 @@ class Alternative(Symbol):
 	
 	namespace: NS  # WordDefiner fills
 
-	def __init__(self, pattern:Nom, _head, sub_expr:ValExpr, where:WhereClause):
+	def __init__(self, pattern:Nom, _head:slice, sub_expr:ValExpr, where:Optional[WhereClause]):
 		super().__init__(pattern)
 		self._head = _head
 		self.sub_expr = sub_expr
@@ -395,6 +397,16 @@ class Alternative(Symbol):
 			self.where = ()
 	def head(self) -> slice:
 		return self._head
+
+class Absurdity(ValExpr):
+	def __init__(self, _head:slice, reason:Literal):
+		self._head = _head
+		self.reason = reason
+	def head(self) -> slice:
+		return slice(self._head.start, self.reason.head().stop)
+
+def absurdAlternative(pattern:Nom, _head:slice, absurdity:Absurdity):
+	return Alternative(pattern, _head, absurdity, None)
 	
 class Subject(Symbol):
 	""" Within a match-case, a name must reach a different symbol with the particular subtype """
@@ -435,9 +447,14 @@ class NewAgent(Symbol):
 class DoBlock(ValExpr):
 	namespace: NS  # WordDefiner fills
 
-	def __init__(self, agents:list[NewAgent], steps:list[ValExpr]):
+	def __init__(self, agents:list[NewAgent], _head:slice, steps:list[ValExpr]):
 		self.agents = agents
 		self.steps = steps
+		self._head = _head
+		
+	def head(self) -> slice:
+		return self._head
+
 
 class AssignField(Reference):
 	def __init__(self, nom:Nom, expr:ValExpr):
@@ -488,9 +505,11 @@ ImportDirective = Union[ImportModule, ImportForeign]
 class Module:
 	imports: list[ImportModule]
 	foreign: list[ImportForeign]
-	source_path: Path  # Module loader fills this.
 	outer_functions: list[UserFunction]
-	agent_defs: list[UserAgent]
+	agent_definitions: list[UserAgent]
+	
+	source_path: Path  # Module loader fills this.
+	all_functions: list[UserFunction]  # Resolver fills this.
 
 	def __init__(self, exports:list, imports:list[ImportDirective], types:list[TypeDeclaration], assumption:list[Assumption], top_levels:list, main:list):
 		self.exports = exports
@@ -498,10 +517,11 @@ class Module:
 		self.foreign = [i for i in imports if isinstance(i, ImportForeign)]
 		self.types = types
 		self.outer_functions = []
-		self.agent_defs = []
+		self.agent_definitions = []
+		self.all_functions = []
 		for item in top_levels:
 			if isinstance(item, UserFunction): self.outer_functions.append(item)
-			elif isinstance(item, UserAgent): self.agent_defs.append(item)
+			elif isinstance(item, UserAgent): self.agent_definitions.append(item)
 			else: assert False, type(item)
 		self.main = main
 	

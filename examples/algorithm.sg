@@ -1,0 +1,37 @@
+# This example demonstrates (and tests) the tree library.
+
+import:
+    sys."tree"(new_tree, is_empty, in_order, assign, delete);
+
+define:
+
+    demo(text) = console ! echo(flat(grow(new_tree, sequence, 1))) where
+        
+        sequence = each_chr(text);
+        
+        grow(tree, letters, n) = case letters of
+            nil -> shrink(tree, sequence);
+            cons -> cons(show(tree, letters), grow(assign(tree, letters.head, n), letters.tail, n+1));
+        esac;
+        
+        shrink(tree, letters) = case letters of
+            nil -> [show(tree, letters)];
+            cons -> cons(show(tree, letters), shrink(delete(tree, letters.head).rest, letters.tail));
+        esac;
+        
+    end demo;
+    
+    show(tree, letters) = flat [
+        [join(map(format_item, in_order(tree))), " --|--  "],
+        interleave(' . ', letters),
+        [EOL],
+    ];
+    
+    format_item(item) = join [item.key, ":", str(item.value), " "];
+
+
+begin:
+
+    demo("ALGORITHM");
+
+end.

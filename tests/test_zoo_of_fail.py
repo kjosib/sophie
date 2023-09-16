@@ -8,7 +8,7 @@ from sophie.type_evaluator import DeductionEngine
 
 class Silence(Report):
 	def __init__(self):
-		super().__init__(False)
+		super().__init__(verbose=False, max_issues=30)
 		self.complain_to_console = mock.Mock()
 	pass
 

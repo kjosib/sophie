@@ -175,8 +175,24 @@ subject -> name     :simple_subject
   | expr AS name    :Subject
 hint -> :nothing | ':' reference
 alternative -> name '->' expr where_clause :Alternative
+
 ```
 Experience may later suggest expanding the `pattern` grammar, but this will do for now.
+
+**Absurd Cases**
+
+Type-case matches in Sophie must list every variety of subtype for the subject of the match.
+But sometimes there are cases which cannot happen in the first place.
+Sophie's type-system is cool, but Sophie is not a proof system.
+Instead, Sophie allows you to declare a case to be *absurd* along with a brief explanation.
+
+The precise run-time behavior of reaching an absurdity is implementation-defined,
+but should resemble whatever happens in case of division by zero.
+
+```
+alternative -> name '->' absurdity :absurdAlternative
+absurdity -> .ABSURD .short_string  :Absurdity
+```
 
 -----
 
@@ -193,11 +209,11 @@ is just a special type of value which happens to express
 observable outcomes, with just a few extra production rules.
 
 ```
-expr -> SKIP       :Skip
+expr -> .SKIP       :Skip
       | '!' expr       :AsTask
       | expr '!' name       :BindMethod
       | MY name ':=' expr      :AssignField
-      | with_agents DO semicolon_list(expr) END     :DoBlock
+      | .with_agents .DO .semicolon_list(expr) END     :DoBlock
 
 with_agents -> :empty | CAST semicolon_list(new_agent)
 new_agent -> name IS expr   :NewAgent

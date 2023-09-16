@@ -13,7 +13,7 @@ the upcoming message-passing semantics.
 
 from typing import TypeVar, Generic, Union
 from pathlib import Path
-from .ontology import Symbol, SELF
+from .ontology import Symbol
 from .syntax import UserFunction, Behavior, ValExpr, Subject, Module
 
 CRUMB = Union[Symbol, Module]
@@ -44,15 +44,18 @@ class RootFrame(Frame):
 	def __init__(self):
 		self._bindings = {}
 	def chase(self, key:Symbol) -> "Frame[T]":
-		assert key in self._bindings, key
-		return self
+		if key in self._bindings:
+			return self
+		else:
+			raise KeyError(key)
 	def trace(self, tracer):
 		tracer.hit_bottom()
 
 class Activation(Frame):
-	def __init__(self, static_link: Frame[T], breadcrumb:CRUMB):
+	def __init__(self, static_link: Frame[T], dynamic_link: Frame[T], breadcrumb:CRUMB):
 		self._bindings = {}
 		self._static_link = static_link
+		self._dynamic_link = dynamic_link
 		self.breadcrumb = breadcrumb
 	
 	def path(self) -> Path:
@@ -63,11 +66,12 @@ class Activation(Frame):
 
 	def trace(self, tracer):
 		tracer.trace_frame(self.breadcrumb, self._bindings, self.pc)
+		self._dynamic_link.trace(tracer)
 
 	@staticmethod
-	def for_function(static_link: Frame[T], udf: UserFunction, arguments) -> "Activation[T]":
+	def for_function(static_link: Frame[T], dynamic_link: Frame[T], udf: UserFunction, arguments) -> "Activation[T]":
 		assert len(udf.params) == len(arguments)
-		ar = Activation(static_link, udf)
+		ar = Activation(static_link, dynamic_link, udf)
 		ar._bindings.update(zip(udf.params, arguments))
 		for key in udf.where:
 			ar.declare(key)
@@ -75,27 +79,27 @@ class Activation(Frame):
 
 	@staticmethod
 	def for_subject(static_link: Frame[T], subject:Subject) -> "Activation[T]":
-		ar = Activation(static_link, static_link.breadcrumb)
+		ar = Activation(static_link, static_link, static_link.breadcrumb)
 		ar.declare(subject)
 		return ar
 	
 	@staticmethod
 	def for_module(static_link: Frame[T], module:Module) -> "Activation[T]":
-		ar = Activation(static_link, module)
+		ar = Activation(static_link, RootFrame(), module)
 		for udf in module.outer_functions:
 			ar.declare(udf)
-		for uda in module.agent_defs:
+		for uda in module.agent_definitions:
 			ar.declare(uda)
 		return ar
 
 	@staticmethod
 	def for_do_block(static_link: Frame[T]) -> "Activation[T]":
-		return Activation(static_link, static_link.breadcrumb)
+		return Activation(static_link, static_link, static_link.breadcrumb)
 
 	@staticmethod
-	def for_behavior(static_link: Frame[T], b:Behavior, arguments) -> "Activation[T]":
+	def for_behavior(static_link: Frame[T], dynamic_link: Frame[T], b:Behavior, arguments) -> "Activation[T]":
 		assert len(b.params) == len(arguments)
-		ar = Activation(static_link, b)
+		ar = Activation(static_link, dynamic_link, b)
 		ar._bindings.update(zip(b.params, arguments))
 		return ar
 

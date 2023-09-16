@@ -28,8 +28,6 @@ class RoadMap:
 	module_scopes : dict[syntax.Module, NS]
 	import_alias : dict[syntax.Module, NS]
 	each_module : list[syntax.Module]
-	each_udf : list[syntax.UserFunction]
-	each_uda : list[syntax.UserAgent]
 	each_match : list[syntax.MatchExpr]
 	import_map : dict[syntax.ImportModule, syntax.Module]
 
@@ -37,8 +35,6 @@ class RoadMap:
 		self.module_scopes = {}
 		self.import_alias = {}
 		self.each_module = []
-		self.each_udf = []
-		self.each_uda = []
 		self.each_match = []
 
 		def register(parent, module):
@@ -85,7 +81,7 @@ class RoadMap:
 		""" Both the type checker and the simple evaluator uses these. """
 		for mx in self.each_match:
 			mx.dispatch = {
-				alt.nom.key() : alt.sub_expr
+				alt.nom.key() : alt
 				for alt in mx.alternatives
 			}
 
@@ -100,9 +96,10 @@ class TopDown(Visitor):
 		for a in it.lhs:
 			self.visit(a, env)
 		self.visit(it.rhs, env)
-
+	
+	def visit_Absurdity(self, absurd: syntax.Absurdity, env): pass
 	def visit_Literal(self, l:syntax.Literal, env): pass
-
+	def visit_Skip(self, s:syntax.Skip, env): pass
 	def visit_ImplicitType(self, it:syntax.ImplicitTypeVariable, env): pass
 
 	def visit_ShortCutExp(self, it: syntax.ShortCutExp, env):
@@ -147,12 +144,13 @@ class _ResolutionPass(TopDown):
 
 	def __init__(self, roadmap: RoadMap, module:syntax.Module, report:Report):
 		self.roadmap = roadmap
+		self.module = module
 		self.report = report
 		self.globals = self.roadmap.module_scopes[module]
 		self.import_alias = self.roadmap.import_alias[module]
-		self.visit_Module(module)
+		self.visit_Module()
 
-	def visit_Module(self, module:syntax.Module):
+	def visit_Module(self):
 		raise NotImplementedError(type(self))
 
 class _WordDefiner(_ResolutionPass):
@@ -164,15 +162,15 @@ class _WordDefiner(_ResolutionPass):
 	Attaches NameSpace objects in key places and install definitions.
 	Takes note of names with more than one definition in the same scope.
 	"""
-	def visit_Module(self, module:syntax.Module):
-		self._source_path = module.source_path
+	def visit_Module(self):
+		module = self.module
 		for d in module.imports: self.visit_ImportModule(d)
 		for td in module.types: self.visit(td)
 		for d in module.foreign: self.visit_ImportForeign(d)
 		# Can't iterate all-functions yet; must build it first.
 		for fn in module.outer_functions:
 			self.visit(fn, self.globals)
-		for uda in module.agent_defs:
+		for uda in module.agent_definitions:
 			self.visit(uda, self.globals)
 		for expr in module.main:  # Might need to define some case-match symbols here.
 			self.visit(expr, self.globals)
@@ -234,8 +232,8 @@ class _WordDefiner(_ResolutionPass):
 			self.visit(a, env)
 
 	def visit_UserFunction(self, udf:syntax.UserFunction, env:NS):
-		udf.source_path = self._source_path
-		self.roadmap.each_udf.append(udf)
+		udf.source_path = self.module.source_path
+		self.module.all_functions.append(udf)
 		self._install(env, udf)
 		inner = udf.namespace = env.new_child(udf)
 		for param in udf.params:
@@ -247,8 +245,7 @@ class _WordDefiner(_ResolutionPass):
 		self.visit(udf.expr, inner)
 
 	def visit_UserAgent(self, uda:syntax.UserAgent, env:NS):
-		uda.source_path = self._source_path
-		self.roadmap.each_uda.append(uda)
+		uda.source_path = self.module.source_path
 		self._install(env, uda)
 		field_space = uda.field_space = env.new_child(uda)
 		for f in uda.fields:
@@ -369,15 +366,16 @@ class _WordResolver(_ResolutionPass):
 	dubious_constructors: list[syntax.Reference]
 	_current_uda = None
 
-	def visit_Module(self, module:syntax.Module):
+	def visit_Module(self):
 		self.dubious_constructors = []
+		module = self.module
 		for td in module.types:
 			self.visit(td)
 		for item in module.foreign:
 			self.visit(item)
-		for item in self.roadmap.each_uda:
+		for item in module.agent_definitions:
 			self.visit(item)
-		for item in self.roadmap.each_udf:
+		for item in module.all_functions:
 			self.visit(item)
 		for expr in module.main:
 			self.visit(expr, self.globals)
@@ -516,15 +514,13 @@ class _AliasChecker(Visitor):
 		self.report = report
 		self.globals = self.roadmap.module_scopes[module]
 		self.import_alias = self.roadmap.import_alias[module]
-		self.visit_Module(module)
-
-	def visit_Module(self, module: syntax.Module):
 		self.non_types = []
 		self.graph = {td:[] for td in module.types}
+		
 		self._tour(module.types)
 		self._tour(module.foreign)
-		self._tour(self.roadmap.each_uda)
-		self._tour(self.roadmap.each_udf)
+		self._tour(module.agent_definitions)
+		self._tour(module.all_functions)
 		if self.non_types:
 			self.report.these_are_not_types(self.non_types)
 		alias_order = []
@@ -655,12 +651,11 @@ def _check_one_match_expression(mx: syntax.MatchExpr, module_scope: NS, report: 
 			return 
 
 	# Check for duplicate cases and typos.
-	seen, err = {}, False
+	seen = {}
 	for alt in mx.alternatives:
 		key = alt.nom.key()
 		if key in seen:
 			report.redefined_name(seen[key], alt.nom)
-			err = True
 		else: seen[key] = alt
 		if key not in variant.sub_space:
 			report.not_a_case_of(alt.nom, variant)

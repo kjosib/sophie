@@ -118,7 +118,8 @@ define:
 	# left(s, n) = mid(s, 0, n);
 	# right(s, n) = mid(s, len(s)-n, len(s));
 
-	join(ss) = reduce(strcat, "", ss);  # Yes, this is O(n^2). Fixing that from within is nontrivial.
+	join(ss : list[string]) : string
+	= reduce(strcat, "", ss);  # Yes, this is O(n^2). Fixing that from within is nontrivial.
 
 	interleave(x, ys) = drop(1, flat(map(prefix, ys))) where prefix(y)=cons(x, cons(y, nil)); end interleave;
 

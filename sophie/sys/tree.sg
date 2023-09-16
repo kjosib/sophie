@@ -1,0 +1,248 @@
+# 2-3 Trees
+
+# A balanced-tree associative data structure.
+
+# I mostly referred to:
+#   https://www.cs.princeton.edu/~dpw/courses/cos326-12/ass/2-3-trees.pdf
+
+# It's a big enough project to highlight unresolved tensions in Sophie's design so far.
+
+# One of those tensions relates to literacy: It's hard to know where to put commentary.
+# Another is the lack of proper generics just yet: Keys can so far only be numbers and strings.
+
+export:
+    Tree, Item, Removed,
+    
+    search, in_order, assign, new_tree, is_empty,
+    first, last, shift, delete,
+
+type:
+
+    #####################   Public Interface Types   #####################
+
+    Tree[K,V] is case:
+        Leaf;
+        Two(left:Tree[K,V], pivot:Item[K,V], right:Tree[K,V]);
+        Three(left:Tree[K,V], p1:Item[K,V], mid:Tree[K,V], p2:Item[K,V], right:Tree[K,V]);
+    esac;
+
+    Item[K,V] is (key: K, value:V);
+
+    Removed[K,V] is (item:maybe[Item[K,V]], rest:Tree[K,V]);
+
+    #####################   Internal Implementation Types   #####################
+
+    puddle[K,V] is  # Intermediate result type for upsert sub-function
+    case:
+        ok(tree:Tree[K,V]);
+        spill(left:Tree[K,V], pivot:Item[K,V], right:Tree[K,V]);
+    esac;
+    
+    bubble[K,V] is  # Intermediate result for shift and delete internals
+    case:
+        Nothing;
+        Hole(item:Item[K,V], tree:Tree[K,V]);
+        Full(item:Item[K,V], tree:Tree[K,V]);
+    esac;
+    
+define:
+
+    new_tree:Tree = Leaf;
+    
+    is_empty(T:Tree):flag = case T of
+        Leaf -> yes;
+        else no;
+    esac;
+
+    search(T:Tree, key) = case T of
+        Leaf -> nope;
+        Two -> case
+            when key < T.pivot.key then search(T.left, key);
+            when key > T.pivot.key then search(T.right, key);
+            else this(T.pivot.value);
+        esac;
+        Three -> case
+            when key < T.p1.key then search(T.left, key);
+            when key > T.p2.key then search(T.right, key);
+            when key == T.p1.key then this(T.p1.value);
+            when key == T.p2.key then this(T.p2.value);
+            else search(T.mid, key);
+        esac;
+    esac;
+
+    in_order(T:Tree) : list[Item] = case T of
+        Leaf -> nil;
+        Two -> cat(in_order(T.left), cons(T.pivot, in_order(T.right)));
+        Three -> cat(in_order(T.left), cons(T.p1, cat(in_order(T.mid), cons(T.p2, in_order(T.right)))));
+    esac;
+
+    assign(tree:Tree, key, value) = case downward(tree) as x of
+        ok -> x.tree;
+        spill -> Two(x.left, x.pivot, x.right);
+    esac where
+        new_item = Item(key, value);
+        downward(T) : puddle = case T of
+            Leaf -> spill(Leaf, new_item, Leaf);
+            Two -> case
+                when key < T.pivot.key then case downward(T.left) as sub of
+                    ok -> ok(Two(sub.tree, T.pivot, T.right));
+                    spill -> ok(Three(sub.left, sub.pivot, sub.right, T.pivot, T.right));
+                esac;
+                when key > T.pivot.key then case downward(T.right) as sub of
+                    ok -> ok(Two(T.left, T.pivot, sub.tree));
+                    spill -> ok(Three(T.left, T.pivot, sub.left, sub.pivot, sub.right));
+                esac;
+                else ok(Two(T.left, new_item, T.right));
+            esac;
+            Three -> case
+                when key == T.p1.key then ok(Three(T.left, new_item, T.mid, T.p2, T.right));
+                when key == T.p2.key then ok(Three(T.left, T.p1, T.mid, new_item, T.right));
+                when key < T.p1.key then case downward(T.left) as sub of
+                    ok -> ok(Three(sub.tree, T.p1, T.mid, T.p2, T.right));
+                    spill -> spill(Two(sub.left, sub.pivot, sub.right), T.p1, Two(T.mid, T.p2, T.right));
+                esac;
+                when key > T.p2.key then case downward(T.right) as sub of
+                    ok -> ok(Three(T.left, T.p1, T.mid, T.p2, sub.tree));
+                    spill -> spill(Two(T.left, T.p1, T.mid), T.p2, Two(sub.left, sub.pivot, sub.right));
+                esac;
+                else case downward(T.mid) as sub of
+                    ok -> ok(Three(T.left, T.p1, sub.tree, T.p2, T.right));
+                    spill -> spill(Two(T.left, T.p1, sub.left), sub.pivot, Two(sub.right, T.p2, T.right));
+                esac;
+            esac;
+        esac;
+    end assign;
+
+    first(T:Tree) : maybe[Item]
+    = case T of
+        Leaf -> nope;
+        Two -> case first(T.left) as sub of
+            nope -> this(T.pivot);
+            this -> sub;
+        esac;
+        Three -> case first(T.left) as sub of
+            nope -> this(T.p1);
+            this -> sub;
+        esac;
+    esac;
+    
+    last(T:Tree) : maybe[Item]
+    = case T of
+        Leaf -> nope;
+        Two -> case last(T.right) as sub of
+            nope -> this(T.pivot);
+            this -> sub;
+        esac;
+        Three -> case last(T.right) as sub of
+            nope -> this(T.p2);
+            this -> sub;
+        esac;
+    esac;
+
+# 2-3 Tree deletion is ... agonizing.
+# It has sub-cases and sub-sub-cases enough to make the eyes glaze over.
+# I shall first attempt to solve a simpler included sub-problem:
+# Separating the first element of a 2-3 tree and bubbling that up.
+
+    shift(root:Tree) : Removed = _remove(root, _shift);
+    
+    _remove(root:Tree, how:(Tree)->bubble) = case how(root) as b of
+        Nothing ->
+            # Give back the root (not Leaf) so a mis-aimed delete does not drop the tree.
+            Removed(nope, root);
+        Hole -> Removed(this(b.item), b.tree);
+        Full -> Removed(this(b.item), b.tree);
+    esac;
+    
+    _shift(T:Tree) : bubble = case T of
+        Leaf -> Nothing;
+        Two -> _bubble_two_from_left(_shift(T.left), T.pivot, T.right, Hole(T.pivot, Leaf));
+        Three -> _bubble_three_from_left(_shift(T.left), T.p1, T.mid, T.p2, T.right, Full(T.p1, Two(Leaf, T.p2, Leaf)));
+    esac;
+
+    _bubble_two_from_left(sub:bubble, pivot:Item, right:Tree, on_nothing:bubble) : bubble
+    = case sub of
+        Nothing -> on_nothing;
+        Hole -> case right of
+            Leaf -> absurd "all siblings have the same height";
+            Two -> Hole(sub.item, Three(sub.tree, pivot, right.left, right.pivot, right.right));
+            Three -> Full(sub.item, Two(Two(sub.tree, pivot, right.left), right.p1, Two(right.mid, right.p2, right.right)));
+        esac;
+        Full -> Full(sub.item, Two(sub.tree, pivot, right));
+    esac;
+    
+    _bubble_three_from_left(sub:bubble, p1:Item, mid:Tree, p2:Item, right:Tree, on_nothing): bubble
+    = case sub of
+        Nothing -> on_nothing;
+        Hole -> case mid of
+            Leaf -> absurd "all siblings have the same height";
+            Two -> Full(sub.item, Two(Three(sub.tree, p1, mid.left, mid.pivot, mid.right), p2, right));
+            Three -> Full(sub.item, Three(Two(sub.tree, p1, mid.left), mid.p1, Two(mid.mid, mid.p2, mid.right), p2, right));
+        esac;
+        Full -> Full(sub.item, Three(sub.tree, p1, mid, p2, right));
+    esac;
+    
+    delete(root:Tree, key) : Removed = _remove(root, del) where
+        del(T) : bubble = case T of
+        
+            Leaf -> Nothing;  # Key was not found; delete nothing.
+            
+            Two -> case
+                when key < T.pivot.key then _bubble_two_from_left(del(T.left), T.pivot, T.right, Nothing);
+                when key > T.pivot.key then case del(T.right) as sub of
+                    Nothing -> Nothing;
+                    Hole -> balance(sub.item, T.pivot, sub.tree);
+                    Full -> Full(sub.item, Two(T.left, T.pivot, sub.tree));
+                esac;
+                else case _shift(T.right) as next of
+                    Nothing -> Hole(T.pivot, Leaf);
+                    Hole -> balance(T.pivot, next.item, next.tree);
+                    Full -> Full(T.pivot, Two(T.left, next.item, next.tree));
+                esac;
+            esac where
+                balance(evict:Item, pivot:Item, sub:Tree) = case T.left as left of
+                    Leaf -> absurd "all siblings have the same height";
+                    Two -> Hole(evict, Three(left.left, left.pivot, left.right, pivot, sub));
+                    Three -> Full(evict, Two(Two(left.left, left.p1, left.mid), left.p2, Two(left.right, pivot, sub)));
+                esac;
+            end Two;
+            
+            Three -> case
+                when key < T.p1.key then _bubble_three_from_left(del(T.left), T.p1, T.mid, T.p2, T.right, Nothing);
+                when key == T.p1.key then case _shift(T.mid) as next of
+                    Nothing -> lonely(T.p1, T.p2);
+                    Hole -> balance_mid(T.p1, next.item, next.tree);
+                    Full -> Full(T.p1, Three(T.left, next.item, next.tree, T.p2, T.right));
+                esac;
+                when key < T.p2.key then case del(T.mid) as sub of
+                    Nothing -> Nothing;
+                    Hole -> balance_mid(sub.item, T.p1, sub.tree);
+                    Full -> Full(sub.item, Three(T.left, T.p1, sub.tree, T.p2, T.right));
+                esac;
+                when key == T.p2.key then case _shift(T.right) as next of
+                    Nothing -> lonely(T.p2, T.p1);
+                    Hole -> balance_right(T.p2, next.item, next.tree);
+                    Full -> Full(T.p2, Three(T.left, T.p1, T.mid, next.item, next.tree));
+                esac;
+                else case del(T.right) as sub of
+                    Nothing -> Nothing;
+                    Hole -> balance_right(sub.item, T.p2, sub.tree);
+                    Full -> Full(sub.item, Three(T.left, T.p1, T.mid, T.p2, sub.tree));
+                esac;
+            esac where
+                lonely(evict:Item, keep:Item) = Full(evict, Two(Leaf, keep, Leaf));
+                balance_mid(evict:Item, keep:Item, sub:Tree) = case T.left as left of
+                    Leaf -> absurd "all siblings have the same height";
+                    Two -> Full(evict, Two(Three(left.left, left.pivot, left.right, keep, sub), T.p2, T.right));
+                    Three -> Full(evict, Three(Two(left.left, left.p1, left.mid), left.p2, Two(left.right, keep, sub), T.p2, T.right));
+                esac;
+                balance_right(evict:Item, keep:Item, sub:Tree) = case T.mid as mid of
+                    Leaf -> absurd "all siblings have the same height";
+                    Two -> Full(evict, Two(T.left, T.p1, Three(mid.left, mid.pivot, mid.right, keep, sub)));
+                    Three -> Full(evict, Three(T.left, T.p1, Two(mid.left, mid.p1, mid.mid), mid.p2, Two(mid.right, keep, sub)));
+                esac;
+            end Three;
+        esac;
+    end delete;
+    
+end.
