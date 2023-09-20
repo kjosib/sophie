@@ -54,7 +54,7 @@ define:
         else no;
     esac;
 
-    search(T:Tree, key) = case T of
+    search(T:Tree, key):maybe = case T of
         Leaf -> nope;
         Two -> case
             when key < T.pivot.key then search(T.left, key);
