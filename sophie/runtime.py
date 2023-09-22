@@ -2,7 +2,7 @@ import traceback
 from typing import Any, Union, Sequence, Optional
 from . import syntax, primitive
 from .ontology import SELF
-from .stacking import Frame, Activation
+from .stacking import Frame, Activation, RootFrame
 from .scheduler import MAIN_QUEUE, Task, Actor
 
 STRICT_VALUE = Union[
@@ -12,6 +12,8 @@ STRICT_VALUE = Union[
 LAZY_VALUE = Union[STRICT_VALUE, "Thunk"]
 ENV = Frame[LAZY_VALUE]
 VTABLE = object()
+
+THREADED_ROOT = RootFrame()
 
 ###############################################################################
 
@@ -281,17 +283,17 @@ class CompoundAction(Action):
 	def perform(self):
 		agents = self._block.agents
 		if agents:
-			env = Activation.for_do_block(self._dynamic_env)
+			inner = Activation.for_do_block(self._dynamic_env)
 			for na in agents:
 				assert isinstance(na, syntax.NewAgent)
 				template = _strict(na.expr, self._dynamic_env)
-				env.assign(na, template.instantiate())
+				inner.assign(na, template.instantiate(self._dynamic_env))
 		else:
-			env = self._dynamic_env
+			inner = self._dynamic_env
 		# TODO: Solve the tail-recursion problem.
 		for expr in self._block.steps:
-			env.pc = expr
-			action = _strict(expr, env)
+			inner.pc = expr
+			action = _strict(expr, inner)
 			action.perform()
 
 class BoundMessage(Action):
@@ -314,7 +316,7 @@ class TaskAction(Action):
 class Message(Function):
 	""" Interface for things that, with arguments, become messages ready to send. """
 	def dispatch_with(self, *args):
-		self.apply(args).perform()
+		self.apply(args, THREADED_ROOT).perform()
 
 class BoundMethod(Message, Action):
 	def __init__(self, receiver, method_name):
@@ -349,7 +351,7 @@ class ParametricTask(Task):
 		self._closure = closure
 		self._args = args
 	def proceed(self):
-		action = force(self._closure.apply(self._args))
+		action = force(self._closure.apply(self._args, THREADED_ROOT))
 		assert isinstance(action, Action), type(action)
 		action.perform()
 
@@ -362,7 +364,7 @@ class UserDefinedActor(Actor):
 		state = self._frame.fetch(SELF)
 		behavior = state[VTABLE][message]
 		assert isinstance(behavior, syntax.Behavior)
-		frame = Activation.for_behavior(self._frame, behavior, args)
+		frame = Activation.for_behavior(self._frame, THREADED_ROOT, behavior, args)
 		_strict(behavior.expr, frame).perform()
 
 ###############################################################################
