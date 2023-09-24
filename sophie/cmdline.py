@@ -21,7 +21,7 @@ Documentation: https://sophie.readthedocs.io/en/latest/
 import sys, argparse
 from pathlib import Path
 
-EXPERIMENT = "to skip the type checker"  # nothing
+EXPERIMENT = "to emit some IL"  # nothing
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -46,11 +46,10 @@ def run(args):
 			report.complain_to_console()
 			return 1
 		assert report.ok()
-		if not args.experimental:
-			DeductionEngine(roadmap, report)
-			if report.sick():
-				report.complain_to_console()
-				return 1
+		DeductionEngine(roadmap, report)
+		if report.sick():
+			report.complain_to_console()
+			return 1
 	except TooManyIssues:
 		report.complain_to_console()
 		print(" *"*35, file=sys.stderr)
@@ -58,6 +57,9 @@ def run(args):
 		return 1
 	if args.check:
 		print("Looks plausible to me.", file=sys.stderr)
+	elif args.experimental:
+		from .intermediate import linearize
+		linearize(roadmap)
 	else:
 		run_program(roadmap)
 
