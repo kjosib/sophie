@@ -65,3 +65,80 @@ A message containing unevaluated thunks (even indirectly) represents the potenti
 To prevent that, the obvious temptation is to demand messages be fully evaluated in advance.
 That is, no co-data in a message. But to reconcile this with lazy semantics *is hard*. 
 
+
+Design Log
+==============
+
+16 September 2023
+-----------------
+Felt the performance impact of Sophie's Python-based tree-walk runtime for the first time.
+The example code for the 2-3 tree library completes relatively quickly,
+but given a bit more input it slowed noticeably. I probably first began to consider
+implementing a Sophie-specific bytecode VM at that point.
+
+Later, I ran across an article about someone seeing a major performance boost switching
+a tree-walker to a byte-code VM. And his tree-walker was probably already in C.
+I asked about it.
+
+19 September 2023
+-----------------
+Got a response from VM guy. Quite convincing. Got serious about making a VM.
+Began by cribbing from Crafting Interpreters with intention to diverge and
+produce a pseudo-assembler instead.
+
+CI starts with the VM fetch-execute loop, a few hard-coded bytecodes, and a disassembler.
+It's not much, but you have to start somewhere and this puts everything in perspective.
+
+21 September 2023
+-----------------
+Got to the point where I could assemble bytecodes.
+Assembler and disassembler are both driven with a table of instructions and their characteristics --
+effectively "addressing modes" per bytecode. But the "constant" instruction seems needlessly verbose.
+The first digression from the assembler design came when I changed the outer parse loop to
+detect literal constants vs. instructions. Any literal constant gets compiled to a constant-instruction.
+That's convenient for writing and running simple tests because there's less to go wrong.
+
+It also feels a bit like FORTH.
+
+23 September 2023
+-----------------
+Made the hash-table thing. The hash function (FNV-1a) is not stellar, but it will serve the purpose.
+Skimmed the global-variables chapter. I will probably want a symbol table, but it won't look like this.
+
+24 September 2023
+-----------------
+Looking at the local-variables chapter. It's focused on block-structure and mostly irrelevant.
+I'll skim this and skip ahead to the functions chapter, for it's time to start thinking about how to
+represent a calling convention and activation records.
+
+I'd forgotten how user-hostile the C programming language is.
+Every time I sneeze, the cmake configuration is haywire again.
+At least with all the ``.h`` files combined together into one,
+the project builds again.
+
+Here's a general plan for functions:
+I'll have some token that means to define a function.
+The sequel will grab the name and a number of parameters.
+It will allocate a new chunk, set a few things up including nested static scope,
+and move the compiler's attention to this nested scope.
+Scopes of course form a stack (implicitly because they have parent-links)
+and this means there must be a corresponding end-function token.
+
+For these scope-brackets, one option is to use curly braces.
+
+I will deal with thunks later, after a bit more of the bytecode system comes together.
+
+For the moment, I suppose it would be interesting to "compile" arithmetic expressions.
+On the VM side, I shall keep heavy sanity checks in place for the time being.
+
+Let the calling convention be to load the arguments in-order,
+then look up the function, and then emit a ``call`` instruction.
+The callee cleans the value stack, leaving the return value in place of the arguments.
+The need for an explicit ``call`` comes from the ability to pass functions around as data.
+
+For global functions, I'll just use the global-variable mechanism but use mangled names.
+There will be a single "global" instruction that reads a constant from the chunk's constant table.
+This is a compromise. For now, this will work. Longer-term I might prefer to make the compiler
+work out a reference to the exact function and store that as an ordinary constant,
+but it would require a nontrivial amount of work to represent the symbolic module import graph.
+

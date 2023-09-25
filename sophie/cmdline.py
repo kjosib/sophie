@@ -58,8 +58,8 @@ def run(args):
 	if args.check:
 		print("Looks plausible to me.", file=sys.stderr)
 	elif args.experimental:
-		from .intermediate import linearize
-		linearize(roadmap)
+		from .intermediate import Translation
+		Translation().visit(roadmap)
 	else:
 		run_program(roadmap)
 
