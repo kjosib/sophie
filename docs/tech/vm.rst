@@ -142,3 +142,28 @@ This is a compromise. For now, this will work. Longer-term I might prefer to mak
 work out a reference to the exact function and store that as an ordinary constant,
 but it would require a nontrivial amount of work to represent the symbolic module import graph.
 
+25 September 2023
+-----------------
+Added the bit about call frames, mostly cribbed from CLOX with suitable adjustments for what else I've changed.
+I don't like the indirection to get at the IP, and there's still no way to define or call a function,
+but at least this lays down a conceptual framework in C.
+
+I glanced ahead at how CLOX handles defining functions.
+I plan to diverge, because Sophie knows everything ahead of time. 
+
+Suppose a simple global function ``double`` with the obvious definition.
+I could write::
+
+    { "double" PARAM 1 PARAM 1 ADD RETURN }
+    
+Statically, the ``{`` should be enough to make the pseudo-assembler construct a function,
+name it ``double``, and arrange to begin assembling into that new function.
+There should be a context stack because the ``}`` should send work back to the prior function.
+
+If the ``{`` happens at global scope, then I can treat this like assigning a global variable.
+If it happens at local scope, then it's a little more complicated.
+First, the current function gets a reference to a child function.
+I can keep these references in a vector attached to the function-definition object.
+At run-time, there must be some instruction suited to composing a closure over a function.
+
+I'd like not to repeat work evaluating non-parametric functions, but I can solve that problem later.
