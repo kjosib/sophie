@@ -167,3 +167,53 @@ I can keep these references in a vector attached to the function-definition obje
 At run-time, there must be some instruction suited to composing a closure over a function.
 
 I'd like not to repeat work evaluating non-parametric functions, but I can solve that problem later.
+
+26 September 2023
+-----------------
+
+Later on last night I got the itch to make the pseudo-assembler actually build function-objects.
+Now I think it does, but I still have no way to call them.
+It's probably time to implement a ``call`` instruction.
+For now, I'll just call whatever's at top-of-stack and rely on the callee to interpret parameters.
+That breaks a common pattern in half, but it's the fully-general solution.
+I can worry about super-instructions later.
+
+CLOX goes to great pains to worry about things like a function's arity and what the parameters are called.
+I won't have to worry about that: It's all done in the Sophie front-end. Sophie can emit numeric offsets
+from the stack base. Which reminds me: I'll want to have a base-pointer in the call-frame.
+
+In any case, since defining a function effectively just sets a global, I'll have to implement that "global"
+instruction as well if I want to actually call said function.
+
+I'm not going to worry about thunks right this minute.
+I feel like it should be *at least possible* to add later.
+Similarly, I'll not worry about tail-calls just yet.
+Those are definitely easy but they *are* a distraction for now.
+
+29 September 2023
+-----------------
+
+I got function calls basically working. There's also most of support for native functions,
+but I don't have any examples yet.
+
+I'd been reading about dispatch loop performance. Apparently the very latest generations of
+CPUs have such excellent branch-predictors that they even deal well with switch-case dispatch loops,
+but if you're running on consumer-grade silicon then you're probably still at least a little
+bit better off with the distributed indirect-goto pattern.
+And anyway, it doesn't hurt anything on monster CPUs.
+
+Trouble is, sources I've found suggest MSVC does not support the technique.
+It might be premature optimization but I've gone ahead and made a ``NEXT`` macro anyway,
+which for now is just ``continue``.
+That's handy because it jumps out of potentially-nested ``switch`` statements.
+And I do have such a thing in the bit that interprets a ``CALL`` instruction.
+
+For the moment, this code::
+
+    { "X" CONSTANT 1 DISPLAY CONSTANT 2 DISPLAY } GLOBAL "X" CALL GLOBAL "X" CALL
+
+writes ``1212`` to the screen. (Obviously ``DISPLAY`` is a temporary hack.)
+
+In the next increment I'll probably change the function declaration sequence to start with the function's arity.
+Also, I'll probably want to change the operand-mode signature to pass in the whole function for sanity checks.
+That suggests unifying functions with chunks. The only place chunks appear so far is in functions. Time will tell.
