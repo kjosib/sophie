@@ -74,7 +74,7 @@ Design Log
 Felt the performance impact of Sophie's Python-based tree-walk runtime for the first time.
 The example code for the 2-3 tree library completes relatively quickly,
 but given a bit more input it slowed noticeably. I probably first began to consider
-implementing a Sophie-specific bytecode VM at that point.
+making a Sophie-specific bytecode VM at that point.
 
 Later, I ran across an article about someone seeing a major performance boost switching
 a tree-walker to a byte-code VM. And his tree-walker was probably already in C.
@@ -217,3 +217,99 @@ writes ``1212`` to the screen. (Obviously ``DISPLAY`` is a temporary hack.)
 In the next increment I'll probably change the function declaration sequence to start with the function's arity.
 Also, I'll probably want to change the operand-mode signature to pass in the whole function for sanity checks.
 That suggests unifying functions with chunks. The only place chunks appear so far is in functions. Time will tell.
+
+30 September 2023
+-----------------
+
+Returning Values
+................
+
+I changed ``RETURN`` to return the topmost stack value past whatever arity of functions.
+This creates a subtlety: if the function has no stack-effect,
+then ``RETURN`` ends up duplicating whatever happens to the be at the top -- even if that means underflow.
+Evidently I shall want an instruction that does not do this, for use with procedures.
+The compiler will deal with this sensibly because function and procedure calls are clearly distinct in Sophie.
+For the time being, ending a function inserts a ``RETURN`` instruction -- and maybe this is just good insurance.
+
+Parameters
+............
+
+I have decided to implement parameters today.
+For now that means adding an instruction to read a parameter.
+I'll call it ``PARAM``. It will take an immediate byte to indicate which parameter.
+This will motivate smartening up the assembler so as not to accept out-of-range bytes.
+Or I could save the p-code trust problem for later. After all, an ``.EXE`` file is just as dangerous
+if you don't know where it came from.
+
+OK, that seems to work. This code::
+
+    { 1 "double" PARAM 0 PARAM 0 ADD } CONSTANT 21 GLOBAL "double" CALL DISPLAY
+
+now emits ``42``.
+
+Control Flow
+..............
+
+Control-flow is next. I'll start with simple selection via forward jumps.
+The pattern in FORTH is ``<condition> THEN <consequent> ELSE <alternative> IF``,
+and this reflects the compiled structure of such code. The equivalent of *else-if*
+is to just nest another *then-else-if* structure inside the *<alternative>* part,
+which means several ``IF`` words in a row. This means perfect nesting, and it's fine.
+
+So, let's suppose a stack of nested conditionals.
+At any given time, there's at most one pending back-patch per such.
+Here's how that works:
+
+* ``THEN`` assembles a conditional forward jump and pushes the address of the operand on a stack.
+* ``ELSE`` assembles an unconditional forward jump,
+  resolves a back-patch to the address after the jump,
+  and pushes its own operand-address.
+* ``IF`` simply resolves one back-patch.
+
+Now, there's this trick where you thread the back-patch addresses through the code-under-construction.
+It's actually quite nice, and it means I won't need to worry about explicit labels.
+
+Sophie also features multi-way branching based on the tag of a variant-type.
+The plan is to index into an array of destination addresses -- which means tags are small unsigned integers.
+The back-patching gymnastics are more complicated for jump-tables, but I'll figure something out.
+
+Consider shortcut logic. ``X and Y`` is isomorphic to ``X then Y if``.
+In fact, I may as well just call the ``then`` operator ``and`` instead. 
+The shortcut ``or`` operator just branches on true instead of false,
+yielding a pleasing symmetry.
+
+One must carefully consider the stack effects of conditional branching.
+Well, it turns out that a branch-not-taken is always followed by popping the stack. *Always.*
+I'll encode that in the VM's interpretation of these instructions.
+There are fewer dispatch cycles when individual instructions do more work, which usually leads to a faster VM.
+The *branch-or-pop* approach seems to strike a sensible balance.
+
+In summary, here's the plan so far:
+
+* ``JF`` and ``JT`` instructions jump on falsehood and truth, respectively, or otherwise pop the stack.
+* ``JMP`` instruction is unconditional branching.
+* There will eventually be some sort of jump-table for type-matching, but not today.
+
+These will be assembled directly in the compiler, taking advantage of the back-patching mechanism.
+I shall want a small dictionary of compiling words. Probably lower-case to distinguish from P-ASM instructions.
+
+Rejiggering the Compiler
+........................
+
+I'm now taking further advantage of the hash-table module. Rather than a linear search for instructions,
+I've arranged a hash table containing all the raw assembly instructions and also the higher-level
+compiling words like ``and``, ``or``, ``else``, and ``if``. The mechanism vaguely resembles a FORTH interpreter.
+In fact, I could probably simplify the scanner considerably if I went the rest of the way with that.
+Someday I may pursue that idea.
+
+Also, that word ``CONSTANT`` is too long. I'll just go with ``CONST`` for now.
+
+A Recursive Program
+...................
+
+The test-case for today is::
+
+    { 1 "factorial" PARAM 0 CONST 2 LT and CONST 1 else PARAM 0 CONST 1 SUB GLOBAL "factorial" CALL PARAM 0 MUL if }
+    CONST 5 GLOBAL "factorial" CALL DISPLAY
+
+I expect the thing to produce the number ``120``. And it works!
