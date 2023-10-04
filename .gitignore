@@ -8,7 +8,9 @@ __pycache__/
 *.automaton
 .idea/*
 .vscode/*
+vm/.vs/*
 docs/_build/
+vm/Source/.vscode/*
 
 # C extensions
 *.so

@@ -1,0 +1,11 @@
+Much of the code in this early draft of the VM is based on, or simply cribbed from,
+the CLOX interpreter illustrated in Robert Nystrom's excellent book "Crafting Interpreters."
+
+It turns out he put the code for the CLOX interpreter under the MIT license.
+The entire programming-language community owes him a great debt of gratitude
+for that grand and selfless gesture. And Sophie's nascent VM owes its very
+existence to that same generosity.
+
+All the rest of Sophie has always been under the MIT license as well,
+so for the license to the code in this folder,
+consult the LICENSE file at the repository root just as you might expect.
