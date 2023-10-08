@@ -1,0 +1,6 @@
+# This is the inefficient way to define the Fibonacci function.
+# I've done it that way to act as a simple speed benchmark.
+
+define: fib(n) = n if n < 2 else fib(n-1) + fib(n-2);
+begin: fib(29);
+end.

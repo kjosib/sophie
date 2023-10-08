@@ -313,3 +313,118 @@ The test-case for today is::
     CONST 5 GLOBAL "factorial" CALL DISPLAY
 
 I expect the thing to produce the number ``120``. And it works!
+
+7 October 2023
+--------------
+
+Another week's gone by! Here's what's up that's been going down:
+
+Bench-Marketing
+................
+
+Early in the week, I messed around with the inefficient-Fibonacci benchmark::
+
+    > { 1 "fib" PARAM 0 CONST 2 LT and PARAM 0 else PARAM 0 CONST 1 SUB GLOBAL "fib" CALL PARAM 0 CONST 2 SUB GLOBAL "fib" CALL ADD if }
+    > GLOBAL "clock" CALL CONST 39 GLOBAL "fib" CALL DISPLAY GLOBAL "clock" CALL SUB
+    6.3246e+07          [ -8.466 ]
+
+Racing against this equivalent Python::
+
+    Python 3.9.7 (tags/v3.9.7:1016ef3, Aug 30 2021, 20:19:38) [MSC v.1929 64 bit (AMD64)] on win32
+    Type "help", "copyright", "credits" or "license" for more information.
+    >>> def fib(n): return n if n < 2 else fib(n-1)+fib(n-2)
+    ...
+    >>> import timeit
+    >>> timeit.timeit(lambda:fib(39), number=1)
+    13.519206900000086
+
+On a release-build in MSVC, my VM so far computes the result in about two thirds of the time it takes Python 3.9.
+That's nothing to sneeze at! Performance will fluctuate as the system matures, but this is an encouraging start.
+
+A Start on Lowering
+.....................
+
+Having a VM that could keep up, it became time to think more about translating Sophie ASTs into
+something this VM could load. Lowering is a tree-walk. Or at least the first stage is.
+
+I began to flesh out ``intermediate.py``. Now typing ``sophie -x program.sg``
+will translate *program.sg* into instructions for the VM. Let me be clear: It's far from ready.
+In fact it only copes with a few forms, and imperfectly at that.
+
+I am setting a goal to be able to translate this Sophie code::
+
+    define: fib(n) = n if n < 2 else fib(n-1) + fib(n-2);
+    begin: fib(39); end.
+
+For today I'm not going to worry about lazy evaluation or memoization.
+I will have to come back to it very soon, but I do have a strictness-analysis pass in mind that would
+recognize this function as strict in its argument.
+
+Aside: I will not have the patience to run this in the simple Python-based run-time.
+I extrapolated from the behavior at ``fib(29)`` that the simple runtime is about 100x slower.
+(Then again, it also emulates call-by-need here... But still... 100x.)
+If nothing else, this is a strong incentive to get the VM to a respectable place.
+
+And that worked.
+
+Maybe tomorrow I'll solve closures. The Newton's-Method demo would be a good test-case.
+And speaking of, it's not too soon to want some automated tests. But what to assert?
+Especially at this early stage, the requirements are going to keep shifting.
+
+Closures Partially Solved
+..........................
+
+I've decided to start with the CLOX / LUA design for closure-capture.
+A closure-object will contain a copy of its captured values rather than a static link.
+It seems to be well-suited to modern architectures, and it means no need for escape analysis.
+A VM instruction ``CAPTIVE n`` will push the ``n``th captured value onto the stack.
+
+Figuring out the proper ``n`` is the tricky bit.
+
+The ``Translation`` visitor now passes around some context -- an object responsible for
+working out the particulars of closure capture and proper initialization of closures.
+In concept, each stack frame will have some space analogous to "local variables",
+but they're to be filled with closures as needed. It will also refer to a closure
+object in memory (not just the raw function) which will provide the values for
+the ``CAPTIVE`` instruction.
+
+Some child-functions only come into scope in some branches of a parent function,
+such as if they're attached to a particular match-case construction.
+
+Here's the idea: I'll want some other VM instruction to initialize closures
+at exactly the right times and places.
+Now suppose I nest their definitions in the IL that goes to the VM.
+I can, at the point of definition, emit an IL instruction to capture that closure.
+Later, a ``LOCAL n`` instruction can push the closure on the stack, ready to call.
+
+That's close, but imperfect: Peer functions can see each other.
+That means that I'll need a phased approach: First allocate all the closures,
+and then initialize them.
+
+The real plan is to have an instruction that takes a count followed by some
+constant numbers, where these constants are function objects.
+Then the VM's job is to perform the above two phases.
+
+Correspondingly, I can make the pseudo-assembler emit a single instruction for a
+batch of functions all defined together.
+
+This has an interesting side-effect: Sub-functions no longer need names!
+This is because all the p-code will refer to them programmatically by their ``LOCAL`` numbers.
+But it's probably still nice to include the name for more than just the aesthetics:
+Debugging symbols are important, and if the runtime ever hits a panic then it's nice
+to be able to follow the dump.
+
+Things on the Horizon
+......................
+
+In some particular order:
+
+* The VM supports line number information, but the P-ASM doesn't yet, and neither does the translator.
+* Records will be heap-allocated arrays of values with a pointer to their type declaration.
+* Type-case matching will be a decent-sized project.
+* Record-constructors can be trivial functions that contain a special opcode, which can be inlined.
+* Or, they can be a special kind of callable object. Either way, they act like functions.
+* Strictness analysis, which can also apply to the simple run-time.
+* Thunks in the VM.
+* Actors.
+* Garbage Collection.
