@@ -57,9 +57,6 @@ static void skipWhitespace() {
 			scanner.line++;
 			ahead();
 			break;
-		case ';':
-				// A comment goes until the end of the line.
-				while (peek() != '\n' && !isAtEnd()) ahead();
 		break;
 		default:
 			return;

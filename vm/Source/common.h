@@ -7,8 +7,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-// #define DEBUG_PRINT_CODE
-// #define DEBUG_TRACE_EXECUTION
+#define DEBUG_PRINT_CODE
+#define DEBUG_TRACE_EXECUTION
 
 #define UINT8_COUNT (UINT8_MAX + 1)
 
@@ -51,7 +51,11 @@ typedef enum {
 	VAL_NUMBER,
 	VAL_ENUM,
 	VAL_OBJ,
+	VAL_CAPTURE_LOCAL,
+	VAL_CAPTURE_OUTER,
 } ValueType;
+
+extern char *valKind[];
 
 typedef struct {
 	ValueType type;
@@ -79,7 +83,7 @@ typedef struct {
 #define BOOL_VAL(value)   ((Value){VAL_BOOL, {.boolean = value}})
 #define NIL_VAL	          ((Value){VAL_NIL, {.number = 0}})
 #define NUMBER_VAL(value) ((Value){VAL_NUMBER, {.number = value}})
-#define ENUM_VAL(value)   ((Value){VAL_ENUM, {.number = value}})
+#define ENUM_VAL(value)   ((Value){VAL_ENUM, {.tag = value}})
 #define OBJ_VAL(object)   ((Value){VAL_OBJ, {.obj = (Obj*)object}})
 
 DEFINE_VECTOR_TYPE(ValueArray, Value)
@@ -117,10 +121,12 @@ int disassembleInstruction(Chunk *chunk, int offset);
 
 #define OBJ_TYPE(value)        (AS_OBJ(value)->type)
 
+#define IS_CLOSURE(value)      isObjType(value, OBJ_CLOSURE)
 #define IS_FUNCTION(value)     isObjType(value, OBJ_FUNCTION)
 #define IS_NATIVE(value)       isObjType(value, OBJ_NATIVE)
 #define IS_STRING(value)       isObjType(value, OBJ_STRING)
 
+#define AS_CLOSURE(value)      ((ObjClosure*)AS_OBJ(value))
 #define AS_FUNCTION(value)     ((ObjFunction*)AS_OBJ(value))
 #define AS_NATIVE(value)       (((ObjNative*)AS_OBJ(value)))
 #define AS_STRING(value)       ((ObjString*)AS_OBJ(value))
@@ -128,6 +134,7 @@ int disassembleInstruction(Chunk *chunk, int offset);
 
 
 typedef enum {
+	OBJ_CLOSURE,
 	OBJ_FUNCTION,
 	OBJ_NATIVE,
 	OBJ_STRING,
@@ -143,13 +150,17 @@ typedef enum {
 	TYPE_SCRIPT,
 } FunctionType;
 
+
+
 typedef struct {
 	Obj obj;
 	uint8_t arity;
+	uint8_t nr_locals;
 	FunctionType type;
 	Chunk chunk;
 	ObjString *name;
 	ValueArray children;
+	ValueArray captures;
 } ObjFunction;
 
 
@@ -163,15 +174,24 @@ typedef struct {
 
 struct ObjString {
 	Obj obj;
-	int length;
+	size_t length;
 	char *chars;
 	uint32_t hash;
 };
 
+typedef struct {
+	Obj obj;
+	ObjFunction *function;
+	ValueArray captives;
+} ObjClosure;
+
+
+ObjClosure *newClosure(ObjFunction *function);
 ObjFunction *newFunction(FunctionType type, uint8_t arity, ObjString *name);
+uint32_t hashString(const char *key, size_t length);
 ObjNative *newNative(uint8_t arity, NativeFn function);
-ObjString *takeString(char *chars, int length);
-ObjString *copyString(const char *chars, int length);
+ObjString *takeString(char *chars, size_t length);
+ObjString *copyString(const char *chars, size_t length);
 void printObject(Value value);
 
 static inline bool isObjType(Value value, ObjType type) {
@@ -205,7 +225,7 @@ typedef enum {
 typedef struct {
 	TokenType type;
 	const char *start;
-	int length;
+	size_t length;
 	int line;
 } Token;
 
@@ -227,7 +247,7 @@ void error(const char *message);
 void errorAtCurrent(const char *message);
 void advance();
 void consume(TokenType type, const char *message);
-double parseDouble();
+double parseDouble(const char *message);
 Value parseConstant();
 ObjString *parseString();
 
@@ -242,6 +262,7 @@ typedef enum {
 	OP_TRUE,
 	OP_FALSE,
 	OP_GET_GLOBAL,
+	OP_CAPTIVE,
 	OP_EQUAL,
 	OP_GREATER,
 	OP_LESS,
@@ -256,6 +277,7 @@ typedef enum {
 	OP_NOT,
 	OP_NEGATE,
 	OP_CALL,
+	OP_CLOSURE,
 	OP_RETURN,
 	OP_DISPLAY,
 	OP_FIB,
@@ -295,7 +317,7 @@ DEFINE_VECTOR_TYPE(Table, Entry)
 bool tableGet(Table *table, ObjString *key, Value *value);
 bool tableSet(Table *table, ObjString *key, Value value);
 void tableAddAll(Table *from, Table *to);
-Entry *tableFindString(Table *table, const char *chars, int length, uint32_t hash);
+Entry *tableFindString(Table *table, const char *chars, size_t length, uint32_t hash);
 
 /* vm.h */
 
@@ -303,10 +325,13 @@ Entry *tableFindString(Table *table, const char *chars, int length, uint32_t has
 #define STACK_MAX (FRAMES_MAX * UINT8_COUNT)
 #define STACK_MIN UINT8_COUNT
 
-#define WORD_AT(ptr) (*((uint16_t *)(ptr)))
+static inline uint16_t word_at(const char *ch) {
+	uint16_t *ptr = (uint16_t *)(ch);
+	return *ptr;
+}
 
 typedef struct {
-	ObjFunction *function;
+	ObjClosure *closure;
 	uint8_t *ip;
 	Value *base;
 } CallFrame;

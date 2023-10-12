@@ -11,13 +11,23 @@ static Obj *allocateObject(size_t size, ObjType type) {
 	return object;
 }
 
+ObjClosure *newClosure(ObjFunction *function) {
+	ObjClosure *closure = ALLOCATE_OBJ(ObjClosure, OBJ_CLOSURE);
+	closure->function = function;
+	initValueArray(&closure->captives);
+	resizeValueArray(&closure->captives, function->captures.cnt);
+	return closure;
+}
+
 ObjFunction *newFunction(FunctionType type, uint8_t arity, ObjString *name) {
 	ObjFunction *function = ALLOCATE_OBJ(ObjFunction, OBJ_FUNCTION);
 	function->arity = arity;
+	function->nr_locals = 0;
 	function->type = type;
 	function->name = name;
 	initChunk(&function->chunk);
 	initValueArray(&function->children);
+	initValueArray(&function->captures);
 	return function;
 }
 
@@ -28,7 +38,7 @@ ObjNative *newNative(uint8_t arity, NativeFn function) {
 	return native;
 }
 
-static ObjString *allocateString(char *chars, int length, uint32_t hash) {
+static ObjString *allocateString(char *chars, size_t length, uint32_t hash) {
 	ObjString *string = ALLOCATE_OBJ(ObjString, OBJ_STRING);
 	string->length = length;
 	string->chars = chars;
@@ -37,7 +47,7 @@ static ObjString *allocateString(char *chars, int length, uint32_t hash) {
 	return string;
 }
 
-uint32_t hashString(const char *key, int length) {
+uint32_t hashString(const char *key, size_t length) {
 	uint32_t hash = 2166136261u;
 	for (int i = 0; i < length; i++) {
 		hash ^= (uint8_t)key[i];
@@ -46,7 +56,7 @@ uint32_t hashString(const char *key, int length) {
 	return hash;
 }
 
-ObjString *takeString(char *chars, int length) {
+ObjString *takeString(char *chars, size_t length) {
 	uint32_t hash = hashString(chars, length);
 	Entry *interned = tableFindString(&vm.strings, chars, length, hash);
 	if (interned != NULL) {
@@ -57,7 +67,7 @@ ObjString *takeString(char *chars, int length) {
 	return allocateString(chars, length, hash);
 }
 
-ObjString *copyString(const char *chars, int length) {
+ObjString *copyString(const char *chars, size_t length) {
 	uint32_t hash = hashString(chars, length);
 	Entry *interned = tableFindString(&vm.strings, chars, length, hash);
 	if (interned != NULL) return interned->key;
@@ -79,6 +89,10 @@ static void printFunction(ObjFunction *function) {
 
 void printObject(Value value) {
 	switch (OBJ_TYPE(value)) {
+	case OBJ_CLOSURE:
+		printFunction(AS_CLOSURE(value)->function);
+	break;
+
 	case OBJ_FUNCTION:
 		printFunction(AS_FUNCTION(value));
 		break;

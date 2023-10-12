@@ -12,7 +12,7 @@ static void errorAt(Token *token, const char *message) {
 		// Nothing.
 	}
 	else {
-		fprintf(stderr, " at '%.*s'", token->length, token->start);
+		fprintf(stderr, " at '%.*s'", (int)(token->length), token->start);
 	}
 
 	fprintf(stderr, ": %s\n", message);
@@ -48,14 +48,14 @@ ObjString *parseString() {
 	return copyString(parser.previous.start + 1, parser.previous.length - 2);
 }
 
-double parseDouble() {
-	consume(TOKEN_NUMBER, "Need a number here");
+double parseDouble(const char *message) {
+	consume(TOKEN_NUMBER, message);
 	return strtod(parser.previous.start, NULL);
 }
 
 Value parseConstant() {
 	if (predictToken(TOKEN_NUMBER)) {
-		return NUMBER_VAL(parseDouble());
+		return NUMBER_VAL(parseDouble("Need a number here"));
 	}
 	else if (predictToken(TOKEN_STRING)) {
 		return OBJ_VAL(parseString());

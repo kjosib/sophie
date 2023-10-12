@@ -23,11 +23,12 @@ static void emit(uint8_t byte) { appendCode(&current->chunk.code, byte); }
 
 static void emitHole() {
 	// This trick should work regardless of endianness.
-	uint8_t *trick = &patchLink;
+	uint8_t *trick = (uint8_t *)(&patchLink);
 	// Grow the vector one byte at a time to keep its invariants happy.
 	emit(trick[0]);
 	emit(trick[1]);
-	patchLink = current->chunk.code.cnt - 2;
+	// The cast will be fine because chunks larger than 64k are banned anyway.
+	patchLink = (uint16_t)(current->chunk.code.cnt - 2);
 }
 
 static void writeWordAt(uint16_t offset, uint16_t word) {
@@ -44,10 +45,10 @@ uint16_t readWordAt(uint16_t offset) {
 	return *target;
 }
 
-static void patchJump(uint16_t target) {
+static void patchJump(size_t target) {
 	uint16_t prior = readWordAt(patchLink);
 	// writeWordAt(patchLink, target);
-	writeWordAt(patchLink, target - patchLink);
+	writeWordAt(patchLink, (uint16_t)(target - patchLink));
 	patchLink = prior;
 }
 
@@ -112,28 +113,65 @@ static bool finished() { return parser.current.type == TOKEN_EOF; }
 
 static void startFunction() {
 	if (patchLink) error("must resolve forward branches before starting a function");
-	uint8_t arity = (uint8_t)parseDouble();
+	uint8_t arity = (uint8_t)parseDouble("arity");
 	ObjString *name = parseString();
 	if (1 == scopes.cnt) declareGlobal(name);
 	current = newFunction(TYPE_FUNCTION, arity, name);
 	appendValueArray(&scopes, OBJ_VAL(current));
 }
 
+static void checkPatchLinkage() {
+	if (patchLink) error("must resolve forward branches before finishing a function");
+}
+
+static void parseUpvalueLinkages(int nr_captures) {
+	while (nr_captures--) {
+		int type;
+		if (predictToken(TOKEN_NAME)) {
+			consume(TOKEN_NAME, "");
+			type = VAL_CAPTURE_LOCAL;
+			printf("Local ");
+		}
+		else {
+			type = VAL_CAPTURE_OUTER;
+			printf("Outer ");
+		}
+		Value capture = { type, {.tag = parseDouble("Capture") } };
+		printf("%d\n", capture.as.tag);
+		appendValueArray(&current->captures, capture);
+	}
+}
+
+static void parseVitalStatistics() {
+	current->nr_locals = parseDouble("number of additional stack slots to reserve for locals");
+	parseUpvalueLinkages(parseDouble("number of captures"));
+	consume(TOKEN_SEMICOLON, "Semicolon to delimit the end of the stats");
+}
+
+static void checkSizeLimits() {
+	if (current->chunk.code.cnt > UINT16_MAX) error("function is too long");
+	if (current->chunk.constants.cnt > UINT8_MAX) error("function has too many constants");
+	if (current->children.cnt > UINT8_MAX) error("function has too many children");
+	if (current->captures.cnt > UINT8_MAX) error("function has too many captures");
+}
+
 static void finishFunction() {
-	ObjFunction *function = current;
 #ifdef DEBUG_PRINT_CODE
 	disassembleChunk(&current->chunk, current->name->chars);
 #endif
 
-	if (patchLink) error("must resolve forward branches before finishing a function");
-	if (function->chunk.code.cnt > UINT16_MAX) error("function is too long");
-	if (function->chunk.constants.cnt > UINT8_MAX) error("function has too many constants");
 
+	checkPatchLinkage();
+	parseVitalStatistics();
+	checkSizeLimits();
+
+	// Insert function into its containing scope.
+	ObjFunction *function = current;
 	scopes.cnt--;
 	current = AS_FUNCTION(scopes.at[scopes.cnt - 1]);
 	switch (current->type) {
 	case TYPE_SCRIPT:
-		defineGlobal(function->name, OBJ_VAL(function));
+		defineGlobal(function->name, OBJ_VAL(newClosure(function)));
 		break;
 	case TYPE_FUNCTION:
 		appendValueArray(&current->children, OBJ_VAL(function));

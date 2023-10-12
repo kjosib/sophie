@@ -428,3 +428,27 @@ In some particular order:
 * Thunks in the VM.
 * Actors.
 * Garbage Collection.
+
+8 October 2023
+--------------
+
+Messing around with closures. I find myself adjusting details of the IR stream to reflect
+the order in which information becomes available in the translation process.
+The obvious other choice would be to write a translation-planning pass first to
+gather all relevant measurements in advance, but then there's the problem to keep it
+organized from one pass to the next.
+
+12 October 2023
+---------------
+
+Did battle with C today and made UpValues basically work.
+The details are rather different from CLOX.
+Sophie's analogue is by value rather than by reference, since values are immutable.
+The run-time details of the corresponding instructions are different also,
+to make mutual-recursion do all the right things,
+as functions might need to capture their peers mutually.
+
+For the moment I've added a value-type to represent the capture-instructions associated with a function.
+I can see the attraction of keeping such information in the bytecode stream, but this works for now.
+
+It still doesn't quite run the Newton's method thing, but it's getting a lot closer.
