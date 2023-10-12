@@ -5,7 +5,7 @@
 
 VM vm;
 
-static Value clockNative(Value* args) {
+static Value clockNative(Value *args) {
 	return NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
 }
 
@@ -23,7 +23,7 @@ static InterpretResult runtimeError(uint8_t *vpc, const char *format, ...) {
 	vm.frames[vm.frameIndex].ip = vpc;
 	for (int i = 0; i <= vm.frameIndex; i++) {
 		CallFrame *frame = &vm.frames[i];
-		ObjFunction *function = frame->function;
+		ObjFunction *function = frame->closure->function;
 		size_t offset = frame->ip - function->chunk.code.at - 1;
 		int line = findLine(&function->chunk, offset);
 		char *name = function->name == NULL ? "<script>" : function->name->chars;
@@ -34,7 +34,7 @@ static InterpretResult runtimeError(uint8_t *vpc, const char *format, ...) {
 	return INTERPRET_RUNTIME_ERROR;
 }
 
-static void defineNative(const char* name, uint8_t arity, NativeFn function) {
+static void defineNative(const char *name, uint8_t arity, NativeFn function) {
 	push(OBJ_VAL(copyString(name, (int)strlen(name))));
 	push(OBJ_VAL(newNative(arity, function)));
 	tableSet(&vm.globals, AS_STRING(vm.stack[0]), vm.stack[1]);
@@ -97,7 +97,7 @@ static void concatenate() {
 	ObjString *b = AS_STRING(pop());
 	ObjString *a = AS_STRING(pop());
 
-	int length = a->length + b->length;
+	size_t length = a->length + b->length;
 	char *chars = ALLOCATE(char, length + 1);
 	memcpy(chars, a->chars, a->length);
 	memcpy(chars + a->length, b->chars, b->length);
@@ -115,7 +115,7 @@ static inline uint16_t readShort(CallFrame *frame) {
 	return (uint16_t)((frame->ip[-2] << 8) | frame->ip[-1]);
 }
 
-static CallFrame *callFunction(ObjFunction *function) {
+static CallFrame *callClosure(ObjClosure *closure) {
 	/*
 	The VPC in the current call-frame has already been
 	incremented to point just past this instruction.
@@ -124,9 +124,10 @@ static CallFrame *callFunction(ObjFunction *function) {
 	*/
 	vm.frameIndex++;
 	CallFrame *frame = &vm.frames[vm.frameIndex];
-	frame->function = function;
-	frame->ip = function->chunk.code.at;
-	frame->base = vm.stackTop - function->arity;
+	frame->closure = closure;
+	frame->ip = closure->function->chunk.code.at;
+	frame->base = vm.stackTop - closure->function->arity;
+	for (int i = 0; i < closure->function->nr_locals; i++) push(NIL_VAL);
 	return frame;
 }
 
@@ -138,16 +139,37 @@ static double fib(double n) {
 static inline bool outOfCallFrames() { return vm.frameIndex >= FRAMES_MAX; }
 static inline bool tooShallow(uint8_t arity) { return vm.stackTop - vm.stack < arity; }
 
-static InterpretResult run(CallFrame *frame) {
+#define CONSTANT(index) (frame->closure->function->chunk.constants.at[index])
+#define CHILD(index) (AS_FUNCTION(frame->closure->function->children.at[index]))
+#define LOCAL(index) (frame->base[index])
+#define CAPTIVE(index) (frame->closure->captives.at[index])
 
-	register uint8_t *vpc = frame->ip;
+static void initClosure(ObjClosure *closure, CallFrame *frame) {
+	// Precondition: *closure points to a fresh Closure object with no captures.
+	size_t count = closure->function->captures.cnt;
+	if (count) {
+		resizeValueArray(&closure->captives, count);
+		// From here down, this function should not allocate.
+		for (int index = 0; index < count; index++) {
+			Value capture = closure->function->captures.at[index];
+			Value captive;
+			if (capture.type == VAL_CAPTURE_LOCAL) {
+				captive = LOCAL(capture.as.tag);
+			}
+			else {
+				captive = CAPTIVE(capture.as.tag);
+			}
+			closure->captives.at[index] = captive;
+		}
+		closure->captives.cnt = count;
+		// Postcondition: Captures have been copied per directives in *closure's function.
+	}
+}
 
 #define NEXT goto top
 #define READ_BYTE() (*vpc++)
-#define READ_CONSTANT() (frame->function->chunk.constants.at[READ_BYTE()])
-#define READ_WORD() (*((uint16_t *)(vpc)))
-// #define LEAP() do { vpc = &frame->function->chunk.code.at[READ_WORD()]; } while (0)
-#define LEAP() do { vpc += READ_WORD(); } while (0)
+#define READ_CONSTANT() CONSTANT(READ_BYTE())
+#define LEAP() do { vpc += word_at(vpc); } while (0)
 #define SKIP() do { pop(); vpc += 2; } while(0)
 #define BINARY_OP(valueType, op) \
     if (isTwoNumbers()) { \
@@ -157,12 +179,17 @@ static InterpretResult run(CallFrame *frame) {
     } else return runtimeError(vpc, "Operands must be numbers."); \
 	NEXT; \
 
-	top:
+static InterpretResult run(CallFrame *frame) {
+
+	register uint8_t *vpc = frame->ip;
+
+
+top:
 	for (;;) {
 
 #ifdef DEBUG_TRACE_EXECUTION
 		displayStack();
-		disassembleInstruction(&frame->function->chunk, (int)(vpc - frame->function->chunk.code.at));
+		disassembleInstruction(&frame->closure->function->chunk, (int)(vpc - frame->closure->function->chunk.code.at));
 #endif // DEBUG_TRACE_EXECUTION
 
 		uint8_t instruction = READ_BYTE();
@@ -182,7 +209,9 @@ static InterpretResult run(CallFrame *frame) {
 					NEXT;
 				}
 				else return runtimeError(vpc, "Undefined global '%s'.", AS_CSTRING(va));
-			} else return runtimeError(vpc, "Operand must be string.");
+			}
+			else return runtimeError(vpc, "Operand must be string.");
+		case OP_CAPTIVE: push(CAPTIVE(READ_BYTE())); NEXT;
 		case OP_TRUE: push(BOOL_VAL(true)); NEXT;
 		case OP_FALSE: push(BOOL_VAL(false)); NEXT;
 		case OP_EQUAL:
@@ -208,7 +237,8 @@ static InterpretResult run(CallFrame *frame) {
 				da = AS_NUMBER(pop());
 				push(NUMBER_VAL(da + db));
 				NEXT;
-			} else if (isTwoStrings()) {
+			}
+			else if (isTwoStrings()) {
 				concatenate();
 				NEXT;
 			}
@@ -222,15 +252,16 @@ static InterpretResult run(CallFrame *frame) {
 			if (IS_NUMBER(peek(0))) {
 				push(NUMBER_VAL(-AS_NUMBER(pop())));
 				NEXT;
-			} else return runtimeError(vpc, "Operand must be a number.");
+			}
+			else return runtimeError(vpc, "Operand must be a number.");
 		case OP_CALL:
 			va = pop();
 			if (IS_OBJ(va)) switch (OBJ_TYPE(va)) {
-			case OBJ_FUNCTION:
+			case OBJ_CLOSURE:
 				if (outOfCallFrames()) return runtimeError(vpc, "Call depth exceeded");
-				if (tooShallow(AS_FUNCTION(va)->arity)) return runtimeError(vpc, "Stack underflow calling %s", AS_FUNCTION(va)->name->chars);
+				if (tooShallow(AS_CLOSURE(va)->function->arity)) return runtimeError(vpc, "Stack underflow calling %s", AS_FUNCTION(va)->name->chars);
 				frame->ip = vpc;
-				frame = callFunction(AS_FUNCTION(va));
+				frame = callClosure(AS_CLOSURE(va));
 				vpc = frame->ip;
 				NEXT;
 			case OBJ_NATIVE:
@@ -239,8 +270,25 @@ static InterpretResult run(CallFrame *frame) {
 				vm.stackTop -= AS_NATIVE(va)->arity;
 				push(vb);
 				NEXT;
+			default:
+				return runtimeError(vpc, "Needed a callable object; got obj %d.", OBJ_TYPE(va));
 			}
-			return runtimeError(vpc, "Needed a callable object.");
+			return runtimeError(vpc, "Needed a callable object; got val %s.", valKind[va.type]);
+		case OP_CLOSURE: {
+			// Initialize a continuous run of N closures starting in
+			// constant-index M into local variables starting at P.
+			// (Observation: Could elide P and just push if compiler were smarter.)
+			int nr_closures = READ_BYTE();
+			int child_index = READ_BYTE();
+			int local_index = READ_BYTE();
+			for (int index = 0; index < nr_closures; index++) {
+				LOCAL(local_index + index) = OBJ_VAL(newClosure(CHILD(child_index + index)));
+			}
+			for (int index = 0; index < nr_closures; index++) {
+				initClosure(AS_CLOSURE(LOCAL(local_index + index)), frame);
+			}
+			NEXT;
+		}
 		case OP_RETURN:
 			va = pop();
 			vm.stackTop = frame->base;
@@ -260,12 +308,13 @@ static InterpretResult run(CallFrame *frame) {
 		}
 		case OP_DISPLAY:
 			printValue(pop());
+			printf("\n");
 			NEXT;
 		case OP_FIB:
-			printf("%g", fib(AS_NUMBER(pop())));
+			printf("%g\n", fib(AS_NUMBER(pop())));
 			NEXT;
 		case OP_PARAM:
-			push(frame->base[READ_BYTE()]);
+			push(LOCAL(READ_BYTE()));
 			NEXT;
 		case OP_JF:
 			if (AS_BOOL(peek(0))) SKIP();
@@ -282,16 +331,25 @@ static InterpretResult run(CallFrame *frame) {
 			return runtimeError(vpc, "Unrecognized instruction.");
 		}
 	}
+}
 
 #undef BINARY_OP
+#undef LOCAL
+#undef CONSTANT
+#undef LEAP
+#undef SKIP
 #undef READ_CONSTANT
 #undef READ_BYTE
-}
+#undef NEXT
 
 InterpretResult interpret(const char *source) {
 	resetStack();
 	ObjFunction *function = compile(source);
 	if (function == NULL) return INTERPRET_COMPILE_ERROR;
-	else return run(callFunction(function));
+	else {
+		ObjClosure* closure = newClosure(function);
+		CallFrame *frame = callClosure(closure);
+		return run(frame);
+	}
 }
 

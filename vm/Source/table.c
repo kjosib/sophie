@@ -99,7 +99,7 @@ void tableAddAll(Table *from, Table *to) {
 	}
 }
 
-Entry *tableFindString(Table *table, const char *chars, int length, uint32_t hash) {
+Entry *tableFindString(Table *table, const char *chars, size_t length, uint32_t hash) {
 	if (table->cnt == 0) return NULL;
 
 	size_t index = hash % table->cap;

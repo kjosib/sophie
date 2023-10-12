@@ -22,3 +22,14 @@ bool valuesEqual(Value a, Value b) {
 	default:         return false;
 	}
 }
+
+
+char *valKind[] = {
+	[VAL_BOOL] = "bool",
+	[VAL_NIL] = "nil",
+	[VAL_NUMBER] = "number",
+	[VAL_ENUM] = "enum",
+	[VAL_OBJ] = "obj",
+	[VAL_CAPTURE_LOCAL] = "capture_local",
+	[VAL_CAPTURE_OUTER] = "capture_outer",
+};

@@ -4,9 +4,9 @@ static void asmSimple(Chunk *chunk) {
 }
 
 static int disSimple( Chunk *chunk, int offset) {
-	uint8_t opcode = chunk->code.at[offset];
+	uint8_t opcode = chunk->code.at[offset++];
 	printf("%s\n", instruction[opcode].name);
-	return offset + 1;
+	return offset;
 }
 
 static void asmConstant(Chunk *chunk) {
@@ -16,40 +16,56 @@ static void asmConstant(Chunk *chunk) {
 }
 
 static int disConstant(Chunk *chunk, int offset) {
-	uint8_t opcode = chunk->code.at[offset];
-	uint8_t operand = chunk->code.at[offset + 1];
+	uint8_t opcode = chunk->code.at[offset++];
+	uint8_t operand = chunk->code.at[offset++];
 	printf("%-16s %4d '", instruction[opcode].name, operand);
 	printValue(chunk->constants.at[operand]);
 	printf("\n");
-	return offset + 2;
+	return offset;
 }
 
 static void asmImmediate(Chunk *chunk) {
-	appendCode(&chunk->code, (uint8_t)parseDouble());
+	appendCode(&chunk->code, (uint8_t)parseDouble("Argument"));
 }
 
 static int disImmediate(Chunk *chunk, int offset) {
-	uint8_t opcode = chunk->code.at[offset];
-	uint8_t operand = chunk->code.at[offset + 1];
+	uint8_t opcode = chunk->code.at[offset++];
+	uint8_t operand = chunk->code.at[offset++];
 	printf("%-16s #%4d\n", instruction[opcode].name, operand);
-	return offset + 2;
+	return offset;
 }
 
-static void asmJump(Chunk *chunk) {
+static void asmNotByHand(Chunk *chunk) {
 	error("this instruction is not meant to be assembled by hand");
 }
 
 static int disJump(Chunk *chunk, int offset) {
 	uint8_t opcode = chunk->code.at[offset];
-	uint16_t operand = WORD_AT(1 + offset + chunk->code.at);
+	uint16_t operand = word_at(&chunk->code.at[1 + offset]);
 	printf("%-16s  %4d\n", instruction[opcode].name, operand);
 	return offset + 3;
+}
+
+static void asmClosure(Chunk *chunk) {
+	appendCode(&chunk->code, (uint8_t)parseDouble("nr_closures"));
+	appendCode(&chunk->code, (uint8_t)parseDouble("child_index"));
+	appendCode(&chunk->code, (uint8_t)parseDouble("local_index"));
+}
+
+static int disClosure(Chunk *chunk, int offset) {
+	uint8_t opcode  = chunk->code.at[offset++];
+	int nr_closures = chunk->code.at[offset++];
+	int child_index = chunk->code.at[offset++];
+	int local_index = chunk->code.at[offset++];
+	printf("%-16s   %3d %3d %3d\n", instruction[opcode].name, nr_closures, child_index, local_index);
+	return offset;
 }
 
 AddressingMode modeSimple = { asmSimple, disSimple };
 AddressingMode modeConstant = { asmConstant, disConstant };
 AddressingMode modeImmediate = { asmImmediate, disImmediate };
-AddressingMode modeJump = {asmJump, disJump};
+AddressingMode modeJump = {asmNotByHand, disJump};
+AddressingMode modeClosure = {asmClosure, disClosure};
 
 Instruction instruction[] = {
 	[OP_CONSTANT] = {"CONST", &modeConstant},
@@ -58,6 +74,7 @@ Instruction instruction[] = {
 	[OP_TRUE] = {"TRUE", &modeSimple},
 	[OP_FALSE] = {"FALSE", &modeSimple},
 	[OP_GET_GLOBAL] = {"GLOBAL", &modeConstant},
+	[OP_CAPTIVE] = {"CAPTIVE", &modeImmediate},
 	[OP_EQUAL] = {"EQ", &modeSimple},
 	[OP_GREATER] = {"GT", &modeSimple},
 	[OP_LESS] = {"LT", &modeSimple},
@@ -72,6 +89,7 @@ Instruction instruction[] = {
 	[OP_NOT] = {"NOT", &modeSimple},
 	[OP_NEGATE] = {"NEG", &modeSimple},
 	[OP_CALL] = {"CALL", &modeSimple},
+	[OP_CLOSURE] = {"CLOSURE", &modeClosure},
 	[OP_RETURN] = {"RET", &modeSimple},
 	[OP_DISPLAY] = {"DISPLAY", &modeSimple},
 	[OP_FIB] = {"FIB", &modeSimple},
