@@ -1,5 +1,5 @@
 """
-This is currently just some messing around. 
+This part is currently a work in progress. 
 
 Probably assign every module a name consisting of minimal distinctive prefix.
 Then give every function and constructor a mangled name based on its module and any surrounding scopes.
@@ -127,7 +127,7 @@ class FunctionContext(Context):
 		if len(self._captives) > 255: raise TooComplicated("More than 255 captures in one function")
 		if len(self._children) > 255: raise TooComplicated("More than 255 children of one function")
 
-		emit(nr_locals)
+		emit(nr_locals - self._arity)
 		self._outer.emit_captured(list(self._captives)) # Preserving insertion order
 		emit(";")
 		
@@ -150,7 +150,7 @@ class FunctionContext(Context):
 	
 	def load(self, symbol:ontology.Symbol):
 		if symbol in self._local:
-			emit("PARAM")
+			emit("LOCAL")
 			emit(self._local[symbol])
 		elif self.capture(symbol):
 			emit("CAPTIVE")
@@ -197,12 +197,11 @@ class Translation(Visitor):
 		emit(quote(fn.nom.text))
 		inner = FunctionContext(outer, fn)
 		inner.nl()
-		# Walk the function's direct children.
-		for sub in fn.where:
-			self.write_function(sub, inner)
-		# Emit code to initialize child closures.
+		# Initialize direct children.
 		if fn.where:
 			inner.close_over(fn.where)
+			for sub in fn.where:
+				self.write_function(sub, inner)
 		self.visit(fn.expr, inner)
 		inner.emit_epilogue()
 		outer.nl()
@@ -217,7 +216,11 @@ class Translation(Visitor):
 
 	@staticmethod
 	def visit_PlainReference(ref:syntax.PlainReference, context:Context):
-		context.load(ref.dfn)
+		sym = ref.dfn
+		context.load(sym)
+		if isinstance(sym, syntax.UserFunction):
+			if not sym.params:
+				emit("CALL")  # Maybe this can become a FORCE instruction instead soon?
 		
 	def visit_BinExp(self, it: syntax.BinExp, context:Context):
 		self.visit(it.lhs, context)

@@ -130,14 +130,11 @@ static void parseUpvalueLinkages(int nr_captures) {
 		if (predictToken(TOKEN_NAME)) {
 			consume(TOKEN_NAME, "");
 			type = VAL_CAPTURE_LOCAL;
-			printf("Local ");
 		}
 		else {
 			type = VAL_CAPTURE_OUTER;
-			printf("Outer ");
 		}
 		Value capture = { type, {.tag = parseDouble("Capture") } };
-		printf("%d\n", capture.as.tag);
 		appendValueArray(&current->captures, capture);
 	}
 }

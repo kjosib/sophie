@@ -452,3 +452,60 @@ For the moment I've added a value-type to represent the capture-instructions ass
 I can see the attraction of keeping such information in the bytecode stream, but this works for now.
 
 It still doesn't quite run the Newton's method thing, but it's getting a lot closer.
+
+14 October 2023
+---------------
+
+Closures work in the VM now, along with a couple of standard math functions::
+
+    D:\Playground>sophie -x d:\GitHub\sophie\examples\mathematics\Newton_3.sg > newton
+    D:\Playground>d:\GitHub\sophie\vm\out\build\x64-release\svm.exe newton
+    1.41421
+    1.41421
+    4.12311
+    4.12311
+    412.311
+    412.311
+
+I noticed unused ``nil`` slots on the stack in debug mode.
+I tracked this back to mismatched semantics on one of the measures the translator currently provides,
+which is the number of stack slots to reserve for locals when the VM enters a function.
+I was mistakenly providing the number of locals *including parameters.*
+Easy fix once the cause is known, but it encourages me to want to map the stack depth
+more carefully in the translator. This would both simplify the ``OP_CLOSURE`` instruction
+and mean that I wouldn't need to spend time reserving stack slots.
+Furthermore, a nice thing falls out: the max depth of local stack the function uses.
+This statistic would allow the VM to check for adequate stack *once* at function entry
+rather than on each push. (Right now the approach is to allocate an array of call-frames and
+a rather pessimistic amount of stack, but in principle most functions don't use all 256 slots.)
+Propeller-beanie mode would solve it with page tables and let the MMU detect stack overflow,
+but that kind of arcane wizardry is a long way off. Anyway the branch will be well-predicted.
+
+Next up: tail-calls.
+
+Let the expression translator pass around a context bit indicating whether
+the expression under translation is in tail position.
+If yes, and the last instruction would ordinarily be ``OP_CALL`` followed by ``OP_RETURN``,
+then it should emit an ``OP_EXEC`` instruction instead. (That is, *call/cc* if you speak Lisp.)
+The VM will handle the stack gymnastics just fine. 
+
+That bit of being in tail position can supply another (minor) optimization:
+emitting ``OP_RETURN`` instead of an unconditional jump thereto.
+That would have interactions with the back-patching thing.
+
+Honestly, back-patching is a clever solution to a problem that doesn't really exist anymore.
+It should go away. All jumps in this little IL are forward, and things get more complicated
+once type-case matching enters the picture. Therefore, I can change the IL as follows:
+Assembling a jump allocates a forward-reference in sequence. A ``come_from`` compiling word
+takes the number of a forward-reference, verifies that its target has not already been set,
+and then sets the target to the location of the subsequent instruction. This would mean
+conditional forms must compile slightly differently depending on if they are in tail position,
+but this is just fine.
+
+Under this scheme, type-case match forms require an indirect-branching instruction that allocates
+an entire array of forward references. Also: The alternatives have the match-subject in scope as
+well as potentially per-alternative local functions. Therefore, a match-alternative not in
+tail-call position must still clean its bit of stack before jumping out.
+I'll provide a clean-and-jump instruction to handle that.
+
+So that's the plan.

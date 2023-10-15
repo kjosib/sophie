@@ -7,8 +7,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifdef _DEBUG
 #define DEBUG_PRINT_CODE
 #define DEBUG_TRACE_EXECUTION
+#endif // _DEBUG
 
 #define UINT8_COUNT (UINT8_MAX + 1)
 
@@ -261,7 +263,8 @@ typedef enum {
 	OP_NIL,
 	OP_TRUE,
 	OP_FALSE,
-	OP_GET_GLOBAL,
+	OP_GLOBAL,
+	OP_LOCAL,
 	OP_CAPTIVE,
 	OP_EQUAL,
 	OP_GREATER,
@@ -282,7 +285,6 @@ typedef enum {
 	OP_DISPLAY,
 	OP_FIB,
 	OP_QUIT,
-	OP_PARAM,
 	OP_JF,
 	OP_JT,
 	OP_JMP,
