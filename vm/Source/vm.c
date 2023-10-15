@@ -9,6 +9,14 @@ static Value clockNative(Value *args) {
 	return NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
 }
 
+static Value fabsNative(Value *args) {
+	return NUMBER_VAL(fabs(AS_NUMBER(args[0])));
+}
+
+static Value sqrtNative(Value *args) {
+	return NUMBER_VAL(sqrt(AS_NUMBER(args[0])));
+}
+
 static void resetStack() {
 	vm.stackTop = vm.stack;
 	vm.frameIndex = -1;
@@ -49,6 +57,8 @@ void initVM() {
 	initTable(&vm.strings);
 
 	defineNative("clock", 0, clockNative);
+	defineNative("fabs", 1, fabsNative);
+	defineNative("sqrt", 1, sqrtNative);
 }
 
 void freeVM() {
@@ -83,13 +93,25 @@ static inline Value peek(int distance) {
 	return vm.stackTop[-1 - distance];
 }
 
-void displayStack() {
-	printf("          ");
-	for (Value *slot = vm.stack; slot < vm.stackTop; slot++) {
-		printf("[ ");
-		printValue(*slot);
-		printf(" ]");
+static void displaySomeValues(Value *first, size_t count) {
+	for (size_t index = 0; index < count; index++) {
+		printf("[");
+		printValue(first[index]);
+		printf("] ");
 	}
+}
+
+void displayStack(CallFrame *frame) {
+	printf("          ");
+	displaySomeValues(vm.stack, (frame->base - vm.stack));
+	printf("/ ");
+	displaySomeValues(frame->base, (vm.stackTop - frame->base));
+	printf("( ");
+	ValueArray *captives = &frame->closure->captives;
+	displaySomeValues(captives->at, captives->cnt);
+	printf(") ");
+	ValueArray *children = &frame->closure->function->children;
+	displaySomeValues(children->at, children->cnt);
 	printf("\n");
 }
 
@@ -148,8 +170,7 @@ static void initClosure(ObjClosure *closure, CallFrame *frame) {
 	// Precondition: *closure points to a fresh Closure object with no captures.
 	size_t count = closure->function->captures.cnt;
 	if (count) {
-		resizeValueArray(&closure->captives, count);
-		// From here down, this function should not allocate.
+		// This function should not allocate because the capacity was already set at closure creation.
 		for (int index = 0; index < count; index++) {
 			Value capture = closure->function->captures.at[index];
 			Value captive;
@@ -188,7 +209,7 @@ top:
 	for (;;) {
 
 #ifdef DEBUG_TRACE_EXECUTION
-		displayStack();
+		displayStack(frame);
 		disassembleInstruction(&frame->closure->function->chunk, (int)(vpc - frame->closure->function->chunk.code.at));
 #endif // DEBUG_TRACE_EXECUTION
 
@@ -200,7 +221,7 @@ top:
 			push(READ_CONSTANT());
 			NEXT;
 		case OP_POP: pop(); NEXT;
-		case OP_GET_GLOBAL:
+		case OP_GLOBAL:
 			va = READ_CONSTANT();
 			if (IS_STRING(va)) {
 				Value value;
@@ -211,6 +232,9 @@ top:
 				else return runtimeError(vpc, "Undefined global '%s'.", AS_CSTRING(va));
 			}
 			else return runtimeError(vpc, "Operand must be string.");
+		case OP_LOCAL:
+			push(LOCAL(READ_BYTE()));
+			NEXT;
 		case OP_CAPTIVE: push(CAPTIVE(READ_BYTE())); NEXT;
 		case OP_TRUE: push(BOOL_VAL(true)); NEXT;
 		case OP_FALSE: push(BOOL_VAL(false)); NEXT;
@@ -301,7 +325,9 @@ top:
 			}
 			else return runtimeError(vpc, "RETURN WITHOUT GOSUB");
 		case OP_QUIT: {
-			displayStack();
+#ifdef DEBUG_TRACE_EXECUTION
+			displayStack(frame);
+#endif // DEBUG_TRACE_EXECUTION
 			resetStack();
 			printf("\n");
 			return INTERPRET_OK;
@@ -312,9 +338,6 @@ top:
 			NEXT;
 		case OP_FIB:
 			printf("%g\n", fib(AS_NUMBER(pop())));
-			NEXT;
-		case OP_PARAM:
-			push(LOCAL(READ_BYTE()));
 			NEXT;
 		case OP_JF:
 			if (AS_BOOL(peek(0))) SKIP();
