@@ -40,4 +40,4 @@ You can run this program as follows::
     Gulliver's Travels
 
 I'll grant it's not a very imposing result, but it shows that the mechanism works -- at least to some degree.
-You can read more about different ways to use modules in the :doc:`../ref/reference`.
+You can read more about different ways to use modules in the :doc:`../ref/modules`.
