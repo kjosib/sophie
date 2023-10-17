@@ -509,3 +509,11 @@ tail-call position must still clean its bit of stack before jumping out.
 I'll provide a clean-and-jump instruction to handle that.
 
 So that's the plan.
+
+15 October 2023
+---------------
+
+Garbage Collection. 
+
+I spent most of the evening elaborating a plan for garbage collection.
+
