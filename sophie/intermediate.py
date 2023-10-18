@@ -16,7 +16,6 @@ The static-depth information will be useful for look-up operations.
 
 """
 
-from typing import Iterable
 from boozetools.support.foundation import Visitor
 from . import syntax, ontology
 from .resolution import RoadMap
@@ -45,12 +44,21 @@ INSTRUCTION_FOR = {
 	"LogicalNot" : "NOT",
 }
 
-def emit(x): print(x, end=" ")
+def emit(x):
+	print(x, end=" ")
 def quote(x):
 	assert '"' not in x
 	return '"'+x+'"'
+def post(tail):
+	if tail:
+		emit("RETURN")
 
-class Context:
+
+LABEL_QUEUE = list(reversed(range(4096)))
+LABEL_MAP = {}
+
+
+class BaseContext:
 	"""
 	Why do I not attempt to re-use the existing stacking mechanism here?
 	Because I'm solving a slightly different problem.
@@ -60,7 +68,7 @@ class Context:
 	Escape analysis could perhaps do slightly better with static pointers,
 	but this works regardless and it's consistent. And allegedly plenty fast, too.
 		
-	There is a small gotcha: Functions may captive their peers. To avoid ordering problems,
+	There is a small gotcha: Functions may capture their peers. To avoid ordering problems,
 	allocate the closures first and then fill in their captive linkages.
 	Sophie never sees an incompletely-initialized closure.
 	"""
@@ -70,85 +78,42 @@ class Context:
 		print()
 		print("", end=self.indent)
 
-	def declare(self, symbol:ontology.Symbol):
-		raise NotImplementedError(type(self))
-
 	def capture(self, symbol: ontology.Symbol) -> bool:
 		raise NotImplementedError(type(self))
-	
-	def load(self, symbol:ontology.Symbol):
+
+	def emit_captured(self, captives: list[ontology.Symbol]):
 		raise NotImplementedError(type(self))
 
-	def emit_captured(self, captives:Iterable[ontology.Symbol]):
-		raise NotImplementedError(type(self))
-
-
-class RootContext(Context):
-	pass
-
-class ModuleContext(Context):
-	def __init__(self, root:RootContext):
-		self._root = root
-
-	def declare(self, symbol:ontology.Symbol):
-		pass
-
-	def capture(self, symbol: ontology.Symbol):
+class RootContext(BaseContext):
+	def capture(self, symbol: ontology.Symbol) -> bool:
 		return False
 
-	def load(self, symbol:ontology.Symbol):
-		emit("GLOBAL")
-		emit(quote(symbol.nom.text))
-
-	def emit_captured(self, captives:Iterable[ontology.Symbol]):
-		assert not captives
-		emit(0)
-
-class FunctionContext(Context):
-	def __init__(self, outer:Context, fn:syntax.UserFunction):
-		self.indent = outer.indent+"  "
-		self._outer = outer
-		self._arity = len(fn.params)
-		self._local = {}
-		self._captives = {}
-		self._next_local = 0
-		self._stack = []
-		self._children = []
-		
-		for param in fn.params: self.declare(param)
-		
-	def emit_epilogue(self):
-		# Consists of right brace, number of locals, number of other stack slots,
-		# number of captures, and information about each capture.
-		emit("}")
-		nr_locals = 1+max(self._local.values()) if self._local else 0
-		
-		if nr_locals > 255: raise TooComplicated("More than 255 locals in one function")
-		if len(self._captives) > 255: raise TooComplicated("More than 255 captures in one function")
-		if len(self._children) > 255: raise TooComplicated("More than 255 children of one function")
-
-		emit(nr_locals - self._arity)
-		self._outer.emit_captured(list(self._captives)) # Preserving insertion order
-		emit(";")
-		
 	def emit_captured(self, captives: list[ontology.Symbol]):
-		emit(len(captives))
-		for sym in captives:
-			if sym in self._local:
-				emit("L")
-				emit(self._local[sym])
-			else:
-				emit(self._captives[sym])
-				
-	def declare(self, symbol:ontology.Symbol):
-		assert symbol not in self._local
-		self._local[symbol] = self._next_local
-		self._next_local += 1
-		
-	def mark(self): self._stack.append((self._next_local, self._depth))
-	def restore(self): self._next_local, self._depth = self._stack.pop()
+		assert not captives
+
+class Context(BaseContext):
+	def __init__(self, outer:BaseContext):
+		self._outer = outer
+		self.indent = "" if isinstance(outer, RootContext) else outer.indent+"  "
+		self._local = {}
+		self._children = []
+		self._captives = {}
+		self._depth = 0
 	
-	def load(self, symbol:ontology.Symbol):
+	def depth(self): return self._depth
+	def reset(self, depth): self._depth = depth
+	def pop(self): self._depth -= 1
+	def push(self): self._depth += 1
+	
+	def declare(self, symbol: ontology.Symbol):
+		self.alias(symbol)
+		self.push()
+	
+	def alias(self, symbol: ontology.Symbol):
+		assert symbol not in self._local
+		self._local[symbol] = self._depth
+		
+	def load(self, symbol: ontology.Symbol):
 		if symbol in self._local:
 			emit("LOCAL")
 			emit(self._local[symbol])
@@ -158,31 +123,96 @@ class FunctionContext(Context):
 		else:
 			emit("GLOBAL")
 			emit(quote(symbol.nom.text))
-	
+		self.push()
+
+	def constant(self, value):
+		emit("CONST")
+		if isinstance(value, str):
+			emit(quote(value))
+		elif isinstance(value, (int, float)):
+			emit(value)
+		elif isinstance(value, bool):
+			emit(INSTRUCTION_FOR[value])
+		else:
+			assert False
+		self.push()
+
 	def capture(self, symbol: ontology.Symbol) -> bool:
 		if symbol in self._local or symbol in self._captives:
 			return True
 		elif self._outer.capture(symbol):
 			self._captives[symbol] = len(self._captives)
 			return True
-	
+		
 	def close_over(self, subs):
 		emit("CLOSURE")
 		emit(len(subs))
 		emit(len(self._children))
-		emit(self._next_local)
 		self._children.extend(subs)
 		for sub in subs:
 			self.declare(sub)
+
+	def jump(self, ins):
+		emit(ins)
+		return self.emit_hole()
+	
+	def emit_hole(self):
+		label = LABEL_QUEUE.pop()
+		emit("hole")
+		emit(label)
+		LABEL_MAP[label] = (self, self._depth)
+		return label
+	
+	def come_from(self, label):
+		(source, depth) = LABEL_MAP.pop(label)
+		assert source is self, "Improper Come-From"
+		self.reset(depth)
+		emit("come_from")
+		emit(label)
+		LABEL_QUEUE.append(label)
+
+	def emit_preamble(self, fn:syntax.UserFunction):
+		emit("{")
+		# Emit number of parameters
+		emit(len(fn.params))
+		# Emit fully-qualified name
+		emit(quote(fn.nom.text))
+		for param in fn.params:
+			self.declare(param)
+
+	def emit_epilogue(self):
+		# Consists of right brace, maximum number of locally-used stack slots,
+		# number of captures, and information about each capture.
+		if len(self._captives) > 255: raise TooComplicated("More than 255 captures in one function")
+		if len(self._children) > 255: raise TooComplicated("More than 255 children of one function")
+
+		emit("}")
+		emit(len(self._captives))
+		self._outer.emit_captured(list(self._captives)) # Preserving insertion order
+		emit(";")
+		
+	def emit_captured(self, captives: list[ontology.Symbol]):
+		for sym in captives:
+			if sym in self._local:
+				emit("L")
+				emit(self._local[sym])
+			else:
+				emit(self._captives[sym])
+	
+	def display(self):
+		assert self._depth == 1, self.depth()
+		emit("DISPLAY")
+		self.pop()
+
 
 class Translation(Visitor):
 	def visit_RoadMap(self, roadmap:RoadMap):
 		context = RootContext()
 		for module in roadmap.each_module:
-			self.visit(module, context)
+			self.visit_Module(module, context)
 	
 	def visit_Module(self, module:syntax.Module, root:RootContext):
-		context = ModuleContext(root)
+		context = Context(root)
 		for fn in module.outer_functions:
 			self.write_function(fn, context)
 		for expr in module.main:
@@ -190,74 +220,88 @@ class Translation(Visitor):
 
 	def write_function(self, fn, outer:Context):
 		# Emit the preamble.
-		emit("{")
-		# Emit number of parameters
-		emit(len(fn.params))
-		# Emit fully-qualified name
-		emit(quote(fn.nom.text))
-		inner = FunctionContext(outer, fn)
+		inner = Context(outer)
 		inner.nl()
+		inner.emit_preamble(fn)
 		# Initialize direct children.
 		if fn.where:
 			inner.close_over(fn.where)
 			for sub in fn.where:
 				self.write_function(sub, inner)
-		self.visit(fn.expr, inner)
+		self.visit(fn.expr, inner, True)
 		inner.emit_epilogue()
 		outer.nl()
 
 	def write_begin_expression(self, expr, context:Context):
 		context.nl()
-		self.visit(expr, context)
-		emit("DISPLAY")
+		self.visit(expr, context, False)
+		context.display()
 	
-	def visit_Lookup(self, lu:syntax.Lookup, context:Context):
-		self.visit(lu.ref, context)
+	def visit_Lookup(self, lu:syntax.Lookup, context:Context, tail:bool):
+		self.visit(lu.ref, context, tail)
 
 	@staticmethod
-	def visit_PlainReference(ref:syntax.PlainReference, context:Context):
+	def visit_PlainReference(ref:syntax.PlainReference, context:Context, tail:bool):
 		sym = ref.dfn
 		context.load(sym)
 		if isinstance(sym, syntax.UserFunction):
 			if not sym.params:
-				emit("CALL")  # Maybe this can become a FORCE instruction instead soon?
-		
-	def visit_BinExp(self, it: syntax.BinExp, context:Context):
-		self.visit(it.lhs, context)
-		self.visit(it.rhs, context)
+				emit("EXEC" if tail else "CALL")
+		post(tail)
+
+	def visit_BinExp(self, it: syntax.BinExp, context:Context, tail:bool):
+		self.visit(it.lhs, context, False)
+		self.visit(it.rhs, context, False)
 		emit(INSTRUCTION_FOR[it.glyph])
+		context.pop()
+		post(tail)
 	
-	def visit_UnaryExp(self, ux:syntax.UnaryExp, context:Context):
-		self.visit(ux.arg, context)
+	def visit_UnaryExp(self, ux:syntax.UnaryExp, context:Context, tail:bool):
+		self.visit(ux.arg, context, False)
 		emit(INSTRUCTION_FOR[ux.glyph])
+		post(tail)
 
 	@staticmethod
-	def visit_Literal(l:syntax.Literal, _:Context):
-		emit("CONST")
-		if isinstance(l.value, str):
-			emit(quote(l.value))
-		elif isinstance(l.value, (int, float)):
-			emit(l.value)
-		elif isinstance(l.value, bool):
-			emit(INSTRUCTION_FOR[l.value])
-		else:
-			assert False
+	def visit_Literal(l:syntax.Literal, context:Context, tail:bool):
+		context.constant(l.value)
+		post(tail)
 
-	def visit_Call(self, call:syntax.Call, context:Context):
+	def visit_Call(self, call:syntax.Call, context:Context, tail:bool):
 		# Order of operations here is meaningless because it must be pure.
 		# Sort of.
+		depth = context.depth()
 		for arg in call.args:
-			self.visit(arg, context)
-		self.visit(call.fn_exp, context)
-		emit("CALL")
+			self.visit(arg, context, False)
+		self.visit(call.fn_exp, context, False)
+		if tail:
+			emit("EXEC")
+		else:
+			emit("CALL")
+			context.reset(depth)
+			context.push()
 
-	def visit_Cond(self, cond:syntax.Cond, context:Context):
+	def visit_Cond(self, cond:syntax.Cond, context:Context, tail:bool):
 		# This is super-simplistic for now.
 		# It just has to work, not be hyper-optimized.
-		self.visit(cond.if_part, context)
-		emit("and")
-		self.visit(cond.then_part, context)
-		emit("else")
-		self.visit(cond.else_part, context)
-		emit("if")
+		depth = context.depth()
+		self.visit(cond.if_part, context, False)
+		assert context.depth() == depth+1
+		
+		label_else = context.jump("JF")
+		context.pop()
+		
+		self.visit(cond.then_part, context, tail)
+		assert context.depth() == depth + 1
+		
+		if tail:
+			context.come_from(label_else)
+			self.visit(cond.else_part, context, True)
+		
+		else:
+			after = context.jump("JMP")
+			context.come_from(label_else)
+			emit("POP")
+			context.pop()
+			self.visit(cond.else_part, context, False)
+			context.come_from(after)
 

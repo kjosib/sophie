@@ -22,7 +22,6 @@ ObjClosure *newClosure(ObjFunction *function) {
 ObjFunction *newFunction(FunctionType type, uint8_t arity, ObjString *name) {
 	ObjFunction *function = ALLOCATE_OBJ(ObjFunction, OBJ_FUNCTION);
 	function->arity = arity;
-	function->nr_locals = 0;
 	function->type = type;
 	function->name = name;
 	initChunk(&function->chunk);
@@ -31,10 +30,11 @@ ObjFunction *newFunction(FunctionType type, uint8_t arity, ObjString *name) {
 	return function;
 }
 
-ObjNative *newNative(uint8_t arity, NativeFn function) {
+ObjNative *newNative(uint8_t arity, NativeFn function, ObjString *name) {
 	ObjNative *native = ALLOCATE_OBJ(ObjNative, OBJ_NATIVE);
 	native->arity = arity;
 	native->function = function;
+	native->name = name;
 	return native;
 }
 

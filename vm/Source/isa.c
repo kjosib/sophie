@@ -1,5 +1,8 @@
 #include "common.h"
 
+DEFINE_VECTOR_CODE(Labels, uint16_t)
+DEFINE_VECTOR_APPEND(Labels, uint16_t)
+
 static void asmSimple(Chunk *chunk) {
 }
 
@@ -35,10 +38,6 @@ static int disImmediate(Chunk *chunk, int offset) {
 	return offset;
 }
 
-static void asmNotByHand(Chunk *chunk) {
-	error("this instruction is not meant to be assembled by hand");
-}
-
 static int disJump(Chunk *chunk, int offset) {
 	uint8_t opcode = chunk->code.at[offset];
 	uint16_t operand = word_at(&chunk->code.at[1 + offset]);
@@ -49,25 +48,24 @@ static int disJump(Chunk *chunk, int offset) {
 static void asmClosure(Chunk *chunk) {
 	appendCode(&chunk->code, (uint8_t)parseDouble("nr_closures"));
 	appendCode(&chunk->code, (uint8_t)parseDouble("child_index"));
-	appendCode(&chunk->code, (uint8_t)parseDouble("local_index"));
 }
 
 static int disClosure(Chunk *chunk, int offset) {
 	uint8_t opcode  = chunk->code.at[offset++];
 	int nr_closures = chunk->code.at[offset++];
 	int child_index = chunk->code.at[offset++];
-	int local_index = chunk->code.at[offset++];
-	printf("%-16s   %3d %3d %3d\n", instruction[opcode].name, nr_closures, child_index, local_index);
+	printf("%-16s   %3d %3d\n", instruction[opcode].name, nr_closures, child_index);
 	return offset;
 }
 
 AddressingMode modeSimple = { asmSimple, disSimple };
 AddressingMode modeConstant = { asmConstant, disConstant };
 AddressingMode modeImmediate = { asmImmediate, disImmediate };
-AddressingMode modeJump = {asmNotByHand, disJump};
+AddressingMode modeJump = {asmSimple, disJump};
 AddressingMode modeClosure = {asmClosure, disClosure};
 
 Instruction instruction[] = {
+	[OP_PANIC] = {"PANIC", &modeSimple},
 	[OP_CONSTANT] = {"CONST", &modeConstant},
 	[OP_POP] = {"POP", &modeSimple},
 	[OP_NIL] = {"NIL", &modeSimple},
@@ -76,6 +74,7 @@ Instruction instruction[] = {
 	[OP_GLOBAL] = {"GLOBAL", &modeConstant},
 	[OP_LOCAL] = {"LOCAL", &modeImmediate},
 	[OP_CAPTIVE] = {"CAPTIVE", &modeImmediate},
+	[OP_CLOSURE] = {"CLOSURE", &modeClosure},
 	[OP_EQUAL] = {"EQ", &modeSimple},
 	[OP_GREATER] = {"GT", &modeSimple},
 	[OP_LESS] = {"LT", &modeSimple},
@@ -90,8 +89,8 @@ Instruction instruction[] = {
 	[OP_NOT] = {"NOT", &modeSimple},
 	[OP_NEGATE] = {"NEG", &modeSimple},
 	[OP_CALL] = {"CALL", &modeSimple},
-	[OP_CLOSURE] = {"CLOSURE", &modeClosure},
-	[OP_RETURN] = {"RET", &modeSimple},
+	[OP_EXEC] = {"EXEC", &modeSimple},
+	[OP_RETURN] = {"RETURN", &modeSimple},
 	[OP_DISPLAY] = {"DISPLAY", &modeSimple},
 	[OP_FIB] = {"FIB", &modeSimple},
 	[OP_QUIT] = {"QUIT", &modeSimple},

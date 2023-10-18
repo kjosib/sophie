@@ -1,8 +1,10 @@
 #include "common.h"
 
+#define NR_HOLES 4096
+
 static ValueArray scopes;
 static ObjFunction *current;
-static uint16_t patchLink;
+static uint16_t holes[NR_HOLES];
 
 #define PTR_VAL(x) ((Value){VAL_NIL, {.ptr = x}})
 
@@ -21,16 +23,6 @@ typedef struct {
 
 static void emit(uint8_t byte) { appendCode(&current->chunk.code, byte); }
 
-static void emitHole() {
-	// This trick should work regardless of endianness.
-	uint8_t *trick = (uint8_t *)(&patchLink);
-	// Grow the vector one byte at a time to keep its invariants happy.
-	emit(trick[0]);
-	emit(trick[1]);
-	// The cast will be fine because chunks larger than 64k are banned anyway.
-	patchLink = (uint16_t)(current->chunk.code.cnt - 2);
-}
-
 static void writeWordAt(uint16_t offset, uint16_t word) {
 	// Should work regardless of endianness.
 	// May be trouble if CPU requires alignment.
@@ -45,42 +37,34 @@ uint16_t readWordAt(uint16_t offset) {
 	return *target;
 }
 
-static void patchJump(size_t target) {
-	uint16_t prior = readWordAt(patchLink);
-	// writeWordAt(patchLink, target);
-	writeWordAt(patchLink, (uint16_t)(target - patchLink));
-	patchLink = prior;
+uint16_t *parseHole() {
+	int hole_id = (int)(parseDouble("hole ID"));
+	if (hole_id < 0 || hole_id >= NR_HOLES) error("Improper hole id");
+	return &holes[hole_id];
 }
 
-static void compileAnd(CplWord *dfn) {
-	emit(OP_JF);
-	emitHole();
+static void hole(CplWord *dfn) {
+	uint16_t *hole_ptr = parseHole();
+	if (*hole_ptr) error("Busy hole");
+	*hole_ptr = (uint16_t)current->chunk.code.cnt;
+	emit(0);
+	emit(0);
 }
 
-static void compileOr(CplWord *dfn) {
-	emit(OP_JT);
-	emitHole();
-}
-
-static void compileElse(CplWord *dfn) {
-	if (!patchLink) error("else without criteria");
-	emit(OP_JMP);
-	patchJump(current->chunk.code.cnt + 2);
-	emitHole();
-	emit(OP_POP);
-}
-
-static void compileIf(CplWord *dfn) {
-	if (!patchLink) error("if without criteria");
-	patchJump(current->chunk.code.cnt);
+static void come_from(CplWord *dfn) {
+	uint16_t *hole_ptr = parseHole();
+	uint16_t hole_offset = *hole_ptr;
+	if (!hole_offset) error("Unallocated Label");
+	uint16_t here = (uint16_t)current->chunk.code.cnt;
+	if ( hole_offset + 2 > here || here < 4 || readWordAt(hole_offset)) error("Improper come_from");
+	writeWordAt(hole_offset, (uint16_t)(here - hole_offset));
+	*hole_ptr = 0;
 }
 
 AsmWord asmWords[NR_OPCODES];
 CplWord cplWords[] = {
-	{compileAnd, "and"},
-	{compileOr, "or"},
-	{compileElse, "else"},
-	{compileIf, "if"},
+	{hole, "hole"},
+	{come_from, "come_from"},
 };
 Table lexicon;
 
@@ -103,7 +87,7 @@ void initLexicon() {
 }
 
 static void initCompiler() {
-	patchLink = 0;
+	memset(holes, 0, sizeof(holes));
 	initValueArray(&scopes);
 	appendValueArray(&scopes, OBJ_VAL(newFunction(TYPE_SCRIPT, 0, copyString("<script>", 8))));
 	current = AS_FUNCTION(scopes.at[0]);
@@ -111,17 +95,16 @@ static void initCompiler() {
 
 static bool finished() { return parser.current.type == TOKEN_EOF; }
 
+static uint8_t parseByte(char *what) {
+	return (uint8_t)parseDouble(what);
+}
+
 static void startFunction() {
-	if (patchLink) error("must resolve forward branches before starting a function");
-	uint8_t arity = (uint8_t)parseDouble("arity");
+	uint8_t arity = parseByte("arity");
 	ObjString *name = parseString();
 	if (1 == scopes.cnt) declareGlobal(name);
 	current = newFunction(TYPE_FUNCTION, arity, name);
 	appendValueArray(&scopes, OBJ_VAL(current));
-}
-
-static void checkPatchLinkage() {
-	if (patchLink) error("must resolve forward branches before finishing a function");
 }
 
 static void parseUpvalueLinkages(int nr_captures) {
@@ -134,14 +117,13 @@ static void parseUpvalueLinkages(int nr_captures) {
 		else {
 			type = VAL_CAPTURE_OUTER;
 		}
-		Value capture = { type, {.tag = parseDouble("Capture") } };
+		Value capture = { type, {.tag = parseByte("Capture") } };
 		appendValueArray(&current->captures, capture);
 	}
 }
 
 static void parseVitalStatistics() {
-	current->nr_locals = parseDouble("number of additional stack slots to reserve for locals");
-	parseUpvalueLinkages(parseDouble("number of captures"));
+	parseUpvalueLinkages(parseByte("Number of captures"));
 	consume(TOKEN_SEMICOLON, "Semicolon to delimit the end of the stats");
 }
 
@@ -158,7 +140,6 @@ static void finishFunction() {
 #endif
 
 
-	checkPatchLinkage();
 	parseVitalStatistics();
 	checkSizeLimits();
 
@@ -182,7 +163,6 @@ static bool predictConstant() { return predictToken(TOKEN_NUMBER) || predictToke
 
 static void parseScript() {
 	while (!finished()) {
-		Chunk *chunk = &current->chunk;
 		if (predictToken(TOKEN_NAME)) {
 			advance();
 			uint32_t hash = hashString(parser.previous.start, parser.previous.length);
@@ -203,7 +183,7 @@ static void parseScript() {
 				error("close without open");
 			}
 			else {
-				emit(OP_RETURN);
+				emit(OP_PANIC);
 				finishFunction();
 			}
 		}

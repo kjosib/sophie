@@ -517,3 +517,29 @@ Garbage Collection.
 
 I spent most of the evening elaborating a plan for garbage collection.
 
+16 October 2023
+---------------
+
+Back to tail calls, then.
+
+I briefly tried a polymorphic approach, then decided to just go with that context
+flag I mentioned in the entry from two days ago.
+
+17 October 2023
+---------------
+
+This evening, I got rid of that crazy hole-threading mechanism for back-patches.
+The "compiling-words" ``and``, ``or``, ``else``, and ``if`` went away in favor of a
+two words to explicitly create and fill holes: ``hole`` and ``come_from``.
+Both take a hole-number. One reserves the number, and the other releases the number to be reused.
+The pseudo-compiler avoids overlapping uses of the same-numbered hole.
+For now there are 4096 holes, which should be way more than any practical need.
+But if that should ever prove insufficient, it's just software.
+
+I've made the pseudo-compiler track the depth of stack as it goes.
+This replaces the notion of explicit space for variables on the stack.
+
+Finally, tail-call elimination is now fully operational.
+Even more: the p-code will never jump to a jump or a return instruction.
+This should save a few cycles hither and yon.
+
