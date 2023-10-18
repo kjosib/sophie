@@ -157,7 +157,6 @@ typedef enum {
 typedef struct {
 	Obj obj;
 	uint8_t arity;
-	uint8_t nr_locals;
 	FunctionType type;
 	Chunk chunk;
 	ObjString *name;
@@ -172,6 +171,7 @@ typedef struct {
 	Obj obj;
 	uint8_t arity;
 	NativeFn function;
+	ObjString *name;
 } ObjNative;
 
 struct ObjString {
@@ -191,7 +191,7 @@ typedef struct {
 ObjClosure *newClosure(ObjFunction *function);
 ObjFunction *newFunction(FunctionType type, uint8_t arity, ObjString *name);
 uint32_t hashString(const char *key, size_t length);
-ObjNative *newNative(uint8_t arity, NativeFn function);
+ObjNative *newNative(uint8_t arity, NativeFn function, ObjString *name);
 ObjString *takeString(char *chars, size_t length);
 ObjString *copyString(const char *chars, size_t length);
 void printObject(Value value);
@@ -258,6 +258,7 @@ static inline bool predictToken(TokenType type) { return type == parser.current.
 /* isa.h */
 
 typedef enum {
+	OP_PANIC,
 	OP_CONSTANT,
 	OP_POP,
 	OP_NIL,
@@ -266,6 +267,7 @@ typedef enum {
 	OP_GLOBAL,
 	OP_LOCAL,
 	OP_CAPTIVE,
+	OP_CLOSURE,
 	OP_EQUAL,
 	OP_GREATER,
 	OP_LESS,
@@ -280,7 +282,7 @@ typedef enum {
 	OP_NOT,
 	OP_NEGATE,
 	OP_CALL,
-	OP_CLOSURE,
+	OP_EXEC,
 	OP_RETURN,
 	OP_DISPLAY,
 	OP_FIB,
@@ -290,6 +292,8 @@ typedef enum {
 	OP_JMP,
 	NR_OPCODES,
 } OpCode;
+
+DEFINE_VECTOR_TYPE(Labels, uint16_t)
 
 typedef void (*AsmFn)(Chunk *chunk);
 typedef int (*DisFn)(Chunk *chunk, int offset);
@@ -306,6 +310,7 @@ typedef struct {
 
 extern Instruction instruction[];
 
+void initAsm();
 
 /* table.h */
 
@@ -340,8 +345,6 @@ typedef struct {
 
 typedef struct {
 	CallFrame frames[FRAMES_MAX + 1];
-	int frameIndex;
-
 	Value stack[STACK_MAX];
 	Value *stackTop;
 	Table globals;
@@ -368,11 +371,6 @@ void push(Value value);
 Value pop();
 
 /* compiler.h */
-
-//typedef struct {
-//	Token name;
-//	int depth;
-//} Local;
 
 void initLexicon();
 ObjFunction *compile(const char *source);
