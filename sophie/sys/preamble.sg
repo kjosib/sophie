@@ -12,7 +12,7 @@ foreign "math" where
 
 	acos, acosh, asin, asinh, atan, atanh,
 	ceil, cos, cosh, degrees, erf, erfc, exp, expm1,
-	fabs, factorial, floor, gamma,
+	abs@"fabs", factorial, floor, gamma,
 	isqrt, lcm, lgamma, log, log10, log1p, log2,
 	modf, radians, sin, sinh, sqrt,
 	tan, tanh, trunc, ulp : (number) -> number;

@@ -1,20 +1,31 @@
+/*
+
+DESIGN NOTE
+------------
+
+The hash table is principally a vector of Entry structures.
+An entry consists of a String pointer and a Value.
+
+Code currently represents virgin entries as those with key=NULL and value NIL.
+Tombstones are as key=NULL and value TRUE.
+
+*/
+
 #include "common.h"
 
 #define TABLE_MAX_LOAD 0.75
 
 DEFINE_VECTOR_CODE(Table, Entry)
 
-static Entry *findEntry(Entry *entries, size_t capacity, ObjString *key) {
+static Entry *findEntry(Entry *entries, size_t capacity, String *key) {
 	/*
 	Implementation Notes:
 
 	If probe sequence happens upon a tombstone before an unused bucket,
 	then return that first tombstone thus to keep probe sequences short.
 
-	Code currently represents virgin entries as those with key=NULL and value NIL.
-	Tombstones are as key=NULL and value TRUE.
-
 	What if found entries swapped places with a found tombstone?
+	(Hypothesis: Churn on the data bus.)
 	*/
 
 	size_t index = key->hash % capacity;
@@ -64,7 +75,7 @@ static void adjustCapacity(Table *table, size_t capacity) {
 	table->cap = capacity;
 }
 
-bool tableGet(Table *table, ObjString *key, Value *value) {
+bool tableGet(Table *table, String *key, Value *value) {
 	if (table->cnt == 0) return false;
 
 	Entry *entry = findEntry(table->at, table->cap, key);
@@ -74,8 +85,17 @@ bool tableGet(Table *table, ObjString *key, Value *value) {
 	return true;
 }
 
-bool tableSet(Table *table, ObjString *key, Value value) {
+bool tableSet(Table *table, String *key, Value value) {
 	// Returns true if the key is new, false if already present.
+
+#ifdef _DEBUG
+	if (!is_string(key)) {
+		printf("Got non-string key:");
+		printObject((GC*)key);
+		crashAndBurn("confused");
+	}
+#endif // _DEBUG
+
 
 	if (table->cnt + 1 > table->cap * TABLE_MAX_LOAD) {
 		adjustCapacity(table, GROW(table->cap));
@@ -88,6 +108,11 @@ bool tableSet(Table *table, ObjString *key, Value value) {
 	entry->key = key;
 	entry->value = value;
 	return isNewKey;
+}
+
+bool table_set_from_C(Table *table, char *text, Value value) {
+	String *key = import_C_string(text, strlen(text));
+	return tableSet(table, key, value);
 }
 
 void tableAddAll(Table *from, Table *to) {
@@ -111,7 +136,7 @@ Entry *tableFindString(Table *table, const char *chars, size_t length, uint32_t 
 		}
 		else if (entry->key->length == length &&
 			entry->key->hash == hash &&
-			memcmp(entry->key->chars, chars, length) == 0) {
+			memcmp(entry->key->text, chars, length) == 0) {
 			// We found it.
 			return entry;
 		}
@@ -120,7 +145,7 @@ Entry *tableFindString(Table *table, const char *chars, size_t length, uint32_t 
 	}
 }
 
-bool tableDelete(Table *table, ObjString *key) {
+bool tableDelete(Table *table, String *key) {
 	if (table->cnt == 0) return false;
 
 	// Find the entry.
@@ -131,4 +156,26 @@ bool tableDelete(Table *table, ObjString *key) {
 	entry->key = NULL;
 	entry->value = BOOL_VAL(true);
 	return true;
+}
+
+void darkenTable(Table *table) {
+	for (size_t index = 0; index < table->cap; index++) {
+		Entry *entry = &table->at[index];
+		if (entry->key != NULL) {
+			darken_in_place(&entry->key);
+			darkenValue(&entry->value);
+		}
+	}
+}
+
+void tableDump(Table *table) {
+	for (size_t index = 0; index < table->cap; index++) {
+		Entry *entry = &table->at[index];
+		if (entry->key != NULL) {
+			printObject((GC*)entry->key);
+			printf(" : ");
+			printValue(entry->value);
+			printf("\n");
+		}
+	}
 }

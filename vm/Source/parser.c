@@ -16,7 +16,7 @@ static void errorAt(Token *token, const char *message) {
 	}
 
 	fprintf(stderr, ": %s\n", message);
-	crashAndBurn("there's no point");
+	crashAndBurn("the code-file is ill-formed");
 }
 
 void error(const char *message) {
@@ -43,9 +43,9 @@ void consume(TokenType type, const char *message) {
 	else errorAtCurrent(message);
 }
 
-ObjString *parseString() {
+String *parseString() {
 	consume(TOKEN_STRING, "Need a string here");
-	return copyString(parser.previous.start + 1, parser.previous.length - 2);
+	return import_C_string(parser.previous.start + 1, parser.previous.length - 2);
 }
 
 double parseDouble(const char *message) {
@@ -53,12 +53,14 @@ double parseDouble(const char *message) {
 	return strtod(parser.previous.start, NULL);
 }
 
+byte parseByte(char *message) { return (byte)parseDouble(message); }
+
 Value parseConstant() {
 	if (predictToken(TOKEN_NUMBER)) {
 		return NUMBER_VAL(parseDouble("Need a number here"));
 	}
 	else if (predictToken(TOKEN_STRING)) {
-		return OBJ_VAL(parseString());
+		return GC_VAL(parseString());
 	}
 	else {
 		errorAtCurrent("Expected a literal constant.");

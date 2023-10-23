@@ -17,7 +17,7 @@ void disassembleChunk(Chunk *chunk, const char *name) {
 }
 
 int disassembleInstruction(Chunk *chunk, int offset) {
-	uint8_t opcode = chunk->code.at[offset];
+	byte opcode = chunk->code.at[offset];
 	if (opcode < NR_OPCODES) {
 		return instruction[opcode].operand->disassemble(chunk, offset);
 	}

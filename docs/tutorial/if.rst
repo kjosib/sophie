@@ -100,9 +100,8 @@ Success! But ... What just happened? There's a lot going on in this case-study.
 4. In the function ``good_enough``, we meet `scientific notation`_.
    ``1e-14`` is one over ten trillion, or a very *very* small number for most practical purposes.
 
-5. The built-in function ``fabs`` stands for "absolute-value of" and is effectively ``fabs(x) = x if x >= 0 else -x``,
-   but in native code. The ``f`` in ``fabs`` comes from a historical accident, and I will probably remove it
-   from a near-future version of the interpreter.
+5. The built-in function ``abs`` stands for "absolute-value of" and is effectively ``abs(x) = x if x >= 0 else -x``,
+   but in native code.
 
 6. This illustrates a design technique: The function ``iterated(x, y)`` does most of the work,
    and is `recursive`_ with two parameters. So the outer function ``root(square)`` must

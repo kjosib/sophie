@@ -30,8 +30,9 @@ static void runFile(const char *path) {
 }
 
 int main(int argc, const char *argv[]) {
+	init_gc();
+	initVM(); // This first so that the string table is initialized first, before its first sweep.
 	initLexicon();
-	initVM();
 
 	if (argc == 2) {
 		runFile(argv[1]);

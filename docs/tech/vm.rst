@@ -4,13 +4,12 @@ Sophie's Future Virtual Machine
 I've started implementing a virtual machine for Sophie in C,
 borrowing liberally from the code and ideas
 in `Crafting Interpreters <https://craftinginterpreters.com/>`_
-It's not much to look at yet, but progress takes time.
 
 I am not planning to translate the whole of Sophie into C.
 Rather, the plan is for Sophie to be able to emit an intermediate
 representation which a separate VM can interpret at a respectable speed.
 
-The intermediate representation will be made of plain (UTF-8) text.
+The intermediate representation is made of plain (UTF-8) text.
 I originally thought to make it look like classical assembler input,
 but then realized a structure reminiscent of FORTH would be preferable:
 
@@ -18,10 +17,34 @@ but then realized a structure reminiscent of FORTH would be preferable:
 * The (first) VM will be a stack machine, which maps perfectly to FORTH's agglutinative nature.
 
 
-Where's the Code?
-==================
+.. contents::
+	:local:
+	:depth: 3
 
-When there is something presentable, it will appear in the same GitHub repository as the rest of Sophie.
+Quick Demo
+============
+
+Here's an example:
+
+.. code-block:: text
+
+	D:\Playground>sophie -x d:\GitHub\sophie\examples\mathematics\Newton_3.sg > newton
+	
+	D:\Playground>d:\GitHub\sophie\vm\out\build\x64-release\svm.exe newton
+	1.41421
+	1.41421
+	4.12311
+	4.12311
+	412.311
+	412.311
+
+Source Code
+============
+
+The VM source code is in the same GitHub repository as the rest of Sophie.
+Look under the ``/vm`` folder.
+There, you will find a build set-up that works for me on Windows and MSVC '22.
+If you're running on Linux or a Mac, then ... well ... it's a C program.
 
 
 Why Not JVM or CLR?
@@ -377,7 +400,7 @@ Closures Partially Solved
 I've decided to start with the CLOX / LUA design for closure-capture.
 A closure-object will contain a copy of its captured values rather than a static link.
 It seems to be well-suited to modern architectures, and it means no need for escape analysis.
-A VM instruction ``CAPTIVE n`` will push the ``n``th captured value onto the stack.
+A VM instruction ``CAPTIVE n`` will push the ``n`` th captured value onto the stack.
 
 Figuring out the proper ``n`` is the tricky bit.
 
@@ -543,3 +566,24 @@ Finally, tail-call elimination is now fully operational.
 Even more: the p-code will never jump to a jump or a return instruction.
 This should save a few cycles hither and yon.
 
+18 October 2023
+---------------
+
+It's probably time to get working on garbage collection.
+
+For phase one, I'll just implement the bump allocator.
+Anything that doesn't fit becomes an ordinary ``malloc``.
+
+
+22 October 2023
+---------------
+
+Garbage Collection works. Finally.
+
+One of the best ideas in the Nystrom book is to simulate memory pressure and make the collector work overtime.
+And this was definitely the right time to implement GC, because GC puts hairy tentacles into what you can do.
+
+Now I need some more programs.
+
+Probably I shall first add support for composite types.
+Also, I have an idea how to implement thunks.

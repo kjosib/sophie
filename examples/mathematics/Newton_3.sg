@@ -6,7 +6,7 @@ define:
         iterated(x, y) =                                      # Note 2
           x if good_enough else iterated(newton(x), x) where  # Note 1
             good_enough = relative_difference < 1e-14;        # Note 3, 4
-            relative_difference = fabs(x-y) / (x+y) ;         # Note 5
+            relative_difference = abs(x-y) / (x+y) ;         # Note 5
          end iterated;
     end root;
 
