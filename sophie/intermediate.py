@@ -84,6 +84,9 @@ class BaseContext:
 	def emit_captured(self, captives: list[ontology.Symbol]):
 		raise NotImplementedError(type(self))
 
+	def declare(self, symbol: ontology.Symbol):
+		raise NotImplementedError(type(self))
+
 class RootContext(BaseContext):
 	def capture(self, symbol: ontology.Symbol) -> bool:
 		return False
@@ -91,10 +94,13 @@ class RootContext(BaseContext):
 	def emit_captured(self, captives: list[ontology.Symbol]):
 		assert not captives
 
+	def declare(self, symbol: ontology.Symbol):
+		return
+
 class Context(BaseContext):
 	def __init__(self, outer:BaseContext):
 		self._outer = outer
-		self.indent = "" if isinstance(outer, RootContext) else outer.indent+"  "
+		self.indent = outer.indent+"  "
 		self._local = {}
 		self._children = []
 		self._captives = {}
@@ -144,14 +150,6 @@ class Context(BaseContext):
 			self._captives[symbol] = len(self._captives)
 			return True
 		
-	def close_over(self, subs):
-		emit("CLOSURE")
-		emit(len(subs))
-		emit(len(self._children))
-		self._children.extend(subs)
-		for sub in subs:
-			self.declare(sub)
-
 	def jump(self, ins):
 		emit(ins)
 		return self.emit_hole()
@@ -172,7 +170,6 @@ class Context(BaseContext):
 		LABEL_QUEUE.append(label)
 
 	def emit_preamble(self, fn:syntax.UserFunction):
-		emit("{")
 		# Emit number of parameters
 		emit(len(fn.params))
 		# Emit fully-qualified name
@@ -184,12 +181,10 @@ class Context(BaseContext):
 		# Consists of right brace, maximum number of locally-used stack slots,
 		# number of captures, and information about each capture.
 		if len(self._captives) > 255: raise TooComplicated("More than 255 captures in one function")
-		if len(self._children) > 255: raise TooComplicated("More than 255 children of one function")
 
-		emit("}")
+		emit("|")
 		emit(len(self._captives))
 		self._outer.emit_captured(list(self._captives)) # Preserving insertion order
-		emit(";")
 		
 	def emit_captured(self, captives: list[ontology.Symbol]):
 		for sym in captives:
@@ -212,25 +207,29 @@ class Translation(Visitor):
 			self.visit_Module(module, context)
 	
 	def visit_Module(self, module:syntax.Module, root:RootContext):
+		self.write_functions(module.outer_functions, root)
 		context = Context(root)
-		for fn in module.outer_functions:
-			self.write_function(fn, context)
 		for expr in module.main:
 			self.write_begin_expression(expr, context)
 
-	def write_function(self, fn, outer:Context):
-		# Emit the preamble.
-		inner = Context(outer)
+	def write_functions(self, fns, outer:BaseContext):
+		if not fns: return
+		for fn in fns:
+			outer.declare(fn)
+		emit("{")
+		last = fns[-1]
+		for fn in fns:
+			self.write_one_function(fn, Context(outer))
+			emit("}" if fn is last else ";")
+		outer.nl()
+
+
+	def write_one_function(self, fn, inner:Context):
 		inner.nl()
 		inner.emit_preamble(fn)
-		# Initialize direct children.
-		if fn.where:
-			inner.close_over(fn.where)
-			for sub in fn.where:
-				self.write_function(sub, inner)
+		self.write_functions(fn.where, inner)
 		self.visit(fn.expr, inner, True)
 		inner.emit_epilogue()
-		outer.nl()
 
 	def write_begin_expression(self, expr, context:Context):
 		context.nl()

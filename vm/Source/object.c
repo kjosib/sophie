@@ -1,108 +1,86 @@
 #include "common.h"
 
-
-#define ALLOCATE_OBJ(type, objectType) (type*)allocateObject(sizeof(type), objectType)
-
-static Obj *allocateObject(size_t size, ObjType type) {
-	Obj *object = (Obj *)reallocate(NULL, 0, size);
-	object->type = type;
-	object->next = vm.objects;
-	vm.objects = object;
-	return object;
-}
-
-ObjClosure *newClosure(ObjFunction *function) {
-	ObjClosure *closure = ALLOCATE_OBJ(ObjClosure, OBJ_CLOSURE);
-	closure->function = function;
-	initValueArray(&closure->captives);
-	resizeValueArray(&closure->captives, function->captures.cnt);
-	return closure;
-}
-
-ObjFunction *newFunction(FunctionType type, uint8_t arity, ObjString *name) {
-	ObjFunction *function = ALLOCATE_OBJ(ObjFunction, OBJ_FUNCTION);
-	function->arity = arity;
-	function->type = type;
-	function->name = name;
-	initChunk(&function->chunk);
-	initValueArray(&function->children);
-	initValueArray(&function->captures);
-	return function;
-}
-
-ObjNative *newNative(uint8_t arity, NativeFn function, ObjString *name) {
-	ObjNative *native = ALLOCATE_OBJ(ObjNative, OBJ_NATIVE);
-	native->arity = arity;
-	native->function = function;
-	native->name = name;
-	return native;
-}
-
-static ObjString *allocateString(char *chars, size_t length, uint32_t hash) {
-	ObjString *string = ALLOCATE_OBJ(ObjString, OBJ_STRING);
-	string->length = length;
-	string->chars = chars;
-	string->hash = hash;
-	tableSet(&vm.strings, string, NIL_VAL);
-	return string;
-}
-
-uint32_t hashString(const char *key, size_t length) {
+uint32_t hashString(const char *text, size_t length) {
 	uint32_t hash = 2166136261u;
 	for (int i = 0; i < length; i++) {
-		hash ^= (uint8_t)key[i];
+		hash ^= (byte)text[i];
 		hash *= 16777619;
 	}
 	return hash;
 }
 
-ObjString *takeString(char *chars, size_t length) {
-	uint32_t hash = hashString(chars, length);
-	Entry *interned = tableFindString(&vm.strings, chars, length, hash);
-	if (interned != NULL) {
-		FREE_ARRAY(char, chars, length + 1);
-		return interned->key;
-	}
-
-	return allocateString(chars, length, hash);
+void bad_callee(GC *item) {
+	crashAndBurn("Tried to call a non-callable. The type system should have prevented this.");
 }
 
-ObjString *copyString(const char *chars, size_t length) {
-	uint32_t hash = hashString(chars, length);
-	Entry *interned = tableFindString(&vm.strings, chars, length, hash);
-	if (interned != NULL) return interned->key;
+static void blacken_string(String *string) {}
 
-	char *heapChars = ALLOCATE(char, length + 1);
-	memcpy(heapChars, chars, length);
-	heapChars[length] = '\0';
-	return allocateString(heapChars, length, hash);
+static size_t size_string(String *string) {
+	return sizeof(*string) + string->length + 1;
 }
 
-static void printFunction(ObjFunction *function) {
-	if (function->name == NULL) {
-		printf("<script>");
-	}
+static void display_string(String *string) {
+	printf("%s", string->text);
+}
+
+GC_Kind KIND_String = {
+	.call = bad_callee,
+	.exec = bad_callee,
+	.display = display_string,
+	.blacken = blacken_string,
+	.size = size_string,
+};
+
+
+String *new_String(size_t length) {
+	// Returns partially-initialized string object.
+	// It will have length and null-terminator set properly.
+	// This makes it safe for GC, but the VM must still
+	// fill in the text and then intern the result.
+	String *string = gc_allocate(&KIND_String, sizeof(String) + length + 1);
+	string->length = length;
+	string->text[length] = 0;
+	return string;
+}
+
+String *intern_String(String *string) {
+	// If the new string is known to the string table,
+	// return the version from the string table.
+	// (GC will reap the new duplicate.)
+	// Otherwise, enter this new string into the string table,
+	// and return the argument.
+	// In this manner, string equality is pointer equality.
+
+	// (A single global string table may prove a point of contention in thread-world.)
+
+	// The input string is not expected to have been hashed yet.
+	string->hash = hashString(string->text, string->length);
+	Entry *interned = tableFindString(&vm.strings, string->text, string->length, string->hash);
+	if (interned) return interned->key;
 	else {
-		printf("<fn %s>", function->name->chars);
+		tableSet(&vm.strings, string, NIL_VAL);
+		return string;
 	}
 }
 
-void printObject(Value value) {
-	switch (OBJ_TYPE(value)) {
-	case OBJ_CLOSURE:
-		printFunction(AS_CLOSURE(value)->function);
-	break;
-
-	case OBJ_FUNCTION:
-		printFunction(AS_FUNCTION(value));
-		break;
-
-	case OBJ_NATIVE:
-		printf("<native fn>");
-		break;
-
-	case OBJ_STRING:
-		printf("%s", AS_CSTRING(value));
-		break;
+String *import_C_string(const char *text, size_t length) {
+	uint32_t hash = hashString(text, length);
+	Entry *interned = tableFindString(&vm.strings, text, length, hash);
+	if (interned) return interned->key;
+	else {
+		String *string = new_String(length);
+		memcpy(string->text, text, length);
+		string->hash = hash;
+		tableSet(&vm.strings, string, NIL_VAL);
+		return string;
 	}
+}
+
+
+void printObject(GC *item) {
+	item->kind->display(item);
+}
+
+bool is_string(void *item) {
+	return ((GC*)item)->kind == &KIND_String;
 }

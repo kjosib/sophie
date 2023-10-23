@@ -1,5 +1,19 @@
 #pragma once
 
+/*
+
+Note on naming style:
+
+The identifiers may look inconsistent. Some are camelCase; others are snake_case.
+But there is something of a pattern. Code written on Wednesdays -- no, that's not it.
+Functions completely, or nearly, cribbed from Nystrom's book start out in camel case.
+And for the first brief while, I kept that for consistency.
+
+However, I find snake_case easier to read and write. So the newer stuff mostly uses it.
+Eventually I might enforce a consistent style. But for now, there are bigger fish to fry.
+
+*/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,11 +22,13 @@
 #include <stdint.h>
 
 #ifdef _DEBUG
-#define DEBUG_PRINT_CODE
-#define DEBUG_TRACE_EXECUTION
+//#define DEBUG_PRINT_CODE
+//#define DEBUG_TRACE_EXECUTION
+#define DEBUG_STRESS_GC
 #endif // _DEBUG
 
-#define UINT8_COUNT (UINT8_MAX + 1)
+#define byte uint8_t
+#define BYTE_CARDINALITY 256
 
 #define DEFINE_VECTOR_TYPE(kind, type) \
     typedef struct { size_t cnt; size_t cap; type *at; } kind; \
@@ -22,6 +38,34 @@
     size_t  append ## kind(kind* vec, type item);
 
 __declspec(noreturn) void crashAndBurn(char *why);
+
+typedef void (*Verb)();
+
+/* gc.h */
+
+typedef void (*Method)(void *item);
+typedef size_t (*SizeMethod)(void *item); // Return the size of the payload.
+
+typedef struct {
+	Method call;
+	Method exec;
+	Method display;
+	Method blacken;
+	SizeMethod size;
+} GC_Kind;
+
+typedef union {
+	GC_Kind *kind;
+	void *ptr;
+} GC;
+
+void init_gc();
+void gc_install_roots(Verb verb);
+
+void *gc_allocate(GC_Kind *kind, size_t size);
+void *darken(void *gc);
+
+static inline void darken_in_place(void **gc) { *gc = darken(*gc); }
 
 /* memory.h */
 
@@ -40,24 +84,18 @@ __declspec(noreturn) void crashAndBurn(char *why);
   size_t append ## Kind (Kind *vec, type item) { if (vec->cap <= vec->cnt) resize ## Kind (vec, GROW(vec->cap)); vec->at[vec->cnt++] = item; return vec->cnt - 1; }
 
 void *reallocate(void *pointer, size_t oldSize, size_t newSize);
-void freeObjects();
 
 /* value.h */
-
-typedef struct Obj Obj;
-typedef struct ObjString ObjString;
 
 typedef enum {
 	VAL_BOOL,
 	VAL_NIL,
 	VAL_NUMBER,
 	VAL_ENUM,
-	VAL_OBJ,
-	VAL_CAPTURE_LOCAL,
-	VAL_CAPTURE_OUTER,
+	VAL_GC,     // Garbage-collected pointer.
+	VAL_PTR,    // Non-collectable opaque pointer.
 } ValueType;
 
-extern char *valKind[];
 
 typedef struct {
 	ValueType type;
@@ -65,8 +103,8 @@ typedef struct {
 		bool boolean;
 		double number;
 		int tag;
-		Obj *obj;
 		void *ptr;
+		GC *gc;
 	} as;
 } Value;
 
@@ -75,23 +113,30 @@ typedef struct {
 #define IS_NIL(value)     ((value).type == VAL_NIL)
 #define IS_NUMBER(value)  ((value).type == VAL_NUMBER)
 #define IS_ENUM(value)    ((value).type == VAL_ENUM)
-#define IS_OBJ(value)     ((value).type == VAL_OBJ)
+#define IS_GC(value)     ((value).type == VAL_GC)
 
 #define AS_BOOL(value)    ((value).as.boolean)
 #define AS_NUMBER(value)  ((value).as.number)
 #define AS_ENUM(value)    ((value).as.tag)
-#define AS_OBJ(value)     ((value).as.obj)
+#define AS_GC(value)     ((value).as.gc)
 
 #define BOOL_VAL(value)   ((Value){VAL_BOOL, {.boolean = value}})
 #define NIL_VAL	          ((Value){VAL_NIL, {.number = 0}})
 #define NUMBER_VAL(value) ((Value){VAL_NUMBER, {.number = value}})
 #define ENUM_VAL(value)   ((Value){VAL_ENUM, {.tag = value}})
-#define OBJ_VAL(object)   ((Value){VAL_OBJ, {.obj = (Obj*)object}})
+#define GC_VAL(object)   ((Value){VAL_GC, {.ptr = object}})
+#define PTR_VAL(object)   ((Value){VAL_PTR, {.ptr = object}})
 
 DEFINE_VECTOR_TYPE(ValueArray, Value)
 
 void printValue(Value value);
 bool valuesEqual(Value a, Value b);
+
+static inline darkenValue(Value *value) { if (IS_GC(*value)) darken_in_place(&value->as.ptr); }
+void darkenValues(Value *at, size_t count);
+void darkenValueArray(ValueArray *vec);
+
+extern char *valKind[];
 
 /* chunk.h */
 
@@ -100,7 +145,7 @@ typedef struct {
 	int line;
 } Bound;
 
-DEFINE_VECTOR_TYPE(Code, uint8_t)
+DEFINE_VECTOR_TYPE(Code, byte)
 DEFINE_VECTOR_TYPE(Lines, Bound)
 
 typedef struct {
@@ -114,6 +159,8 @@ void freeChunk(Chunk *chunk);
 void setLine(Chunk *chunk, int line);
 int findLine(Chunk *chunk, size_t offset);
 
+static inline void darkenChunk(Chunk *chunk) { darkenValueArray(&chunk->constants); }
+
 /* debug.h */
 
 void disassembleChunk(Chunk *chunk, const char *name);
@@ -121,90 +168,73 @@ int disassembleInstruction(Chunk *chunk, int offset);
 
 /* object.h */
 
-#define OBJ_TYPE(value)        (AS_OBJ(value)->type)
+typedef struct {
+	GC header;
+	uint32_t hash;
+	size_t length;
+	char text[];
+} String;
 
-#define IS_CLOSURE(value)      isObjType(value, OBJ_CLOSURE)
-#define IS_FUNCTION(value)     isObjType(value, OBJ_FUNCTION)
-#define IS_NATIVE(value)       isObjType(value, OBJ_NATIVE)
-#define IS_STRING(value)       isObjType(value, OBJ_STRING)
+uint32_t hashString(const char *key, size_t length);
+String *new_String(size_t length);
+String *intern_String(String *string);
+String *import_C_string(const char *chars, size_t length);
+void printObject(GC *item);
+void bad_callee(GC *item);
 
-#define AS_CLOSURE(value)      ((ObjClosure*)AS_OBJ(value))
-#define AS_FUNCTION(value)     ((ObjFunction*)AS_OBJ(value))
-#define AS_NATIVE(value)       (((ObjNative*)AS_OBJ(value)))
-#define AS_STRING(value)       ((ObjString*)AS_OBJ(value))
-#define AS_CSTRING(value)      (((ObjString*)AS_OBJ(value))->chars)
+#define AS_STRING(it) ((String *)(it.as.gc))
+bool is_string(void *item);
 
-
-typedef enum {
-	OBJ_CLOSURE,
-	OBJ_FUNCTION,
-	OBJ_NATIVE,
-	OBJ_STRING,
-} ObjType;
-
-struct Obj {
-	ObjType type;
-	struct Obj *next;
-};
+/* function.h */
 
 typedef enum {
 	TYPE_FUNCTION,
 	TYPE_SCRIPT,
 } FunctionType;
 
+typedef struct {
+	byte is_local;
+	byte offset;
+} Capture;
 
 
 typedef struct {
-	Obj obj;
-	uint8_t arity;
-	FunctionType type;
+	// Keep child-functions as objects in the constant table.
+	GC header;
+	byte arity;
+	byte nr_captures;
+	byte fn_type;
 	Chunk chunk;
-	ObjString *name;
-	ValueArray children;
-	ValueArray captures;
-} ObjFunction;
+	Capture captures[];
+} Function;
 
 
 typedef Value(*NativeFn)(Value *args);
 
 typedef struct {
-	Obj obj;
-	uint8_t arity;
+	GC header;
+	byte arity;
 	NativeFn function;
-	ObjString *name;
-} ObjNative;
-
-struct ObjString {
-	Obj obj;
-	size_t length;
-	char *chars;
-	uint32_t hash;
-};
+	String *name;
+} Native;
 
 typedef struct {
-	Obj obj;
-	ObjFunction *function;
-	ValueArray captives;
-} ObjClosure;
+	GC header;
+	Function *function;
+	Value captives[];
+} Closure;
 
+void close_function(Value *stack_slot);
+Function *newFunction(FunctionType fn_type, Chunk *chunk, byte arity, byte nr_captures);
+Native *newNative(byte arity, NativeFn function);
 
-ObjClosure *newClosure(ObjFunction *function);
-ObjFunction *newFunction(FunctionType type, uint8_t arity, ObjString *name);
-uint32_t hashString(const char *key, size_t length);
-ObjNative *newNative(uint8_t arity, NativeFn function, ObjString *name);
-ObjString *takeString(char *chars, size_t length);
-ObjString *copyString(const char *chars, size_t length);
-void printObject(Value value);
-
-static inline bool isObjType(Value value, ObjType type) {
-	return IS_OBJ(value) && AS_OBJ(value)->type == type;
-}
+String *name_of_function(Function *function);
 
 /* scanner.h */
 
 typedef enum {
 	// Single-character tokens.
-	TOKEN_LEFT_PAREN, TOKEN_RIGHT_PAREN,
+	TOKEN_PIPE,
 	TOKEN_LEFT_BRACE, TOKEN_RIGHT_BRACE,
 	TOKEN_COMMA, TOKEN_DOT, TOKEN_MINUS, TOKEN_PLUS,
 	TOKEN_SEMICOLON, TOKEN_SLASH, TOKEN_STAR,
@@ -216,10 +246,6 @@ typedef enum {
 	// Literals.
 	TOKEN_NAME, TOKEN_STRING, TOKEN_NUMBER,
 	// Keywords.
-	TOKEN_AND, TOKEN_CLASS, TOKEN_ELSE, TOKEN_FALSE,
-	TOKEN_FOR, TOKEN_FUN, TOKEN_IF, TOKEN_NIL, TOKEN_OR,
-	TOKEN_PRINT, TOKEN_RETURN, TOKEN_SUPER, TOKEN_THIS,
-	TOKEN_TRUE, TOKEN_VAR, TOKEN_WHILE,
 
 	TOKEN_ERROR, TOKEN_EOF
 } TokenType;
@@ -250,8 +276,9 @@ void errorAtCurrent(const char *message);
 void advance();
 void consume(TokenType type, const char *message);
 double parseDouble(const char *message);
+byte parseByte(char *message);
 Value parseConstant();
-ObjString *parseString();
+String *parseString();
 
 static inline bool predictToken(TokenType type) { return type == parser.current.type; }
 
@@ -310,27 +337,28 @@ typedef struct {
 
 extern Instruction instruction[];
 
-void initAsm();
-
 /* table.h */
 
 typedef struct {
-	ObjString *key;
+	String *key;
 	Value value;
 } Entry;
 
 DEFINE_VECTOR_TYPE(Table, Entry)
 
-bool tableGet(Table *table, ObjString *key, Value *value);
-bool tableSet(Table *table, ObjString *key, Value value);
+bool tableGet(Table *table, String *key, Value *value);
+bool tableSet(Table *table, String *key, Value value);
+bool table_set_from_C(Table *table, char *text, Value value);
 void tableAddAll(Table *from, Table *to);
 Entry *tableFindString(Table *table, const char *chars, size_t length, uint32_t hash);
+bool tableDelete(Table *table, String *key);
+void darkenTable(Table *table);
+void tableDump(Table *table);
 
 /* vm.h */
 
 #define FRAMES_MAX 64
-#define STACK_MAX (FRAMES_MAX * UINT8_COUNT)
-#define STACK_MIN UINT8_COUNT
+#define STACK_MAX (FRAMES_MAX * BYTE_CARDINALITY)
 
 static inline uint16_t word_at(const char *ch) {
 	uint16_t *ptr = (uint16_t *)(ch);
@@ -338,18 +366,18 @@ static inline uint16_t word_at(const char *ch) {
 }
 
 typedef struct {
-	ObjClosure *closure;
-	uint8_t *ip;
+	Closure *closure;
+	byte *ip;
 	Value *base;
 } CallFrame;
 
 typedef struct {
 	CallFrame frames[FRAMES_MAX + 1];
+	CallFrame *frame;
 	Value stack[STACK_MAX];
 	Value *stackTop;
 	Table globals;
 	Table strings;
-	Obj *objects;
 } VM;
 
 
@@ -359,18 +387,27 @@ typedef enum {
 	INTERPRET_RUNTIME_ERROR
 } InterpretResult;
 
-void declareGlobal(ObjString *name);
-void defineGlobal(ObjString *name, Value value);
+void defineGlobal(String *name, Value value);
 
 extern VM vm;
 
 void initVM();
 void freeVM();
 InterpretResult interpret(const char *source);
-void push(Value value);
-Value pop();
+static inline void push(Value value) {
+	*vm.stackTop = value;
+	vm.stackTop++;
+}
+
+static inline Value pop() {
+	vm.stackTop--;
+	return *vm.stackTop;
+}
+
+#define TOP (vm.stackTop[-1])
+#define SND (vm.stackTop[-2])
 
 /* compiler.h */
 
 void initLexicon();
-ObjFunction *compile(const char *source);
+Closure *compile(const char *source);

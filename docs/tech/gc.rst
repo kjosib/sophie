@@ -1,7 +1,103 @@
 Garbage Collection
 ###################
 
-.. warning:: Speculative Design Ahead. Proceed with caution.
+Sophie's VM-in-progress has garbage collection. *Nice.*
+
+.. contents::
+    :local:
+    :depth: 3
+
+
+Garbage Collected Memory Allocation for Sophie VM
+===================================================
+
+
+Concept of Operation
+----------------------
+
+The main cool-factor with this collector is that it handles large and small objects differently.
+It uses compacting collection for small objects and non-moving collection for large ones.
+The goal is minimal overhead and minimal fragmentation.
+
+The text below assumes some general familiarity with garbage-collection theory.
+
+Small objects
+..............
+
+**Small objects** -- smaller than a few K -- live in an arena with a simple bump allocator.
+Whenever this fills up, the system will run a full collection.
+The arena itself is allocated out of the C/``malloc`` heap.
+This collector does not simply divide a large extent into semi-spaces.
+Rather, it allocates a fresh arena for ``to_space`` at the start of each collection.
+At the end, it releases the old arena back to the C heap.
+This allows the size of the arena to adapt to the needs of the program,
+which should help it play well with others in a modern operating system.
+
+Copying/moving collectors need to determine the size and layout of each heap object.
+To that end, all garbage-collectable objects begin with a header consisting of a single pointer.
+Most of the time it points to a descriptor, which is a structure containing function pointers.
+If this sounds like a reinvention of C++, that's because it kind of is.
+But writing in C this way allows at least one cool trick:
+To represent a "Broken Heart" (the forwarding pointer for an object evacuated from ``from_space``)
+just point the object's header at the newer copy of the object in to_space.
+The mutator can never observe this, and it's easily detected in the collector.
+
+
+Large objects
+..............
+
+**Large objects** (and non-movable ones) live on the C heap with two extra pointers for bookkeeping.
+One pointer forms a linked list of all large-objects, and another pointer called ``mark`` determines color.
+In white objects, the ``mark`` is ``NULL``. Otherwise, it's one part linked-list and one part set-membership.
+There is a work-list called ``grey_lobs`` which points at (wait for it...) grey large-objects.
+So, any object reachable via that origin is grey. Other marked large-objects are black.
+This needs to work even for the tail of the list, so there is a designated sentinel instead of NULL.
+
+
+The String Table
+..................
+
+Sophie's VM keeps all strings interned. (Why? Because Robert Nystrom did it that way in CLOX is why.)
+Anyway, this means there's a table of weak references to string objects.
+Naively you'd simply delete entries that didn't get marked at the end of a collection.
+But since the table itself is never grey, the references still point into ``from_space``.
+So you must determine color not by *where* the reference points, but *what* it points to:
+A broken heart means update the key to follow the forwarding pointer!
+Otherwise you end up with multiple copies of the same string running around causing problems for pointer equivalence.
+(Yes, this bug happened.)
+
+
+The Root-Darkener List
+........................
+
+The VM initializes different subsystems in stages,
+and those stages allocate garbage-collectable objects.
+The collector must not try to darken roots from subsystems that aren't
+properly initialized yet. That would pick up nonsense and tends to result in a crash.
+In fact, when the collector runs in *stress-test* mode (small arenas, frequent collection)
+it triggered this problem reliably until I added a solution.
+The collector now has a list of function pointers for darkening the roots.
+One a subsystem's root data structures are at least safe to darken,
+it calls ``gc_install_roots`` with a root-darkener for that subsystem.
+
+Oh, and the subsystem responsible for the string table gets to go first.
+
+
+Things not done
+-----------------
+
+Eventually I plan to add generational features.
+I'm also not going to worry about threads and actors right now. (Threads are hard.)
+
+
+
+Hairy Design Journal
+======================
+
+.. warning::
+    Speculative Design Ahead. Proceed with caution.
+    Code snippets found here are not the final form of anything.
+    You have been warned.
 
 I'd like something nicer than the CLOX approach to GC.
 I may start with a Cheney-style semi-space collector.
@@ -123,7 +219,7 @@ Suppose the extra bits go *before* what the mutator sees:
     static LOB *all_lobs = NULL;
 
     GC *large_alloc(size_t size) {
-        LOB *lob = malloc(size + sizeof(LOB))
+        LOB *lob = malloc(size + sizeof(LOB));
         lob->color = GC_WHITE;
         lob->next = all_lobs;
         all_lobs = lob;
@@ -196,8 +292,6 @@ To integrate this with a LOB system, insert this at the end of that last functio
     }
 
 The remaining adjustments should be pretty straightforward:
-
-* The ``mark_grey`` function
 The scavenging algorithm must be adjusted to account for an explicit grey-list,
 and the finally there is an explicit sweep of the LOBs.
 
@@ -223,7 +317,7 @@ Treat ``kind`` as like a vtable pointer
 
 A simple generational collector:
 
-The concept is to use the Cheney allocator for the nursery, kept at a suitable fraction the size of L1 cache.
+The concept is to use the bump allocator for the nursery, kept at a suitable fraction the size of L1 cache.
 Most allocations are filled right from the stack, so there's no need for a write barrier most of the time.
 Writes that require a barrier are statically knowable: actor updates and forced thunks.
 

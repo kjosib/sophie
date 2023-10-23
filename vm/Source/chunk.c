@@ -1,9 +1,7 @@
-#include <stdlib.h>
-
 #include "common.h"
 
-DEFINE_VECTOR_CODE(Code, uint8_t)
-DEFINE_VECTOR_APPEND(Code, uint8_t)
+DEFINE_VECTOR_CODE(Code, byte)
+DEFINE_VECTOR_APPEND(Code, byte)
 
 DEFINE_VECTOR_CODE(Lines, Bound)
 DEFINE_VECTOR_APPEND(Lines, Bound)
@@ -21,8 +19,8 @@ void initChunk(Chunk *chunk) {
 
 void freeChunk(Chunk *chunk) {
 	freeCode(&chunk->code);
-	freeLines(&chunk->lines);
 	freeValueArray(&chunk->constants);
+	freeLines(&chunk->lines);
 }
 
 void setLine(Chunk *chunk, int line) {
