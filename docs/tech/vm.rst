@@ -587,3 +587,43 @@ Now I need some more programs.
 
 Probably I shall first add support for composite types.
 Also, I have an idea how to implement thunks.
+
+24 October 2023
+---------------
+
+I can write a meaningful program that doesn't need thunks,
+but it's rather more difficult to write a program that doesn't use data.
+So it's time for **composite types.**
+
+One nice characteristic of the garbage collector is the object-kind tables.
+They are essentially hand-crafted vtables. So this means also the VM's
+approach to calling callable objects is to delegate this through the kind.
+
+A suitable calling sequence to construct a record might be to just push the
+field-data onto the stack, then push the runtime-object representing the record type,
+and then emit a call-instruction. The call method on a record-type must simply
+allocate enough space, write a tag, and then ``memcpy`` the correct
+portion of the stack into the newly-allocated object.
+
+The object needs a few extra bits of information. Now that I think of it,
+basically every record needs a tag. So, what shall we find using that tag?
+
+* The size of this class of object (for GC purposes),
+* a map from field-names to slot-offsets,
+* possibly a variant ordinal,
+* and maybe a nice debug symbol.
+
+This means the VM will need another instruction to look up a field on an object.
+Of course it will be delegated through the descriptor, just like *call* and *exec* are done.
+Short term, the normal hash-table machinery will probably be fine for finding an index.
+
+The next topic is how to load this into the machine.
+
+Since types are module-globals, maybe the parser loads something like:
+
+.. code-block:: text
+
+    (head tail : cons)
+    
+This should be straightforward to emit from the intermediate-form generator.
+
