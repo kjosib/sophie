@@ -16,6 +16,7 @@ The static-depth information will be useful for look-up operations.
 
 """
 
+from typing import Iterable
 from boozetools.support.foundation import Visitor
 from . import syntax, ontology
 from .resolution import RoadMap
@@ -154,6 +155,10 @@ class Context(BaseContext):
 		emit(ins)
 		return self.emit_hole()
 	
+	def cases(self, nr_cases):
+		emit("CASE")
+		return [self.emit_hole() for _ in range(nr_cases)]
+	
 	def emit_hole(self):
 		label = LABEL_QUEUE.pop()
 		emit("hole")
@@ -198,19 +203,71 @@ class Context(BaseContext):
 		assert self._depth == 1, self.depth()
 		emit("DISPLAY")
 		self.pop()
+	
+	def ascend_to(self, depth:int):
+		assert self._depth >= depth
+		if self._depth > depth:
+			emit("ASCEND")
+			emit(self._depth - depth)
+			self.reset(depth)
+
+
+def write_record(names:Iterable[str], nom:ontology.Nom, tag:int):
+	emit("(")
+	for name in names:
+		emit(name)
+	close_structure(nom, tag)
+
+def write_enum(nom:ontology.Nom, tag:int):
+	write_record((), nom, tag)
+
+def write_tagged_value(nom:ontology.Nom, tag:int):
+	emit("(")
+	emit("*")
+	close_structure(nom, tag)
+
+def close_structure(nom:ontology.Nom, tag:int):
+	emit(tag)
+	emit(quote(nom.text))
+	emit(")")
+	print()
 
 
 class Translation(Visitor):
+	def __init__(self):
+		self._tag_map = {}  # For compiling type-cases.  
+	
 	def visit_RoadMap(self, roadmap:RoadMap):
 		context = RootContext()
 		for module in roadmap.each_module:
 			self.visit_Module(module, context)
 	
 	def visit_Module(self, module:syntax.Module, root:RootContext):
+		self.write_records(module.types)
 		self.write_functions(module.outer_functions, root)
 		context = Context(root)
 		for expr in module.main:
 			self.write_begin_expression(expr, context)
+
+	def write_records(self, types):
+		for t in types:
+			self.visit(t)
+
+	def visit_TypeAlias(self, t): pass
+	
+	@staticmethod
+	def visit_Record(r:syntax.Record):
+		write_record(r.spec.field_names(), r.nom, 0)
+		
+	def visit_Variant(self, variant:syntax.Variant):
+		for tag, st in enumerate(variant.subtypes):
+			self._tag_map[variant, st.nom.key()] = tag
+			if isinstance(st.body, syntax.RecordSpec):
+				write_record(st.body.field_names(), st.nom, tag)
+			elif st.body is None:
+				write_enum(st.nom, tag)
+			else:
+				write_tagged_value(st.nom, tag)
 
 	def write_functions(self, fns, outer:BaseContext):
 		if not fns: return
@@ -304,3 +361,44 @@ class Translation(Visitor):
 			self.visit(cond.else_part, context, False)
 			context.come_from(after)
 
+	def visit_MatchExpr(self, mx:syntax.MatchExpr, context:Context, tail:bool):
+		self.visit(mx.subject.expr, context, False)
+		context.alias(mx.subject)
+		depth = context.depth()
+		nr_cases = len(mx.variant.subtypes)
+		cases = context.cases(nr_cases)
+		after = []
+		for alt in mx.alternatives:
+			tag = self._tag_map[mx.variant, alt.nom.key()]
+			context.come_from(cases[tag])
+			cases[tag] = None
+			self.write_functions(alt.where, context)
+			self.visit(alt.sub_expr, context, tail)
+			if not tail:
+				context.ascend_to(depth)
+				after.append(context.jump("JMP"))
+		if mx.otherwise is not None:
+			for tag, hole in enumerate(cases):
+				if hole is not None:
+					context.come_from(hole)
+			self.visit(mx.otherwise, context, tail)
+			if not tail:
+				context.ascend_to(depth)
+		for hole in after:
+			context.come_from(hole)
+		pass
+	
+	def visit_FieldReference(self, fr:syntax.FieldReference, context:Context, tail:bool):
+		self.visit(fr.lhs, context, False)
+		emit("FIELD")
+		emit(quote(fr.field_name.key()))
+		post(tail)
+
+	def visit_ExplicitList(self, el:syntax.ExplicitList, context:Context, tail:bool):
+		emit("NIL")
+		context.push()
+		for item in reversed(el.elts):
+			self.visit(item, context, False)
+			emit("SNOC")
+			context.pop()
+		post(tail)

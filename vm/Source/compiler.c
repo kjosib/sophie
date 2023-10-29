@@ -198,7 +198,40 @@ static void parse_global_functions() {
 #endif // _DEBUG
 }
 
+static Value record_definition(int tag, int arity) {
+	crashAndBurn("Records are not yet fully supported");
+}
+
+static Value tag_definition(int tag) {
+	crashAndBurn("Tagged Values are not yet fully supported");
+}
+
+static parse_tagged_value() {
+	int tag = parseByte("tag");
+	String *name = parseString();
+	push(GC_VAL(name));
+	defineGlobal(name, tag_definition(tag));
+	pop();
+}
+
+static void parse_record() {
+	// Parse zero or more names. Keep them on the stack. Track how many.
+	int arity = 0;
+	while (predictToken(TOKEN_NAME)) {
+		push(GC_VAL(parseName()));
+		arity++;
+	}
+	int tag = parseByte("tag");
+	Value constructor = arity ? record_definition(tag, arity) : ENUM_VAL(tag);
+	defineGlobal(parseString(), constructor);
+	consume(TOKEN_RIGHT_PAREN, "yeah");
+}
+
 static void parseScript() {
+	while (maybe_token(TOKEN_LEFT_PAREN)) {
+		if (maybe_token(TOKEN_STAR)) parse_tagged_value();
+		else parse_record();
+	}
 	if (predictToken(TOKEN_LEFT_BRACE)) parse_global_functions();
 	initChunk(&current->chunk);
 	parse_instructions();
