@@ -198,10 +198,6 @@ static void parse_global_functions() {
 #endif // _DEBUG
 }
 
-static Value record_definition(int tag, int arity) {
-	crashAndBurn("Records are not yet fully supported");
-}
-
 static Value tag_definition(int tag) {
 	crashAndBurn("Tagged Values are not yet fully supported");
 }
@@ -216,15 +212,23 @@ static parse_tagged_value() {
 
 static void parse_record() {
 	// Parse zero or more names. Keep them on the stack. Track how many.
-	int arity = 0;
+	int nr_fields = 0;
 	while (predictToken(TOKEN_NAME)) {
 		push(GC_VAL(parseName()));
-		arity++;
+		nr_fields++;
 	}
 	int tag = parseByte("tag");
-	Value constructor = arity ? record_definition(tag, arity) : ENUM_VAL(tag);
-	defineGlobal(parseString(), constructor);
-	consume(TOKEN_RIGHT_PAREN, "yeah");
+	String *name = parseString();
+	Value constructor;
+	if (nr_fields) {
+		push(GC_VAL(name));
+		constructor = GC_VAL(new_constructor(tag, nr_fields));
+	}
+	else {
+		constructor = ENUM_VAL(tag);
+	}
+	defineGlobal(name, constructor);
+	consume(TOKEN_RIGHT_PAREN, "expected ')'");
 }
 
 static void parseScript() {
