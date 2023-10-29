@@ -93,9 +93,9 @@ void initVM() {
 	defineNative("clock", 0, clockNative);
 	defineNative("abs", 1, absNative);
 	defineNative("sqrt", 1, sqrtNative);
-#ifdef _DEBUG
+#ifdef DEBUG_PRINT_GLOBALS
 	tableDump(&vm.globals);
-#endif // _DEBUG
+#endif // DEBUG_PRINT_GLOBALS
 }
 
 void freeVM() {

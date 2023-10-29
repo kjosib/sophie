@@ -43,10 +43,25 @@ void consume(TokenType type, const char *message) {
 	else errorAtCurrent(message);
 }
 
+bool maybe_token(TokenType type) {
+	if (predictToken(type)) {
+		advance();
+		return true;
+	} else {
+		return false;
+	}
+}
+
 String *parseString() {
 	consume(TOKEN_STRING, "Need a string here");
 	return import_C_string(parser.previous.start + 1, parser.previous.length - 2);
 }
+
+String *parseName() {
+	consume(TOKEN_NAME, "Need a string here");
+	return import_C_string(parser.previous.start, parser.previous.length);
+}
+
 
 double parseDouble(const char *message) {
 	consume(TOKEN_NUMBER, message);

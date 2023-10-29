@@ -22,9 +22,10 @@ Eventually I might enforce a consistent style. But for now, there are bigger fis
 #include <stdint.h>
 
 #ifdef _DEBUG
+//#define DEBUG_PRINT_GLOBALS
 //#define DEBUG_PRINT_CODE
 //#define DEBUG_TRACE_EXECUTION
-#define DEBUG_STRESS_GC
+//#define DEBUG_STRESS_GC
 #endif // _DEBUG
 
 #define byte uint8_t
@@ -235,6 +236,7 @@ String *name_of_function(Function *function);
 typedef enum {
 	// Single-character tokens.
 	TOKEN_PIPE,
+	TOKEN_LEFT_PAREN, TOKEN_RIGHT_PAREN,
 	TOKEN_LEFT_BRACE, TOKEN_RIGHT_BRACE,
 	TOKEN_COMMA, TOKEN_DOT, TOKEN_MINUS, TOKEN_PLUS,
 	TOKEN_SEMICOLON, TOKEN_SLASH, TOKEN_STAR,
@@ -279,8 +281,10 @@ double parseDouble(const char *message);
 byte parseByte(char *message);
 Value parseConstant();
 String *parseString();
+String *parseName();
 
 static inline bool predictToken(TokenType type) { return type == parser.current.type; }
+bool maybe_token(TokenType type);
 
 /* isa.h */
 

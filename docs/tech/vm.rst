@@ -627,3 +627,34 @@ Since types are module-globals, maybe the parser loads something like:
     
 This should be straightforward to emit from the intermediate-form generator.
 
+28 October 2023
+---------------
+
+I spent some time on passing constructor-definitions into the VM.
+Now there's pseudo-assembler syntax for records and enumerated values.
+The pseudo-compiler (``intermediate.py``) emits these.
+I wanted to be able to run the ``alias.sg`` example,
+but compiling it meant implementing type-case matches, field access,
+and explicit lists in the pseudo-compiler.
+
+I'm not yet emitting p-code for the preamble,
+so as an ad-hoc temporary measure (that might stick around)
+I've posited bytecodes ``NIL`` and ``SNOC`` for making lists.
+
+The pseudo-assembler does not yet do anything meaningful with record constructors beyond parse them.
+These should be GC-heap objects so they have a ``GC_KIND`` structure and are thus callable.
+Probably the arrangement is that the payload contains a hash-table for field offsets,
+as well as the total number of fields and any tag-number that may be required.
+And then the first payload-word of a *record* object simply refers back to its constructor.
+(After that, it's an array of values.)
+
+Intuitively, the performance of the field hash tables seems pretty important.
+Right now hash buckets involve the modulus operator.
+I recall reading that modulus is slow for that purpose.
+But let me not get ahead of myself.
+It may be that most functions are at least shallowly monomorphic.
+They can be compiled with inline-constant field offsets, making the hash table irrelevant.
+Certainly it would work inside the arms of a type-case.
+(Anything smarter would require more information from the type checker.)
+Alright. Putting a pin in that notion.
+

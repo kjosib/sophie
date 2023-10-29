@@ -15,8 +15,8 @@ see https://sophie.readthedocs.io/en/latest/tech/gc.html
 #define GC_BALANCE 2
 
 #else
-#define TOO_BIG 8192
-#define INITIAL_ARENA_SIZE (8*TOO_BIG)
+#define TOO_BIG 512
+#define INITIAL_ARENA_SIZE (32*TOO_BIG)
 #define GC_BALANCE 3
 #endif // DEBUG_STRESS_GC
 
@@ -182,8 +182,8 @@ static void sweep_weak_table(Table *table) {
         String *key = table->at[index].key;
         if (key == NULL) continue;
         if (ptr_in_arena(key, from_space)) {
-            if (is_broken_heart(key)) {
-                table->at[index].key = follow_heart(key);
+            if (is_broken_heart((GC*)key)) {
+                table->at[index].key = follow_heart((GC*)key);
             }
             else {
                 tableDelete(table, key);
