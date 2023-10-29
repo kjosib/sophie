@@ -658,3 +658,21 @@ Certainly it would work inside the arms of a type-case.
 (Anything smarter would require more information from the type checker.)
 Alright. Putting a pin in that notion.
 
+29 October 2023
+---------------
+
+Fitting in some car-painting. I got a scratch in a weird place and I'd better at least prime it before rust sets in.
+
+Goal for today is that record-definitions will do something useful instead of crash.
+There's a small infelicity in the arrangement I presently have in mind:
+The definitions go in the globals table and so presumably must be GC objects,
+but they own some non-GCed memory: the contents of their individual hash tables,
+which currently are not subject to GC. If a record-type ever becomes unreachable
+then its hash-table becomes floating garbage on the ``malloc`` heap.
+
+The larger pattern is that *resources* -- things the GC does not control --
+may need to be finalized rather than simply forgotten.
+One idea: GC objects that own resources get a weak-reference from a finalization queue.
+But for the moment it's not a genuine problem:
+Constructors are global and thus reachable until the VM quits.
+

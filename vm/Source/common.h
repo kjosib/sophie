@@ -186,6 +186,24 @@ void bad_callee(GC *item);
 #define AS_STRING(it) ((String *)(it.as.gc))
 bool is_string(void *item);
 
+/* table.h */
+
+typedef struct {
+	String *key;
+	Value value;
+} Entry;
+
+DEFINE_VECTOR_TYPE(Table, Entry)
+
+bool tableGet(Table *table, String *key, Value *value);
+bool tableSet(Table *table, String *key, Value value);
+bool table_set_from_C(Table *table, char *text, Value value);
+void tableAddAll(Table *from, Table *to);
+Entry *tableFindString(Table *table, const char *chars, size_t length, uint32_t hash);
+bool tableDelete(Table *table, String *key);
+void darkenTable(Table *table);
+void tableDump(Table *table);
+
 /* function.h */
 
 typedef enum {
@@ -230,6 +248,24 @@ Function *newFunction(FunctionType fn_type, Chunk *chunk, byte arity, byte nr_ca
 Native *newNative(byte arity, NativeFn function);
 
 String *name_of_function(Function *function);
+
+/* record.h */
+
+typedef struct {
+	GC header;
+	String *name;
+	Table field_offset;
+	byte tag;
+	byte nr_fields;
+} Constructor;
+
+typedef struct {
+	GC header;
+	Constructor *constructor;
+	Value fields[];
+} Instance;
+
+Constructor *new_constructor(int tag, int nr_fields);
 
 /* scanner.h */
 
@@ -340,24 +376,6 @@ typedef struct {
 } Instruction;
 
 extern Instruction instruction[];
-
-/* table.h */
-
-typedef struct {
-	String *key;
-	Value value;
-} Entry;
-
-DEFINE_VECTOR_TYPE(Table, Entry)
-
-bool tableGet(Table *table, String *key, Value *value);
-bool tableSet(Table *table, String *key, Value value);
-bool table_set_from_C(Table *table, char *text, Value value);
-void tableAddAll(Table *from, Table *to);
-Entry *tableFindString(Table *table, const char *chars, size_t length, uint32_t hash);
-bool tableDelete(Table *table, String *key);
-void darkenTable(Table *table);
-void tableDump(Table *table);
 
 /* vm.h */
 
