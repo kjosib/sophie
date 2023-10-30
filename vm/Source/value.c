@@ -8,6 +8,7 @@ void printValue(Value value) {
 	case VAL_BOOL: printf(AS_BOOL(value) ? "true" : "false"); break;
 	case VAL_NIL: printf("nil"); break;
 	case VAL_NUMBER: printf("%g", AS_NUMBER(value)); break;
+	case VAL_ENUM: printf("<enum: %d>", value.as.tag); break;
 	case VAL_GC: printObject(value.as.gc); break;
 	default: printf("<<%d>>", value.type);
 	}

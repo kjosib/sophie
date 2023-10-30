@@ -45,10 +45,10 @@ static int disImmediate(Chunk *chunk, int offset) {
 }
 
 static int disJump(Chunk *chunk, int offset) {
-	byte opcode = chunk->code.at[offset];
-	uint16_t operand = word_at(&chunk->code.at[1 + offset]);
+	byte opcode = chunk->code.at[offset++];
+	uint16_t operand = offset + word_at(&chunk->code.at[offset]);
 	printf("%-16s  %4d\n", instruction[opcode].name, operand);
-	return offset + 3;
+	return offset + 2;
 }
 
 static void asmClosure(Chunk *chunk) {
@@ -63,12 +63,30 @@ static int disClosure(Chunk *chunk, int offset) {
 	return offset;
 }
 
+static int disCase(Chunk *chunk, int offset) {
+	byte opcode  = chunk->code.at[offset++];
+	printf("%-16s ", instruction[opcode].name);
+	// Now pick up operands and use them to find the start of the first consequent.
+	// There must be at least one:
+	int limit = offset + word_at(&chunk->code.at[offset]);
+
+	for (; offset < limit; offset += 2) {
+		int target = offset + word_at(&chunk->code.at[offset]);
+		printf(" %4d", target);
+		if (target < limit) limit = target;
+	}
+
+	printf("\n");
+	return limit;
+}
+
 AddressingMode modeSimple = { asmSimple, disSimple };
 AddressingMode modeConstant = { asmConstant, disConstant };
 AddressingMode modeString = { asmString, disConstant };
 AddressingMode modeImmediate = { asmImmediate, disImmediate };
 AddressingMode modeJump = {asmSimple, disJump};
 AddressingMode modeClosure = {asmClosure, disClosure};
+AddressingMode modeCase = {asmSimple, disCase};
 
 Instruction instruction[] = {
 	[OP_PANIC] = {"PANIC", &modeSimple},
@@ -103,6 +121,9 @@ Instruction instruction[] = {
 	[OP_JF] = {"JF", &modeJump},
 	[OP_JT] = {"JT", &modeJump},
 	[OP_JMP] = {"JMP", &modeJump},
+	[OP_CASE] = {"CASE", &modeCase},
+	[OP_FIELD] = {"FIELD", &modeString},
+	[OP_SNOC] = {"SNOC", &modeSimple},
 	//[] = {"", &modeSimple},
 };
 

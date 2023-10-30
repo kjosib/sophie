@@ -43,6 +43,8 @@ INSTRUCTION_FOR = {
 	False: 'FALSE',
 	"Negative" : "NEG",
 	"LogicalNot" : "NOT",
+	"LogicalAnd" : "JF",
+	"LogicalOr" : "JT",
 }
 
 def emit(x):
@@ -133,15 +135,16 @@ class Context(BaseContext):
 		self.push()
 
 	def constant(self, value):
-		emit("CONST")
-		if isinstance(value, str):
-			emit(quote(value))
-		elif isinstance(value, (int, float)):
-			emit(value)
-		elif isinstance(value, bool):
+		if isinstance(value, bool):
 			emit(INSTRUCTION_FOR[value])
 		else:
-			assert False
+			emit("CONST")
+			if isinstance(value, str):
+				emit(quote(value))
+			elif isinstance(value, (int, float)):
+				emit(value)
+			else:
+				assert False
 		self.push()
 
 	def capture(self, symbol: ontology.Symbol) -> bool:
@@ -238,14 +241,24 @@ class Translation(Visitor):
 		self._tag_map = {}  # For compiling type-cases.  
 	
 	def visit_RoadMap(self, roadmap:RoadMap):
-		context = RootContext()
+		# Write all types:
+		self.write_records(roadmap.preamble.types)
+		for module in roadmap.each_module:
+			self.write_records(module.types)
+		
+		# Write all functions:
+		root = RootContext()
+		self.write_functions(roadmap.preamble.outer_functions, root)
+		for module in roadmap.each_module:
+			self.write_functions(module.outer_functions, root)
+		
+		# Write all begin-expressions:
+		context = Context(root)
+		self.visit_Module(roadmap.preamble, context)
 		for module in roadmap.each_module:
 			self.visit_Module(module, context)
 	
-	def visit_Module(self, module:syntax.Module, root:RootContext):
-		self.write_records(module.types)
-		self.write_functions(module.outer_functions, root)
-		context = Context(root)
+	def visit_Module(self, module:syntax.Module, context:Context):
 		for expr in module.main:
 			self.write_begin_expression(expr, context)
 
@@ -254,6 +267,7 @@ class Translation(Visitor):
 			self.visit(t)
 
 	def visit_TypeAlias(self, t): pass
+	def visit_Interface(self, t): pass
 	
 	@staticmethod
 	def visit_Record(r:syntax.Record):
@@ -312,6 +326,14 @@ class Translation(Visitor):
 		context.pop()
 		post(tail)
 	
+	def visit_ShortCutExp(self, it: syntax.ShortCutExp, context:Context, tail:bool):
+		self.visit(it.lhs, context, False)
+		label = context.jump(INSTRUCTION_FOR[it.glyph])
+		context.pop()
+		self.visit(it.rhs, context, False)
+		context.come_from(label)
+		post(tail)
+	
 	def visit_UnaryExp(self, ux:syntax.UnaryExp, context:Context, tail:bool):
 		self.visit(ux.arg, context, False)
 		emit(INSTRUCTION_FOR[ux.glyph])
@@ -347,13 +369,14 @@ class Translation(Visitor):
 		context.pop()
 		
 		self.visit(cond.then_part, context, tail)
-		assert context.depth() == depth + 1
 		
 		if tail:
+			context.reset(depth+1)
 			context.come_from(label_else)
 			self.visit(cond.else_part, context, True)
 		
 		else:
+			assert context.depth() == depth + 1
 			after = context.jump("JMP")
 			context.come_from(label_else)
 			emit("POP")
@@ -378,14 +401,14 @@ class Translation(Visitor):
 				context.ascend_to(depth)
 				after.append(context.jump("JMP"))
 		if mx.otherwise is not None:
-			for tag, hole in enumerate(cases):
-				if hole is not None:
-					context.come_from(hole)
+			for tag, label in enumerate(cases):
+				if label is not None:
+					context.come_from(label)
 			self.visit(mx.otherwise, context, tail)
 			if not tail:
 				context.ascend_to(depth)
-		for hole in after:
-			context.come_from(hole)
+		for label in after:
+			context.come_from(label)
 		pass
 	
 	def visit_FieldReference(self, fr:syntax.FieldReference, context:Context, tail:bool):
