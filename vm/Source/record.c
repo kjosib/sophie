@@ -7,8 +7,8 @@ Support for record-types.
 #include "common.h"
 
 
-static inline size_t enough_space(Constructor *constructor) {
-	return sizeof(Instance) + sizeof(Value) * constructor->nr_fields;
+static inline size_t enough_space(int nr_fields) {
+	return sizeof(Instance) + sizeof(Value) * nr_fields;
 }
 
 
@@ -28,7 +28,7 @@ static void blacken_instance(Instance *instance) {
 }
 
 static size_t size_instance(Instance *instance) {
-	return enough_space(instance->constructor);
+	return enough_space(instance->constructor->nr_fields);
 }
 
 GC_Kind KIND_Instance = {
@@ -39,21 +39,23 @@ GC_Kind KIND_Instance = {
 	.size = size_instance,
 };
 
-static Instance *construct(Constructor *constructor) {
-	Instance *instance = gc_allocate(&KIND_Instance, enough_space(constructor));
-	instance->constructor = constructor;
-	memcpy(&instance->fields, vm.stackTop - constructor->nr_fields, sizeof(Value) * constructor->nr_fields);
+static Instance *construct() {
+	int nr_fields = ((Constructor *)(TOP.as.ptr))->nr_fields;
+	Instance *instance = gc_allocate(&KIND_Instance, enough_space(nr_fields));
+	instance->constructor = pop().as.ptr;
+	memcpy(&instance->fields, vm.stackTop - nr_fields, sizeof(Value) * nr_fields);
 	return instance;
 }
 
-static void call_ctor(Constructor *constructor) {
-	Value *slot = vm.stackTop - constructor->nr_fields;
-	*slot = GC_VAL(construct(constructor));
+static void call_ctor() {
+	Instance *instance = construct();
+	Value *slot = vm.stackTop - instance->constructor->nr_fields;
+	*slot = GC_VAL(instance);
 	vm.stackTop = slot + 1;
 }
 
-static void exec_ctor(Constructor *constructor) {
-	*vm.frame->base = GC_VAL(construct(constructor));
+static void exec_ctor() {
+	*vm.frame->base = GC_VAL(construct());
 	vm.stackTop = vm.frame->base + 1;
 	vm.frame--;
 }

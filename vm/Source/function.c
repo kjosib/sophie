@@ -27,7 +27,8 @@ static void blacken_function(Function *function) { darkenChunk(&function->chunk)
 static size_t size_function(Function *function) { return sizeof(Function) + function->nr_captures * sizeof(Capture); }
 
 
-static void call_closure(Closure *closure) {
+static void call_closure() {
+	Closure *closure = (Closure*)(pop().as.ptr);
 	if (vm.frame == &vm.frame[FRAMES_MAX]) crashAndBurn("Call depth exceeded");
 	vm.frame++;
 	vm.frame->closure = closure;
@@ -35,7 +36,8 @@ static void call_closure(Closure *closure) {
 	vm.frame->base = vm.stackTop - closure->function->arity;
 }
 
-static void exec_closure(Closure *closure) {
+static void exec_closure() {
+	Closure *closure = (Closure*)(pop().as.ptr);
 	int arity = closure->function->arity;
 	// Hand-rolled or memmove here? Let's profile!
 	// ?? memmove(vm.frame->base, vm.stackTop - arity, arity * sizeof(Value)); ??
@@ -63,13 +65,15 @@ static void blacken_closure(Closure *closure) {
 
 static size_t size_closure(Closure *closure) { return sizeof(Closure) + (sizeof(Value) * closure->function->nr_captures); }
 
-static void call_native(Native *native) {
+static void call_native() {
+	Native *native = (Native*)(pop().as.ptr);
 	Value *base = vm.stackTop - native->arity;
 	*base = native->function(base);
 	vm.stackTop = base + 1;
 }
 
-static void exec_native(Native *native) {
+static void exec_native() {
+	Native *native = (Native*)(pop().as.ptr);
 	Value *base = vm.stackTop - native->arity;
 	*vm.frame->base = native->function(base);
 	vm.stackTop = vm.frame->base + 1;
