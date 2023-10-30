@@ -40,16 +40,16 @@ Eventually I might enforce a consistent style. But for now, there are bigger fis
 
 __declspec(noreturn) void crashAndBurn(char *why);
 
-typedef void (*Verb)();
 
 /* gc.h */
 
+typedef void (*Verb)();
 typedef void (*Method)(void *item);
 typedef size_t (*SizeMethod)(void *item); // Return the size of the payload.
 
 typedef struct {
-	Method call;
-	Method exec;
+	Verb call;
+	Verb exec;
 	Method display;
 	Method blacken;
 	SizeMethod size;
@@ -181,7 +181,7 @@ String *new_String(size_t length);
 String *intern_String(String *string);
 String *import_C_string(const char *chars, size_t length);
 void printObject(GC *item);
-void bad_callee(GC *item);
+void bad_callee();
 
 #define AS_STRING(it) ((String *)(it.as.gc))
 bool is_string(void *item);

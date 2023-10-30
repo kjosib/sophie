@@ -9,7 +9,7 @@ uint32_t hashString(const char *text, size_t length) {
 	return hash;
 }
 
-void bad_callee(GC *item) {
+void bad_callee() {
 	crashAndBurn("Tried to call a non-callable. The type system should have prevented this.");
 }
 

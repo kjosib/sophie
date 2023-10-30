@@ -255,16 +255,14 @@ dispatch:
 		case OP_CALL:
 			if (IS_GC(TOP)) {
 				vm.frame->ip = vpc;
-				GC *item = AS_GC(pop());
-				item->kind->call(item);
+				AS_GC(TOP)->kind->call();
 				vpc = vm.frame->ip;
 				NEXT;
 			}
 			return runtimeError(vpc, "Needed a callable object; got val %s.", valKind[TOP.type]);
 		case OP_EXEC:
 			if (IS_GC(TOP)) {
-				GC *item = AS_GC(pop());
-				item->kind->exec(item);
+				AS_GC(TOP)->kind->exec();
 				vpc = vm.frame->ip;
 				NEXT;
 			}

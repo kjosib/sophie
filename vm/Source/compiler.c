@@ -223,6 +223,8 @@ static void parse_record() {
 	if (nr_fields) {
 		push(GC_VAL(name));
 		constructor = GC_VAL(new_constructor(tag, nr_fields));
+		// new_constructor(...) pops all those strings off the VM stack,
+		// so there's no need to do it here.
 	}
 	else {
 		constructor = ENUM_VAL(tag);
