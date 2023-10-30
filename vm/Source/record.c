@@ -14,7 +14,8 @@ static inline size_t enough_space(int nr_fields) {
 
 static void display_instance(Instance *instance) {
 	printf("{%s:\n", instance->constructor->name->text);
-	for (int index = 0; index < instance->constructor->nr_fields; index++) {
+	int nr_fields = instance->constructor->nr_fields;
+	for (int index = 0; index < nr_fields; index++) {
 		printf("\t");
 		printValue(instance->fields[index]);
 		printf("\n");

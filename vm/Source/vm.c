@@ -7,6 +7,8 @@
 
 
 VM vm;
+static String *cons;
+static String *nil;
 
 static void grey_the_vm_roots() {
 	// Grey the value stack
@@ -19,6 +21,9 @@ static void grey_the_vm_roots() {
 			darken_in_place(&frame->closure);
 		}
 	}
+	// Grey the special cases "cons" and "nil"
+	darken_in_place(&cons);
+	darken_in_place(&nil);
 }
 
 
@@ -46,8 +51,10 @@ static InterpretResult runtimeError(byte *vpc, const char *format, ...) {
 	va_end(args);
 	fputs("\n", stderr);
 	vm.frame->ip = vpc;
-	for (CallFrame *frame = vm.frames; frame <= vm.frame; frame++) {
-		Function *function = CLOSURE->function;
+	for (CallFrame *frame = vm.frames+1; frame <= vm.frame; frame++) {
+		// NB: Skip the sacrificial frame at the bottom of the frame stack
+		// because it only points to a (defensive) panic instruction.
+		Function *function = frame->closure->function;
 		size_t offset = frame->ip - function->chunk.code.at - 1;
 		int line = findLine(&function->chunk, offset);
 		String *name = name_of_function(function);
@@ -87,7 +94,8 @@ void initVM() {
 	resetStack();
 	initTable(&vm.globals);
 	initTable(&vm.strings);
-
+	cons = import_C_string("cons", 4);
+	nil = import_C_string("nil", 3);
 	gc_install_roots(grey_the_vm_roots);
 
 	defineNative("clock", 0, clockNative);
@@ -154,11 +162,22 @@ static void capture_closure(Closure *closure) {
 	// Postcondition: Captures have been copied per directives in *closure's function.
 }
 
+static void push_global(String *key) {
+	if (tableGet(&vm.globals, key, vm.stackTop)) {
+		vm.stackTop++;
+	}
+	else {
+		tableDump(&vm.globals);
+		tableDump(&vm.strings);
+		crashAndBurn(key->text);
+	}
+}
+
 #define NEXT goto dispatch
 #define READ_BYTE() (*vpc++)
 #define READ_CONSTANT() CONSTANT(READ_BYTE())
 #define LEAP() do { vpc += word_at(vpc); } while (0)
-#define SKIP() do { pop(); vpc += 2; } while(0)
+#define SKIP_AND_POP() do { pop(); vpc += 2; } while(0)
 #define BINARY_OP(valueType, op) \
     if (isTwoNumbers()) { \
 		db = AS_NUMBER(pop()); \
@@ -170,6 +189,7 @@ static void capture_closure(Closure *closure) {
 static InterpretResult run() {
 
 	register byte *vpc = vm.frame->ip;
+	double da, db;
 
 dispatch:
 	for (;;) {
@@ -180,26 +200,13 @@ dispatch:
 #endif // DEBUG_TRACE_EXECUTION
 
 		switch (READ_BYTE()) {
-			double da, db;
 		case OP_PANIC:
 			return runtimeError(vpc, "PANIC instruction encountered.");
 		case OP_CONSTANT:
 			push(READ_CONSTANT());
 			NEXT;
 		case OP_POP: pop(); NEXT;
-		case OP_GLOBAL:
-		{
-			String *key = AS_STRING(READ_CONSTANT());
-			if (tableGet(&vm.globals, key, vm.stackTop)) {
-				vm.stackTop++;
-				NEXT;
-			}
-			else {
-				tableDump(&vm.globals);
-				tableDump(&vm.strings);
-				return runtimeError(vpc, "Undefined global '%s'.", key->text);
-			}
-		}
+		case OP_GLOBAL: push_global(AS_STRING(READ_CONSTANT())); NEXT;
 		case OP_LOCAL:
 			push(LOCAL(READ_BYTE()));
 			NEXT;
@@ -215,6 +222,7 @@ dispatch:
 			for (int index = 0; index < nr_closures; index++) capture_closure(base[index].as.ptr);
 			NEXT;
 		}
+		case OP_NIL: push_global(nil); NEXT;
 		case OP_TRUE: push(BOOL_VAL(true)); NEXT;
 		case OP_FALSE: push(BOOL_VAL(false)); NEXT;
 		case OP_EQUAL:
@@ -289,18 +297,48 @@ dispatch:
 			printf("%g\n", fib(AS_NUMBER(pop())));
 			NEXT;
 		case OP_JF:
-			if (AS_BOOL(TOP)) SKIP();
+			if (AS_BOOL(TOP)) SKIP_AND_POP();
 			else LEAP();
 			NEXT;
 		case OP_JT:
 			if (AS_BOOL(TOP)) LEAP();
-			else SKIP();
+			else SKIP_AND_POP();
 			NEXT;
 		case OP_JMP:
 			LEAP();
 			NEXT;
+		case OP_CASE: {
+			int tag;
+			switch (TOP.type) {
+			case VAL_ENUM:
+				tag = TOP.as.tag;
+				break;
+			case VAL_GC: {
+				Instance *instance = TOP.as.ptr;
+				tag = instance->constructor->tag;
+				break;
+			}
+			default:
+				return runtimeError(vpc, "Need a case-able object; got val %s.", valKind[TOP.type]);
+			}
+			vpc += 2 * tag;
+			LEAP();
+			NEXT;
+		}
+		case OP_SNOC: {
+			// Swap top two elements;
+			Value tmp = TOP;
+			TOP = SND;
+			SND = tmp;
+			// Load "cons"
+			push_global(cons);
+			// Call it in the usual way
+			AS_GC(TOP)->kind->call();
+			// NB: No vpc traffic because it's a constructor.
+			NEXT;
+		}
 		default:
-			return runtimeError(vpc, "Unrecognized instruction.");
+			return runtimeError(vpc, "Unrecognized instruction %d.", vpc[-1]);
 		}
 	}
 }
@@ -318,7 +356,8 @@ dispatch:
 InterpretResult interpret(const char *source) {
 	resetStack();
 	Closure *closure = compile(source);
-	closure->header.kind->call(closure);
+	push(GC_VAL(closure));
+	closure->header.kind->call();
 	return run();
 }
 
