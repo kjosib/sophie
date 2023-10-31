@@ -33,9 +33,11 @@ void darkenValueArray(ValueArray *vec) {
 }
 
 char *valKind[] = {
-	[VAL_BOOL] = "bool",
 	[VAL_NIL] = "nil",
+	[VAL_BOOL] = "bool",
 	[VAL_NUMBER] = "number",
 	[VAL_ENUM] = "enum",
+	[VAL_PTR] = "opaque pointer",
 	[VAL_GC] = "heap denizen",
+	[VAL_THUNK] = "thunk",
 };

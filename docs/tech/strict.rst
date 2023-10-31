@@ -11,7 +11,7 @@ Overview
 Sophie sports the semantics of "lazy evaluation" rather than "eager evaluation".
 That's a *semantic* distinction because it changes the set of programs which terminate.
 In particular, more functions can terminate with lazy semantics.
-Taking advantage, it makes many algorithms are easier to write.
+Taking advantage of this makes many algorithms easier to write.
 On the other hand, references to the internal private state of an actor
 must be evaluated *immediately* thus to prevent data races.
 
@@ -57,20 +57,48 @@ The minimal solution to strictness-analysis would be the transitive closure of t
 Strictness as a dataflow problem
 ---------------------------------
 
+Finding Strictness
+....................
+We can determine a *greatest lower bound* on strictness by walking the syntax tree.
+Top-down, expressions are either strict or lazy according to form and what's known so far.
+Bottom-up, parameters are strict if they get used in a strict position.
+
 As a base case, certain expressions are *formally* in strict position.
 These include the *if-part* of a conditional form, the left-hand-side of a logical connective,
 and any argument to mathematical operator. Also, the *function* part of a function call,
-the subject of any match-case, and any arguments to *known-strict* parameters of a function.
+the subject of any match-case, and any arguments to *known-strict* parameters of a known function.
 
-We can determine the set of strict parameters by walking the syntax tree.
-Anywhere there's a decision, keep the intersection of the sets from each branch.
-Anywhere there's a regular function call, take the union from the strict arguments.
+* For branching forms, take the intersection of the sets from the alternatives,
+  and then union that with the set from the condition.
+* For function calls, take the union of sets for each known-strict argument,
+  and then union with the head-form (i.e. which function to call).
+* For short-cut logical operators, the left-hand side is strict.
 
 If the set of strict arguments is found to be larger than the prior estimate,
 then reconsider its callers, as they may suddenly become stricter too.
 There may be a clever solution involving work-queues.
 
-There's a complication with nested sub-functions: they can be strict in outer parameters.
+Nested sub-functions can also be strict in lexical captures.
+To deal with this: If a sub-function is called in strict position,
+then add its strict captures to the locally-strict set.
+
+The data model for this exercise is that every concrete function has a set of strict formal
+parameters and a set of strict captures.
+Parameters used as functions are assumed to have lazy arguments.
+
+Perhaps one day some deeper analysis can prove strictness sound in more cases.
+But for now, the goal is something that works as expected all the time,
+even if that means sacrificing a few percentage points on the speedometer.
+
+Eagerness, Inductively Defined
+================================
+
+Certain syntax forms can never *return* thunks. Among these are literal constants,
+the names of constructors, the results of arithmetic, and certain other things.
+If a function's body-expression falls into one of these categories,
+than the function has an eager return-type.
+Calling such a function is thus also an eager expression.
+
 
 Over-Eagerness
 ================

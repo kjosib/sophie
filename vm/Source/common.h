@@ -90,12 +90,13 @@ void *reallocate(void *pointer, size_t oldSize, size_t newSize);
 /* value.h */
 
 typedef enum {
+	VAL_NIL,    // Not the same as Sophie's nil.
 	VAL_BOOL,
-	VAL_NIL,
 	VAL_NUMBER,
 	VAL_ENUM,
-	VAL_GC,     // Garbage-collected pointer.
 	VAL_PTR,    // Non-collectable opaque pointer.
+	VAL_GC,     // Garbage-collected pointer for this and subsequent tags.
+	VAL_THUNK,  // Pointer to thunk; helps with VM to avoid indirections.
 } ValueType;
 
 
@@ -111,30 +112,33 @@ typedef struct {
 } Value;
 
 
-#define IS_BOOL(value)    ((value).type == VAL_BOOL)
 #define IS_NIL(value)     ((value).type == VAL_NIL)
+#define IS_BOOL(value)    ((value).type == VAL_BOOL)
 #define IS_NUMBER(value)  ((value).type == VAL_NUMBER)
 #define IS_ENUM(value)    ((value).type == VAL_ENUM)
-#define IS_GC(value)     ((value).type == VAL_GC)
+#define IS_GC(value)      ((value).type == VAL_GC)
+#define IS_GC_ABLE(value) ((value).type >= VAL_GC)
+#define IS_THUNK(value)   ((value).type == VAL_THUNK)
 
 #define AS_BOOL(value)    ((value).as.boolean)
 #define AS_NUMBER(value)  ((value).as.number)
 #define AS_ENUM(value)    ((value).as.tag)
-#define AS_GC(value)     ((value).as.gc)
+#define AS_GC(value)      ((value).as.gc)
 
-#define BOOL_VAL(value)   ((Value){VAL_BOOL, {.boolean = value}})
 #define NIL_VAL	          ((Value){VAL_NIL, {.number = 0}})
+#define BOOL_VAL(value)   ((Value){VAL_BOOL, {.boolean = value}})
 #define NUMBER_VAL(value) ((Value){VAL_NUMBER, {.number = value}})
 #define ENUM_VAL(value)   ((Value){VAL_ENUM, {.tag = value}})
-#define GC_VAL(object)   ((Value){VAL_GC, {.ptr = object}})
 #define PTR_VAL(object)   ((Value){VAL_PTR, {.ptr = object}})
+#define GC_VAL(object)    ((Value){VAL_GC, {.ptr = object}})
+#define THUNK_VAL(object) ((Value){VAL_THUNK, {.ptr = object}})
 
 DEFINE_VECTOR_TYPE(ValueArray, Value)
 
 void printValue(Value value);
 bool valuesEqual(Value a, Value b);
 
-static inline darkenValue(Value *value) { if (IS_GC(*value)) darken_in_place(&value->as.ptr); }
+static inline darkenValue(Value *value) { if (IS_GC_ABLE(*value)) darken_in_place(&value->as.ptr); }
 void darkenValues(Value *at, size_t count);
 void darkenValueArray(ValueArray *vec);
 
@@ -360,14 +364,17 @@ typedef enum {
 	OP_EXEC,
 	
 	OP_RETURN,
+	OP_FORCE,
+	OP_SNAP,
 	OP_DISPLAY,
 	OP_FIB,
+
 	OP_QUIT,
 	OP_JF,
-	
 	OP_JT,
 	OP_JMP,
 	OP_CASE,
+
 	OP_FIELD,
 	OP_SNOC,
 	
