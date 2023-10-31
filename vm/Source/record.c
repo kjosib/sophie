@@ -16,12 +16,11 @@ static void display_instance(Instance *instance) {
 #ifdef DEBUG_TRACE_EXECUTION
 	printf("{%s:%d}", instance->constructor->name->text, instance->constructor->nr_fields);
 #else
-	printf("{%s:\n", instance->constructor->name->text);
+	printf("{%s:", instance->constructor->name->text);
 	int nr_fields = instance->constructor->nr_fields;
 	for (int index = 0; index < nr_fields; index++) {
-		printf("\t");
+		printf(" ");
 		printValue(instance->fields[index]);
-		printf("\n");
 	}
 	printf("}");
 #endif // DEBUG_TRACE_EXECUTION
