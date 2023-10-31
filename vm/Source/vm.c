@@ -149,7 +149,6 @@ static double fib(double n) {
 }
 
 #define CONSTANT(index) (CLOSURE->function->chunk.constants.at[index])
-#define LOCAL(index) (vm.frame->base[index])
 
 static void capture_closure(Closure *closure) {
 	// Precondition: *closure points to a fresh Closure object with no captures.
@@ -167,9 +166,7 @@ static void push_global(String *key) {
 		vm.stackTop++;
 	}
 	else {
-		tableDump(&vm.globals);
-		tableDump(&vm.strings);
-		crashAndBurn(key->text);
+		crashAndBurn("Missing global: %s", key->text);
 	}
 }
 
@@ -191,11 +188,13 @@ static InterpretResult run() {
 	register byte *vpc = vm.frame->ip;
 	double da, db;
 
-dispatch:
 	for (;;) {
+dispatch:
 
 #ifdef DEBUG_TRACE_EXECUTION
+		printf("-----------------\n");
 		displayStack();
+		printf("%s > ", name_of_function(vm.frame->closure->function)->text);
 		disassembleInstruction(&CLOSURE->function->chunk, (int)(vpc - CLOSURE->function->chunk.code.at));
 #endif // DEBUG_TRACE_EXECUTION
 
@@ -207,9 +206,13 @@ dispatch:
 			NEXT;
 		case OP_POP: pop(); NEXT;
 		case OP_GLOBAL: push_global(AS_STRING(READ_CONSTANT())); NEXT;
-		case OP_LOCAL:
-			push(LOCAL(READ_BYTE()));
+		case OP_LOCAL: {
+			int index = READ_BYTE();
+			assert(vm.frame->base + index < vm.stackTop);
+			push(vm.frame->base[index]);
 			NEXT;
+		}
+
 		case OP_CAPTIVE: push(CLOSURE->captives[READ_BYTE()]); NEXT;
 		case OP_CLOSURE: {
 			// Initialize a run of closures. The underlying function definitions are in the constant table.
@@ -325,6 +328,15 @@ dispatch:
 			LEAP();
 			NEXT;
 		}
+		case OP_FIELD: {
+			assert(TOP.type == VAL_GC);
+			Instance *instance = TOP.as.ptr;
+			assert(instance->header.kind == &KIND_Instance);
+			Table *field_offset = &instance->constructor->field_offset;
+			tableGet(field_offset, AS_STRING(CONSTANT(READ_BYTE())), &TOP);
+			TOP = instance->fields[TOP.as.tag];
+			NEXT;
+		}
 		case OP_SNOC: {
 			// Swap top two elements;
 			Value tmp = TOP;
@@ -345,7 +357,6 @@ dispatch:
 
 #undef CHECK_UNDERFLOW
 #undef BINARY_OP
-#undef LOCAL
 #undef CONSTANT
 #undef LEAP
 #undef SKIP

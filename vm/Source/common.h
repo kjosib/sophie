@@ -14,6 +14,7 @@ Eventually I might enforce a consistent style. But for now, there are bigger fis
 
 */
 
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -38,7 +39,7 @@ Eventually I might enforce a consistent style. But for now, there are bigger fis
     void resize ## kind(kind* vec, size_t cap); \
     size_t  append ## kind(kind* vec, type item);
 
-__declspec(noreturn) void crashAndBurn(char *why);
+__declspec(noreturn) void crashAndBurn(char *why, ...);
 
 
 /* gc.h */
@@ -266,6 +267,9 @@ typedef struct {
 } Instance;
 
 Constructor *new_constructor(int tag, int nr_fields);
+
+extern GC_Kind KIND_Constructor;
+extern GC_Kind KIND_Instance;
 
 /* scanner.h */
 

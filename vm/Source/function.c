@@ -1,8 +1,7 @@
 #include "common.h"
 
 String *name_of_function(Function *function) {
-	if (function->fn_type == TYPE_SCRIPT) return NULL;
-	else return AS_STRING(function->chunk.constants.at[0]);
+	return AS_STRING(function->chunk.constants.at[0]);
 }
 
 static void check_underflow(int arity, String *name) {

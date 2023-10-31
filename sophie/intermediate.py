@@ -371,7 +371,6 @@ class Translation(Visitor):
 		self.visit(cond.then_part, context, tail)
 		
 		if tail:
-			context.reset(depth+1)
 			context.come_from(label_else)
 			self.visit(cond.else_part, context, True)
 		
@@ -385,8 +384,8 @@ class Translation(Visitor):
 			context.come_from(after)
 
 	def visit_MatchExpr(self, mx:syntax.MatchExpr, context:Context, tail:bool):
-		self.visit(mx.subject.expr, context, False)
 		context.alias(mx.subject)
+		self.visit(mx.subject.expr, context, False)
 		depth = context.depth()
 		nr_cases = len(mx.variant.subtypes)
 		cases = context.cases(nr_cases)
