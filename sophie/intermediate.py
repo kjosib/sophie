@@ -47,8 +47,8 @@ INSTRUCTION_FOR = {
 	"LogicalOr" : "JT",
 }
 
-def emit(x):
-	print(x, end=" ")
+def emit(*xs):
+	print(*xs, end=" ")
 def quote(x):
 	assert '"' not in x
 	return '"'+x+'"'
@@ -119,19 +119,25 @@ class Context(BaseContext):
 		self.push()
 	
 	def alias(self, symbol: ontology.Symbol):
+		"""
+		Establishes where in the call-frame to look for a symbol.
+		Call this just before pushing that symbol's value on the stack.
+		
+		It may seem odd to have the symbol's frame offset known before its value has been constructed.
+		That's not a problem: The resolver has already validated all references to all symbols.
+		"""
 		assert symbol not in self._local
 		self._local[symbol] = self._depth
 		
 	def load(self, symbol: ontology.Symbol):
 		if symbol in self._local:
-			emit("LOCAL")
-			emit(self._local[symbol])
+			frame_offset = self._local[symbol]
+			assert frame_offset < self._depth
+			emit("LOCAL", frame_offset)
 		elif self.capture(symbol):
-			emit("CAPTIVE")
-			emit(self._captives[symbol])
+			emit("CAPTIVE", self._captives[symbol])
 		else:
-			emit("GLOBAL")
-			emit(quote(symbol.nom.text))
+			emit("GLOBAL", quote(symbol.nom.text))
 		self.push()
 
 	def constant(self, value):
@@ -164,8 +170,7 @@ class Context(BaseContext):
 	
 	def emit_hole(self):
 		label = LABEL_QUEUE.pop()
-		emit("hole")
-		emit(label)
+		emit("hole", label)
 		LABEL_MAP[label] = (self, self._depth)
 		return label
 	
@@ -173,8 +178,7 @@ class Context(BaseContext):
 		(source, depth) = LABEL_MAP.pop(label)
 		assert source is self, "Improper Come-From"
 		self.reset(depth)
-		emit("come_from")
-		emit(label)
+		emit("come_from", label)
 		LABEL_QUEUE.append(label)
 
 	def emit_preamble(self, fn:syntax.UserFunction):
@@ -190,15 +194,13 @@ class Context(BaseContext):
 		# number of captures, and information about each capture.
 		if len(self._captives) > 255: raise TooComplicated("More than 255 captures in one function")
 
-		emit("|")
-		emit(len(self._captives))
+		emit("|", len(self._captives))
 		self._outer.emit_captured(list(self._captives)) # Preserving insertion order
 		
 	def emit_captured(self, captives: list[ontology.Symbol]):
 		for sym in captives:
 			if sym in self._local:
-				emit("L")
-				emit(self._local[sym])
+				emit("L", self._local[sym])
 			else:
 				emit(self._captives[sym])
 	
@@ -210,8 +212,7 @@ class Context(BaseContext):
 	def ascend_to(self, depth:int):
 		assert self._depth >= depth
 		if self._depth > depth:
-			emit("ASCEND")
-			emit(self._depth - depth)
+			emit("ASCEND", self._depth - depth)
 			self.reset(depth)
 
 
@@ -225,8 +226,7 @@ def write_enum(nom:ontology.Nom, tag:int):
 	write_record((), nom, tag)
 
 def write_tagged_value(nom:ontology.Nom, tag:int):
-	emit("(")
-	emit("*")
+	emit("(", "*")
 	close_structure(nom, tag)
 
 def close_structure(nom:ontology.Nom, tag:int):

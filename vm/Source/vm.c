@@ -175,13 +175,14 @@ static void push_global(String *key) {
 #define READ_CONSTANT() CONSTANT(READ_BYTE())
 #define LEAP() do { vpc += word_at(vpc); } while (0)
 #define SKIP_AND_POP() do { pop(); vpc += 2; } while(0)
-#define BINARY_OP(valueType, op) \
+#define BINARY_OP(valueType, op) do {\
     if (isTwoNumbers()) { \
 		db = AS_NUMBER(pop()); \
 		da = AS_NUMBER(pop()); \
 		push(valueType(da op db)); \
     } else return runtimeError(vpc, "Operands must be numbers."); \
 	NEXT; \
+	} while (0)
 
 static InterpretResult run() {
 
@@ -232,8 +233,8 @@ dispatch:
 			SND = BOOL_VAL(valuesEqual(SND, TOP));
 			pop();
 			NEXT;
-		case OP_GREATER:  BINARY_OP(BOOL_VAL, > )
-		case OP_LESS:     BINARY_OP(BOOL_VAL, < )
+		case OP_GREATER:  BINARY_OP(BOOL_VAL, > );
+		case OP_LESS:     BINARY_OP(BOOL_VAL, < );
 		case OP_POWER:
 			if (isTwoNumbers()) {
 				db = AS_NUMBER(pop());
@@ -242,18 +243,10 @@ dispatch:
 				NEXT;
 			}
 			else return runtimeError(vpc, "Operands must be numbers.");
-		case OP_MULTIPLY: BINARY_OP(NUMBER_VAL, *)
-		case OP_DIVIDE:   BINARY_OP(NUMBER_VAL, / )
-		case OP_ADD: {
-			if (isTwoNumbers()) {
-				db = AS_NUMBER(pop());
-				da = AS_NUMBER(pop());
-				push(NUMBER_VAL(da + db));
-				NEXT;
-			}
-			else return runtimeError(vpc, "Operands must be two numbers or two strings.");
-		}
-		case OP_SUBTRACT: BINARY_OP(NUMBER_VAL, -)
+		case OP_MULTIPLY: BINARY_OP(NUMBER_VAL, * );
+		case OP_DIVIDE:   BINARY_OP(NUMBER_VAL, / );
+		case OP_ADD:      BINARY_OP(NUMBER_VAL, + );
+		case OP_SUBTRACT: BINARY_OP(NUMBER_VAL, - );
 		case OP_NOT:
 			push(BOOL_VAL(!AS_BOOL(pop())));
 			NEXT;
@@ -279,11 +272,33 @@ dispatch:
 			}
 			return runtimeError(vpc, "Needed a callable object; got val %s.", valKind[TOP.type]);
 		case OP_RETURN:
+			assert(! IS_THUNK(TOP));  // Return values are needed values! Don't thunk them.
 			*vm.frame->base = TOP;
 			vm.stackTop = vm.frame->base + 1;
 			vm.frame--;
 			vpc = vm.frame->ip;
 			NEXT;
+		case OP_FORCE: {
+			if (IS_THUNK(TOP)) {
+				Closure *thunk = TOP.as.ptr;
+				if (IS_NIL(thunk->captives[0])) { // Thunk has yet to be evaluated.
+					vm.frame->ip = vpc;     // Standard calling sequence.
+					thunk->header.kind->call();
+					vpc = vm.frame->ip;
+				}
+				else TOP = thunk->captives[0];
+			}
+			NEXT;
+		}
+		case OP_SNAP: {
+			assert(! IS_THUNK(TOP));  // Compiler should put a FORCE instruction before a SNAP if appropriate.
+			assert(IS_THUNK(vm.frame->base[-1]));
+			vm.frame->base[-1] = vm.frame->closure->captives[0] = TOP;
+			vm.stackTop = vm.frame->base;
+			vm.frame--;
+			vpc = vm.frame->ip;
+			NEXT;
+		}
 		case OP_QUIT: {
 #ifdef DEBUG_TRACE_EXECUTION
 			displayStack();

@@ -676,3 +676,24 @@ One idea: GC objects that own resources get a weak-reference from a finalization
 But for the moment it's not a genuine problem:
 Constructors are global and thus reachable until the VM quits.
 
+30 October 2023
+---------------
+
+Car painting finished up just in time, as it got cold and wet last night.
+
+A number of basic demos now work in the VM.
+In particular, the ``alias.sg`` and ``case_when.sg`` examples were my primary guinea-pigs today.
+That means all immutable data types and all operations thereon do work.
+
+I got a disturbing amount of practice with the debugger.
+But in the end, most of the problems were trivial bookkeeping mistakes.
+For example, there's a function in ``intermediate.py`` that takes note of a local symbol's position
+within an activation record. It must be called just before computing that symbol's value,
+but I'd accidentally called it just afterward in an early version of the code to build
+type-case matchers. So of course that went off the rails. And as a result,
+I have some more assertions in various places.
+
+I think the next semantic to port would be :doc:`lazy evaluation <lazy>`.
+Without :doc:`strictness analysis <strict>`, I expect it would slow things down considerably.
+So it will soon be time to make a strictness pass.
+
