@@ -13,6 +13,9 @@ static inline size_t enough_space(int nr_fields) {
 
 
 static void display_instance(Instance *instance) {
+#ifdef DEBUG_TRACE_EXECUTION
+	printf("{%s:%d}", instance->constructor->name->text, instance->constructor->nr_fields);
+#else
 	printf("{%s:\n", instance->constructor->name->text);
 	int nr_fields = instance->constructor->nr_fields;
 	for (int index = 0; index < nr_fields; index++) {
@@ -20,7 +23,8 @@ static void display_instance(Instance *instance) {
 		printValue(instance->fields[index]);
 		printf("\n");
 	}
-	printf("}\n");
+	printf("}");
+#endif // DEBUG_TRACE_EXECUTION
 }
 
 static void blacken_instance(Instance *instance) {
@@ -48,38 +52,38 @@ static Instance *construct() {
 	return instance;
 }
 
-static void call_ctor() {
+static void call_constructor() {
 	Instance *instance = construct();
 	Value *slot = vm.stackTop - instance->constructor->nr_fields;
 	*slot = GC_VAL(instance);
 	vm.stackTop = slot + 1;
 }
 
-static void exec_ctor() {
+static void exec_constructor() {
 	*vm.frame->base = GC_VAL(construct());
 	vm.stackTop = vm.frame->base + 1;
 	vm.frame--;
 }
 
-static void display_ctor(Constructor *constructor) {
+static void display_constructor(Constructor *constructor) {
 	printf("(%s/%d)", constructor->name->text, constructor->nr_fields);
 }
 
-static void blacken_ctor(Constructor *constructor) {
+static void blacken_constructor(Constructor *constructor) {
 	darken_in_place(&constructor->name);
 	darkenTable(&constructor->field_offset);
 }
 
-static size_t size_ctor(Constructor *constructor) {
+static size_t size_constructor(Constructor *constructor) {
 	return sizeof(Constructor);
 }
 
 GC_Kind KIND_Constructor = {
-	.call = call_ctor,
-	.exec = exec_ctor,
-	.display = display_ctor,
-	.blacken = blacken_ctor,
-	.size = size_ctor,
+	.call = call_constructor,
+	.exec = exec_constructor,
+	.display = display_constructor,
+	.blacken = blacken_constructor,
+	.size = size_constructor,
 };
 
 

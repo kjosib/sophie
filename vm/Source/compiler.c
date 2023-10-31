@@ -151,6 +151,7 @@ static Function *parse_single_function() {
 	consume(TOKEN_PIPE, "Expected vertical line");
 	byte nr_captures = parseByte("Number of captures");
 	Function *function = newFunction(TYPE_FUNCTION, &current->chunk, arity, nr_captures);
+	// NB: current->chunk has just been re-initialized because the new function now owns the former contents of the chunk.
 	for (int index = 0; index < nr_captures; index++) {
 		byte is_local = predictToken(TOKEN_NAME);
 		if (is_local) consume(TOKEN_NAME, "");
@@ -193,9 +194,6 @@ static void parse_global_functions() {
 		defineGlobal(name_of_function(closure->function), GC_VAL(closure));
 	} while (predictToken(TOKEN_SEMICOLON));
 	consume(TOKEN_RIGHT_BRACE, "expected semicolon or right-brace.");
-#ifdef _DEBUG
-	tableDump(&vm.globals);
-#endif // _DEBUG
 }
 
 static Value tag_definition(int tag) {
@@ -238,8 +236,9 @@ static void parseScript() {
 		if (maybe_token(TOKEN_STAR)) parse_tagged_value();
 		else parse_record();
 	}
-	if (predictToken(TOKEN_LEFT_BRACE)) parse_global_functions();
+	while (predictToken(TOKEN_LEFT_BRACE)) parse_global_functions();
 	initChunk(&current->chunk);
+	appendValueArray(&current->chunk.constants, GC_VAL(import_C_string("<script>", 8)));
 	parse_instructions();
 	emit(OP_QUIT);
 #ifdef DEBUG_PRINT_CODE

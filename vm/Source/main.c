@@ -1,4 +1,5 @@
-﻿#include "common.h"
+﻿#include <stdarg.h>
+#include "common.h"
 
 static char *readFile(const char *path) {
 	FILE *file = fopen(path, "rb");
@@ -46,8 +47,13 @@ int main(int argc, const char *argv[]) {
 	return 0;
 }
 
-void crashAndBurn(char *why) {
-	fprintf(stderr, "\n***\n ***\n  ***   ***   Giving up because %s.   ***", why);
+void crashAndBurn(char *format, ...) {
+	va_list args;
+	va_start(args, format);
+	fputs("\n***\n ***\n  ***   ***   Giving up because ", stderr);
+	vfprintf(stderr, format, args);
+	va_end(args);
+	fputs(".   ***\n", stderr);
 	exit(74);
 }
 
