@@ -56,25 +56,12 @@ def post(tail):
 	if tail:
 		emit("RETURN")
 
-
 LABEL_QUEUE = list(reversed(range(4096)))
 LABEL_MAP = {}
 
 
-class BaseContext:
-	"""
-	Why do I not attempt to re-use the existing stacking mechanism here?
-	Because I'm solving a slightly different problem.
-	I intend an in-order tree-walk passing these around *not only* as a breadcrumb trail,
-	but also as a way to address non-locals.
-	
-	Escape analysis could perhaps do slightly better with static pointers,
-	but this works regardless and it's consistent. And allegedly plenty fast, too.
-		
-	There is a small gotcha: Functions may capture their peers. To avoid ordering problems,
-	allocate the closures first and then fill in their captive linkages.
-	Sophie never sees an incompletely-initialized closure.
-	"""
+class VMScope:
+	""" Corresponds roughly to the Scope and/or Function structures in the VM. """
 	
 	indent = ""
 	def nl(self):
@@ -90,7 +77,9 @@ class BaseContext:
 	def declare(self, symbol: ontology.Symbol):
 		raise NotImplementedError(type(self))
 
-class RootContext(BaseContext):
+class VMGlobalScope(VMScope):
+	""" Mainly a null-object that encloses a nest of scopes without itself being enclosed. """
+	
 	def capture(self, symbol: ontology.Symbol) -> bool:
 		return False
 
@@ -100,8 +89,10 @@ class RootContext(BaseContext):
 	def declare(self, symbol: ontology.Symbol):
 		return
 
-class Context(BaseContext):
-	def __init__(self, outer:BaseContext):
+class VMFunctionScope(VMScope):
+	""" Encapsulates VM mechanics around the stack, parameters, closure capture, jumps, etc. """
+	
+	def __init__(self, outer:VMScope):
 		self._outer = outer
 		self.indent = outer.indent+"  "
 		self._local = {}
@@ -214,7 +205,14 @@ class Context(BaseContext):
 		if self._depth > depth:
 			emit("ASCEND", self._depth - depth)
 			self.reset(depth)
-
+	
+	def emit_call(self, tail, arity):
+		if tail:
+			emit("EXEC")
+			self._depth = None
+		else:
+			emit("CALL")
+			self._depth -= arity
 
 def write_record(names:Iterable[str], nom:ontology.Nom, tag:int):
 	emit("(")
@@ -236,6 +234,7 @@ def close_structure(nom:ontology.Nom, tag:int):
 	print()
 
 
+
 class Translation(Visitor):
 	def __init__(self):
 		self._tag_map = {}  # For compiling type-cases.  
@@ -247,20 +246,20 @@ class Translation(Visitor):
 			self.write_records(module.types)
 		
 		# Write all functions:
-		root = RootContext()
+		root = VMGlobalScope()
 		self.write_functions(roadmap.preamble.outer_functions, root)
 		for module in roadmap.each_module:
 			self.write_functions(module.outer_functions, root)
 		
 		# Write all begin-expressions:
-		context = Context(root)
-		self.visit_Module(roadmap.preamble, context)
+		scope = VMFunctionScope(root)
+		self.visit_Module(roadmap.preamble, scope)
 		for module in roadmap.each_module:
-			self.visit_Module(module, context)
+			self.visit_Module(module, scope)
 	
-	def visit_Module(self, module:syntax.Module, context:Context):
+	def visit_Module(self, module:syntax.Module, scope:VMFunctionScope):
 		for expr in module.main:
-			self.write_begin_expression(expr, context)
+			self.write_begin_expression(expr, scope)
 
 	def write_records(self, types):
 		for t in types:
@@ -283,144 +282,139 @@ class Translation(Visitor):
 			else:
 				write_tagged_value(st.nom, tag)
 
-	def write_functions(self, fns, outer:BaseContext):
+	def write_functions(self, fns, outer:VMScope):
 		if not fns: return
 		for fn in fns:
 			outer.declare(fn)
 		emit("{")
 		last = fns[-1]
 		for fn in fns:
-			self.write_one_function(fn, Context(outer))
+			inner = VMFunctionScope(outer)
+			self.write_one_function(fn, inner)
 			emit("}" if fn is last else ";")
 		outer.nl()
 
-
-	def write_one_function(self, fn, inner:Context):
+	def write_one_function(self, fn, inner:VMFunctionScope):
 		inner.nl()
 		inner.emit_preamble(fn)
 		self.write_functions(fn.where, inner)
 		self.visit(fn.expr, inner, True)
 		inner.emit_epilogue()
 
-	def write_begin_expression(self, expr, context:Context):
-		context.nl()
-		self.visit(expr, context, False)
-		context.display()
+	def write_begin_expression(self, expr, scope:VMFunctionScope):
+		scope.nl()
+		self.visit(expr, scope, False)
+		scope.display()
 	
-	def visit_Lookup(self, lu:syntax.Lookup, context:Context, tail:bool):
-		self.visit(lu.ref, context, tail)
+	def visit_Lookup(self, lu:syntax.Lookup, scope:VMFunctionScope, tail:bool):
+		self.visit(lu.ref, scope, tail)
 
 	@staticmethod
-	def visit_PlainReference(ref:syntax.PlainReference, context:Context, tail:bool):
+	def visit_PlainReference(ref:syntax.PlainReference, scope:VMFunctionScope, tail:bool):
 		sym = ref.dfn
-		context.load(sym)
-		if isinstance(sym, syntax.UserFunction):
-			if not sym.params:
-				emit("EXEC" if tail else "CALL")
-		post(tail)
+		scope.load(sym)
+		if isinstance(sym, syntax.UserFunction) and not sym.params:
+			scope.emit_call(tail, 0)
+		else:
+			post(tail)
 
-	def visit_BinExp(self, it: syntax.BinExp, context:Context, tail:bool):
-		self.visit(it.lhs, context, False)
-		self.visit(it.rhs, context, False)
+	def visit_BinExp(self, it: syntax.BinExp, scope:VMFunctionScope, tail:bool):
+		self.visit(it.lhs, scope, False)
+		self.visit(it.rhs, scope, False)
 		emit(INSTRUCTION_FOR[it.glyph])
-		context.pop()
+		scope.pop()
 		post(tail)
 	
-	def visit_ShortCutExp(self, it: syntax.ShortCutExp, context:Context, tail:bool):
-		self.visit(it.lhs, context, False)
-		label = context.jump(INSTRUCTION_FOR[it.glyph])
-		context.pop()
-		self.visit(it.rhs, context, False)
-		context.come_from(label)
+	def visit_ShortCutExp(self, it: syntax.ShortCutExp, scope:VMFunctionScope, tail:bool):
+		self.visit(it.lhs, scope, False)
+		label = scope.jump(INSTRUCTION_FOR[it.glyph])
+		scope.pop()
+		self.visit(it.rhs, scope, False)
+		scope.come_from(label)
 		post(tail)
 	
-	def visit_UnaryExp(self, ux:syntax.UnaryExp, context:Context, tail:bool):
-		self.visit(ux.arg, context, False)
+	def visit_UnaryExp(self, ux:syntax.UnaryExp, scope:VMFunctionScope, tail:bool):
+		self.visit(ux.arg, scope, False)
 		emit(INSTRUCTION_FOR[ux.glyph])
 		post(tail)
 
 	@staticmethod
-	def visit_Literal(l:syntax.Literal, context:Context, tail:bool):
-		context.constant(l.value)
+	def visit_Literal(l:syntax.Literal, scope:VMFunctionScope, tail:bool):
+		scope.constant(l.value)
 		post(tail)
 
-	def visit_Call(self, call:syntax.Call, context:Context, tail:bool):
+	def visit_Call(self, call:syntax.Call, scope:VMFunctionScope, tail:bool):
 		# Order of operations here is meaningless because it must be pure.
 		# Sort of.
-		depth = context.depth()
+		depth = scope.depth()
 		for arg in call.args:
-			self.visit(arg, context, False)
-		self.visit(call.fn_exp, context, False)
-		if tail:
-			emit("EXEC")
-		else:
-			emit("CALL")
-			context.reset(depth)
-			context.push()
+			self.visit(arg, scope, False)
+		self.visit(call.fn_exp, scope, False)
+		scope.emit_call(tail, len(call.args))
+		scope.reset(depth)
+		scope.push()
 
-	def visit_Cond(self, cond:syntax.Cond, context:Context, tail:bool):
+	def visit_Cond(self, cond:syntax.Cond, scope:VMFunctionScope, tail:bool):
 		# This is super-simplistic for now.
 		# It just has to work, not be hyper-optimized.
-		depth = context.depth()
-		self.visit(cond.if_part, context, False)
-		assert context.depth() == depth+1
+		depth = scope.depth()
+		self.visit(cond.if_part, scope, False)
+		assert scope.depth() == depth + 1
 		
-		label_else = context.jump("JF")
-		context.pop()
-		
-		self.visit(cond.then_part, context, tail)
-		
+		label_else = scope.jump("JF")
+		scope.pop()
+		self.visit(cond.then_part, scope, tail)
 		if tail:
-			context.come_from(label_else)
-			self.visit(cond.else_part, context, True)
+			scope.come_from(label_else)
+			self.visit(cond.else_part, scope, True)
 		
 		else:
-			assert context.depth() == depth + 1
-			after = context.jump("JMP")
-			context.come_from(label_else)
+			assert scope.depth() == depth + 1
+			after = scope.jump("JMP")
+			scope.come_from(label_else)
 			emit("POP")
-			context.pop()
-			self.visit(cond.else_part, context, False)
-			context.come_from(after)
+			scope.pop()
+			self.visit(cond.else_part, scope, False)
+			scope.come_from(after)
 
-	def visit_MatchExpr(self, mx:syntax.MatchExpr, context:Context, tail:bool):
-		context.alias(mx.subject)
-		self.visit(mx.subject.expr, context, False)
-		depth = context.depth()
+	def visit_MatchExpr(self, mx:syntax.MatchExpr, scope:VMFunctionScope, tail:bool):
+		scope.alias(mx.subject)
+		self.visit(mx.subject.expr, scope, False)
+		depth = scope.depth()
 		nr_cases = len(mx.variant.subtypes)
-		cases = context.cases(nr_cases)
+		cases = scope.cases(nr_cases)
 		after = []
 		for alt in mx.alternatives:
 			tag = self._tag_map[mx.variant, alt.nom.key()]
-			context.come_from(cases[tag])
+			scope.come_from(cases[tag])
 			cases[tag] = None
-			self.write_functions(alt.where, context)
-			self.visit(alt.sub_expr, context, tail)
+			self.write_functions(alt.where, scope)
+			self.visit(alt.sub_expr, scope, tail)
 			if not tail:
-				context.ascend_to(depth)
-				after.append(context.jump("JMP"))
+				scope.ascend_to(depth)
+				after.append(scope.jump("JMP"))
 		if mx.otherwise is not None:
 			for tag, label in enumerate(cases):
 				if label is not None:
-					context.come_from(label)
-			self.visit(mx.otherwise, context, tail)
+					scope.come_from(label)
+			self.visit(mx.otherwise, scope, tail)
 			if not tail:
-				context.ascend_to(depth)
+				scope.ascend_to(depth)
 		for label in after:
-			context.come_from(label)
+			scope.come_from(label)
 		pass
 	
-	def visit_FieldReference(self, fr:syntax.FieldReference, context:Context, tail:bool):
-		self.visit(fr.lhs, context, False)
+	def visit_FieldReference(self, fr:syntax.FieldReference, scope:VMFunctionScope, tail:bool):
+		self.visit(fr.lhs, scope, False)
 		emit("FIELD")
 		emit(quote(fr.field_name.key()))
 		post(tail)
 
-	def visit_ExplicitList(self, el:syntax.ExplicitList, context:Context, tail:bool):
+	def visit_ExplicitList(self, el:syntax.ExplicitList, scope:VMFunctionScope, tail:bool):
 		emit("NIL")
-		context.push()
+		scope.push()
 		for item in reversed(el.elts):
-			self.visit(item, context, False)
+			self.visit(item, scope, False)
 			emit("SNOC")
-			context.pop()
+			scope.pop()
 		post(tail)
