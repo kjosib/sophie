@@ -111,8 +111,10 @@ bool tableSet(Table *table, String *key, Value value) {
 }
 
 bool table_set_from_C(Table *table, char *text, Value value) {
-	String *key = import_C_string(text, strlen(text));
-	return tableSet(table, key, value);
+	if (text) {
+		String *key = import_C_string(text, strlen(text));
+		return tableSet(table, key, value);
+	}
 }
 
 void tableAddAll(Table *from, Table *to) {
