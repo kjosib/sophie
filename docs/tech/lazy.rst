@@ -111,3 +111,18 @@ Observation
 No function ought to ever *return* a thunk. It wouldn't make sense!
 A function's return value is only computed if it's needed,
 but thunks are only appropriate when the need isn't yet clear.
+
+
+Compiling in the Company of Thunks
+===================================
+
+It will be necessary in certain places to emit a ``FORCE`` instruction.
+
+The most obvious approach is to make each code-generation method return
+a flag indicating if it *might* have generated a thunk, and then the caller
+can force it if necessary. However, suppose we know the caller will force
+the result of a branching conditional form: then the callee can force on
+behalf of the caller, and this way only force if strictly necessary.
+This pushes the information to where it's most precise.
+
+
