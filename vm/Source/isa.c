@@ -51,7 +51,7 @@ static int disJump(Chunk *chunk, int offset) {
 	return offset + 2;
 }
 
-static void asmClosure(Chunk *chunk) {
+static void asmNotByHand(Chunk *chunk) {
 	error("This instruction is meant to be built automatically.");
 }
 
@@ -85,8 +85,9 @@ AddressingMode modeConstant = { asmConstant, disConstant };
 AddressingMode modeString = { asmString, disConstant };
 AddressingMode modeImmediate = { asmImmediate, disImmediate };
 AddressingMode modeJump = {asmSimple, disJump};
-AddressingMode modeClosure = {asmClosure, disClosure};
+AddressingMode modeClosure = {asmNotByHand, disClosure};
 AddressingMode modeCase = {asmSimple, disCase};
+AddressingMode modeThunk = {asmNotByHand, disConstant};
 
 Instruction instruction[] = {
 	[OP_PANIC] = {"PANIC", &modeSimple},
@@ -115,6 +116,8 @@ Instruction instruction[] = {
 	[OP_CALL] = {"CALL", &modeSimple},
 	[OP_EXEC] = {"EXEC", &modeSimple},
 	[OP_RETURN] = {"RETURN", &modeSimple},
+	[OP_FORCE] = {"FORCE", &modeSimple},
+	[OP_SNAP] = {"SNAP", &modeSimple},
 	[OP_DISPLAY] = {"DISPLAY", &modeSimple},
 	[OP_FIB] = {"FIB", &modeSimple},
 	[OP_QUIT] = {"QUIT", &modeSimple},
@@ -124,6 +127,7 @@ Instruction instruction[] = {
 	[OP_CASE] = {"CASE", &modeCase},
 	[OP_FIELD] = {"FIELD", &modeString},
 	[OP_SNOC] = {"SNOC", &modeSimple},
+	[OP_THUNK] = {"THUNK", &modeThunk},
 	//[] = {"", &modeSimple},
 };
 

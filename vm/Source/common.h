@@ -377,6 +377,7 @@ typedef enum {
 
 	OP_FIELD,
 	OP_SNOC,
+	OP_THUNK,
 	
 	NR_OPCODES,
 } OpCode;
