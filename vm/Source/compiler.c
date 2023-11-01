@@ -17,6 +17,7 @@ static Table lexicon;
 
 
 static void parse_function_block();
+static void parse_thunk();
 
 
 
@@ -99,10 +100,6 @@ static void initCompiler() {
 	push_new_scope(NULL);
 }
 
-static bool finished() { return parser.current.type == TOKEN_EOF; }
-
-
-
 
 static void perform_word(Value value) {
 	if (value.type == VAL_ENUM) {
@@ -119,7 +116,6 @@ static void perform_word(Value value) {
 
 
 static void parse_one_instruction() {
-	advance();
 	uint32_t hash = hashString(parser.previous.start, parser.previous.length);
 	Entry *entry = tableFindString(&lexicon, parser.previous.start, parser.previous.length, hash);
 	if (entry == NULL) error("bogus code");
@@ -128,8 +124,9 @@ static void parse_one_instruction() {
 
 static void parse_instructions() {
 	for(;;) {
-		if (predictToken(TOKEN_NAME)) parse_one_instruction();
+		if (maybe_token(TOKEN_NAME)) parse_one_instruction();
 		else if (predictToken(TOKEN_LEFT_BRACE)) parse_function_block();
+		else if (maybe_token(TOKEN_LEFT_BRACKET)) parse_thunk();
 		else break;
 	}
 }
@@ -139,12 +136,8 @@ static void checkSizeLimits() {
 	if (current->chunk.constants.cnt > UINT8_MAX) error("function has too many constants");
 }
 
-static Function *parse_single_function() {
-	// The function's name goes in the first constant entry.
-	// That way the right garbage collection things happen automatically.
-	advance();
-	byte arity = parseByte("arity");
-	appendValueArray(&current->chunk.constants, GC_VAL(parseString()));
+static Function *parse_rest_of_function(byte arity, String *name) {
+	appendValueArray(&current->chunk.constants, GC_VAL(name));
 	parse_instructions();
 	emit(OP_PANIC);
 	checkSizeLimits();
@@ -153,14 +146,40 @@ static Function *parse_single_function() {
 	Function *function = newFunction(TYPE_FUNCTION, &current->chunk, arity, nr_captures);
 	// NB: current->chunk has just been re-initialized because the new function now owns the former contents of the chunk.
 	for (int index = 0; index < nr_captures; index++) {
-		byte is_local = predictToken(TOKEN_NAME);
-		if (is_local) consume(TOKEN_NAME, "");
-		function->captures[index] = (Capture){ .is_local = is_local, .offset = parseByte("Capture") };
+		if (maybe_token(TOKEN_STAR)) {
+			function->captures[index] = (Capture){ .is_local = true, .offset=0 };
+		}
+		else {
+			byte is_local = predictToken(TOKEN_NAME);
+			if (is_local) consume(TOKEN_NAME, "");
+			function->captures[index] = (Capture){ .is_local = is_local, .offset = parseByte("Capture") };
+		}
 	}
 #ifdef DEBUG_PRINT_CODE
 	disassembleChunk(&function->chunk, name_of_function(function)->text);
 #endif
 	return function;
+}
+
+static void parse_thunk() {
+	emit(OP_THUNK);
+	emit((byte)current->chunk.constants.cnt);
+
+	Scope *outer = current;
+	push_new_scope(outer);
+	Function *function = parse_rest_of_function(0, import_C_string("<thunk>", 7));
+	appendValueArray(&outer->chunk.constants, GC_VAL(function));
+	consume(TOKEN_RIGHT_BRACKET, "expected right-bracket.");
+	pop_scope();
+}
+
+static Function *parse_normal_function() {
+	// The function's name goes in the first constant entry.
+	// That way the right garbage collection things happen automatically.
+	advance();
+	byte arity = parseByte("arity");
+	String *name = parseString();
+	return parse_rest_of_function(arity, name);
 }
 
 static void parse_function_block() {
@@ -173,7 +192,7 @@ static void parse_function_block() {
 	int fn_count = 0;
 	do {
 		fn_count++;
-		Function *function = parse_single_function();
+		Function *function = parse_normal_function();
 		appendValueArray(&outer->chunk.constants, GC_VAL(function));
 	} while (predictToken(TOKEN_SEMICOLON));
 	consume(TOKEN_RIGHT_BRACE, "expected semicolon or right-brace.");
@@ -190,7 +209,7 @@ static Closure *closure_for_global(Function *function) {
 
 static void parse_global_functions() {
 	do {
-		Closure *closure = closure_for_global(parse_single_function());
+		Closure *closure = closure_for_global(parse_normal_function());
 		defineGlobal(name_of_function(closure->function), GC_VAL(closure));
 	} while (predictToken(TOKEN_SEMICOLON));
 	consume(TOKEN_RIGHT_BRACE, "expected semicolon or right-brace.");

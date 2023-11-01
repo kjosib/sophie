@@ -16,7 +16,7 @@ The static-depth information will be useful for look-up operations.
 
 """
 
-from typing import Iterable
+from typing import Iterable, Optional
 from boozetools.support.foundation import Visitor
 from . import syntax, ontology
 from .resolution import RoadMap
@@ -72,7 +72,7 @@ class VMScope:
 	def capture(self, symbol: ontology.Symbol) -> bool:
 		raise NotImplementedError(type(self))
 
-	def emit_captured(self, captives: list[ontology.Symbol]):
+	def emit_captured(self, captives: list[Optional[ontology.Symbol]]):
 		raise NotImplementedError(type(self))
 
 	def declare(self, symbol: ontology.Symbol):
@@ -93,13 +93,16 @@ class VMGlobalScope(VMScope):
 class VMFunctionScope(VMScope):
 	""" Encapsulates VM mechanics around the stack, parameters, closure capture, jumps, etc. """
 	
-	def __init__(self, outer:VMScope):
+	def __init__(self, outer:VMScope, is_thunk:bool):
 		self._outer = outer
 		self.indent = outer.indent+"  "
 		self._local = {}
 		self._children = []
 		self._captives = {}
 		self._depth = 0
+		if is_thunk:
+			# In position zero...
+			self._captives[None] = 0
 	
 	def depth(self): return self._depth
 	def _pop(self):
@@ -205,6 +208,8 @@ class VMFunctionScope(VMScope):
 		for sym in captives:
 			if sym in self._local:
 				emit("L", self._local[sym])
+			elif sym is None:
+				emit("*")
 			else:
 				emit(self._captives[sym])
 	
@@ -259,7 +264,7 @@ class VMFunctionScope(VMScope):
 	def make_thunk(self, xlat, expr):
 		# Implicitly becomes a THUNK instruction:
 		emit("[")
-		inner = VMFunctionScope(self)
+		inner = VMFunctionScope(self, True)
 		xlat.force(expr, inner)
 		inner.emit_snap()
 		inner.emit_epilogue()
@@ -308,7 +313,7 @@ class Translation(Visitor):
 			self.write_functions(module.outer_functions, root)
 		
 		# Write all begin-expressions:
-		scope = VMFunctionScope(root)
+		scope = VMFunctionScope(root, False)
 		self.visit_Module(roadmap.preamble, scope)
 		for module in roadmap.each_module:
 			self.visit_Module(module, scope)
@@ -345,7 +350,7 @@ class Translation(Visitor):
 		emit("{")
 		last = fns[-1]
 		for fn in fns:
-			inner = VMFunctionScope(outer)
+			inner = VMFunctionScope(outer, False)
 			self.write_one_function(fn, inner)
 			emit("}" if fn is last else ";")
 		outer.nl()

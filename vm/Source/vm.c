@@ -150,16 +150,17 @@ static double fib(double n) {
 
 #define CONSTANT(index) (CLOSURE->function->chunk.constants.at[index])
 
-static void capture_closure(Closure *closure) {
+static void capture_closure(Closure *closure, int first) {
 	// Precondition: *closure points to a fresh Closure object with no captures.
 	Function *fn = closure->function;
-	for (int index = 0; index < fn->nr_captures; index++) {
+	for (int index = first; index < fn->nr_captures; index++) {
 		Capture capture = fn->captures[index];
 		Value *capture_base = capture.is_local ? vm.frame->base : CLOSURE->captives;
 		closure->captives[index] = capture_base[capture.offset];
 	}
 	// Postcondition: Captures have been copied per directives in *closure's function.
 }
+
 
 static void push_global(String *key) {
 	if (tableGet(&vm.globals, key, vm.stackTop)) {
@@ -223,7 +224,16 @@ dispatch:
 			memcpy(base, &CONSTANT(constant_index), sizeof(Value) * nr_closures);
 			vm.stackTop += nr_closures;
 			for (int index = 0; index < nr_closures; index++) close_function(&base[index]);
-			for (int index = 0; index < nr_closures; index++) capture_closure(base[index].as.ptr);
+			for (int index = 0; index < nr_closures; index++) capture_closure(base[index].as.ptr, 0);
+			NEXT;
+		}
+		case OP_THUNK: {
+			int constant_index = READ_BYTE();
+			push(CONSTANT(constant_index));
+			close_function(&TOP);
+			((Closure *)(TOP.as.ptr))->captives[0] = NIL_VAL;
+			capture_closure(TOP.as.ptr, 1);
+			TOP.type = VAL_THUNK;
 			NEXT;
 		}
 		case OP_NIL: push_global(nil); NEXT;
@@ -283,7 +293,7 @@ dispatch:
 				Closure *thunk = TOP.as.ptr;
 				if (IS_NIL(thunk->captives[0])) { // Thunk has yet to be evaluated.
 					vm.frame->ip = vpc;     // Standard calling sequence.
-					thunk->header.kind->call();
+					enter_closure(thunk);
 					vpc = vm.frame->ip;
 				}
 				else TOP = thunk->captives[0];
