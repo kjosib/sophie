@@ -483,7 +483,7 @@ class Translation(Visitor):
 		pass
 	
 	def visit_FieldReference(self, fr:syntax.FieldReference, scope:VMFunctionScope):
-		self.visit(fr.lhs, scope, False)
+		self.force(fr.lhs, scope)
 		scope.emit_field(fr.field_name.key())
 
 	def visit_ExplicitList(self, el:syntax.ExplicitList, scope:VMFunctionScope):
