@@ -47,8 +47,8 @@ INSTRUCTION_FOR = {
 }
 
 SHORTCUTS = {
-	"LogicalAnd" : "JF",
-	"LogicalOr" : "JT",
+	"LogicalAnd" : False,
+	"LogicalOr" : True,
 }
 
 def emit(*xs):
@@ -153,8 +153,8 @@ class VMFunctionScope(VMScope):
 			self._captives[symbol] = len(self._captives)
 			return True
 		
-	def jump_if(self, ins):
-		emit(ins)
+	def jump_if(self, when:bool):
+		emit("JT" if when else "JF")
 		label = self.emit_hole()
 		self._pop()
 		return label
@@ -289,7 +289,7 @@ def might_be_a_thunk(expr: syntax.Expr):
 	return isinstance(expr, syntax.FieldReference) or (isinstance(expr, syntax.Lookup) and isinstance(expr.ref.dfn, syntax.FormalParameter))
 
 def handles_tails(expr: syntax.Expr):
-	return isinstance(expr, (syntax.Lookup, syntax.Call, syntax.Cond, syntax.MatchExpr))
+	return isinstance(expr, (syntax.Lookup, syntax.Call, syntax.ShortCutExp, syntax.Cond, syntax.MatchExpr))
 
 class Translation(Visitor):
 	def __init__(self):
@@ -410,11 +410,17 @@ class Translation(Visitor):
 		self.force(it.rhs, scope)
 		scope.emit_ALU(it.glyph)
 	
-	def visit_ShortCutExp(self, it: syntax.ShortCutExp, scope:VMFunctionScope):
+	def visit_ShortCutExp(self, it: syntax.ShortCutExp, scope:VMFunctionScope, tail:bool):
 		self.force(it.lhs, scope)
-		label = scope.jump_if(SHORTCUTS[it.glyph])
-		self.force(it.rhs, scope)
-		scope.come_from(label)
+		satisfied = SHORTCUTS[it.glyph]
+		label = scope.jump_if(satisfied)
+		if tail:
+			self.tail_call(it.rhs, scope)
+			scope.come_from(label)
+			scope.emit_return()
+		else:
+			self.force(it.rhs, scope)
+			scope.come_from(label)
 	
 	def visit_UnaryExp(self, ux:syntax.UnaryExp, scope:VMFunctionScope):
 		self.force(ux.arg, scope)
@@ -432,7 +438,7 @@ class Translation(Visitor):
 	
 	def visit_Cond(self, cond:syntax.Cond, scope:VMFunctionScope, tail:bool):
 		self.force(cond.if_part, scope)
-		label_else = scope.jump_if("JF")
+		label_else = scope.jump_if(False)
 		if tail:
 			self.tail_call(cond.then_part, scope)
 			scope.come_from(label_else)
