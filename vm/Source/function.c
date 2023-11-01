@@ -25,14 +25,16 @@ static void blacken_function(Function *function) { darkenChunk(&function->chunk)
 
 static size_t size_function(Function *function) { return sizeof(Function) + function->nr_captures * sizeof(Capture); }
 
-
-static void call_closure() {
-	Closure *closure = (Closure*)(pop().as.ptr);
+void enter_closure(Closure *closure) {
 	if (vm.frame == &vm.frame[FRAMES_MAX]) crashAndBurn("Call depth exceeded");
 	vm.frame++;
 	vm.frame->closure = closure;
 	vm.frame->ip = closure->function->chunk.code.at;
 	vm.frame->base = vm.stackTop - closure->function->arity;
+}
+
+static void call_closure() {
+	enter_closure(pop().as.ptr);
 }
 
 static void exec_closure() {
@@ -126,8 +128,7 @@ void close_function(Value *stack_slot) {
 	// Potentially several peers could refer to each other,
 	// so this can't capture yet.
 	// We do, however, need to clear out the captives array right quick to avoid confounding the garbage collector.
-	Function *fn = stack_slot->as.ptr;
-	size_t capture_size = sizeof(Value) * fn->nr_captures;
+	size_t capture_size = sizeof(Value) * ((Function *)(stack_slot->as.ptr))->nr_captures;
 	Closure *closure = gc_allocate(&KIND_Closure, sizeof(Closure) + capture_size);
 	// fn is now invalid, as there's been a collection
 	closure->function = stack_slot->as.ptr;
@@ -142,5 +143,4 @@ Native *newNative(byte arity, NativeFn function) {
 	native->name = NULL;
 	return native;
 }
-
 

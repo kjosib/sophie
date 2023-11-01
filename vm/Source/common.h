@@ -248,6 +248,7 @@ typedef struct {
 	Value captives[];
 } Closure;
 
+void enter_closure(Closure *closure);
 void close_function(Value *stack_slot);
 Function *newFunction(FunctionType fn_type, Chunk *chunk, byte arity, byte nr_captures);
 Native *newNative(byte arity, NativeFn function);
@@ -282,6 +283,7 @@ typedef enum {
 	TOKEN_PIPE,
 	TOKEN_LEFT_PAREN, TOKEN_RIGHT_PAREN,
 	TOKEN_LEFT_BRACE, TOKEN_RIGHT_BRACE,
+	TOKEN_LEFT_BRACKET, TOKEN_RIGHT_BRACKET,
 	TOKEN_COMMA, TOKEN_DOT, TOKEN_MINUS, TOKEN_PLUS,
 	TOKEN_SEMICOLON, TOKEN_SLASH, TOKEN_STAR,
 	// One or two character tokens.
