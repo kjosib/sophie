@@ -25,24 +25,28 @@ class TooComplicated(Exception):
 	pass
 
 INSTRUCTION_FOR = {
-	'PowerOf': 'POW',
-	'Mul': 'MUL',
-	'FloatDiv': 'DIV',
-	'IntDiv': 'IDIV',
-	'FloatMod': 'MOD',
-	'IntMod': 'IMOD',
-	'Add': 'ADD',
-	'Sub': 'SUB',
-	'EQ': 'EQ',
-	'NE': 'EQ NOT',
-	'LT': 'LT',
-	'LE': 'GT NOT',
-	'GT': 'GT',
-	'GE': 'LT NOT',
-	True: 'TRUE',
-	False: 'FALSE',
-	"Negative" : "NEG",
-	"LogicalNot" : "NOT",
+	# glyph : (opcode, stack-effect)
+	'PowerOf': ("POW", -1),
+	'Mul': ("MUL", -1),
+	'FloatDiv': ("DIV", -1),
+	'IntDiv': ("IDIV", -1),
+	'FloatMod': ("MOD", -1),
+	'IntMod': ("IMOD", -1),
+	'Add': ("ADD", -1),
+	'Sub': ("SUB", -1),
+	'EQ': ("EQ", -1),
+	'NE': ("EQ NOT", -1),
+	'LT': ("LT", -1),
+	'LE': ("GT NOT", -1),
+	'GT': ("GT", -1),
+	'GE': ("LT NOT", -1),
+	True: ("TRUE", 1),
+	False: ("FALSE", 1),
+	"Negative" : ("NEG", 0),
+	"LogicalNot" : ("NOT", 0),
+}
+
+SHORTCUTS = {
 	"LogicalAnd" : "JF",
 	"LogicalOr" : "JT",
 }
@@ -52,9 +56,6 @@ def emit(*xs):
 def quote(x):
 	assert '"' not in x
 	return '"'+x+'"'
-def post(tail):
-	if tail:
-		emit("RETURN")
 
 LABEL_QUEUE = list(reversed(range(4096)))
 LABEL_MAP = {}
@@ -101,13 +102,14 @@ class VMFunctionScope(VMScope):
 		self._depth = 0
 	
 	def depth(self): return self._depth
-	def reset(self, depth): self._depth = depth
-	def pop(self): self._depth -= 1
-	def push(self): self._depth += 1
-	
+	def _pop(self):
+		self._depth -= 1
+	def _push(self):
+		self._depth += 1
+
 	def declare(self, symbol: ontology.Symbol):
 		self.alias(symbol)
-		self.push()
+		self._push()
 	
 	def alias(self, symbol: ontology.Symbol):
 		"""
@@ -129,11 +131,11 @@ class VMFunctionScope(VMScope):
 			emit("CAPTIVE", self._captives[symbol])
 		else:
 			emit("GLOBAL", quote(symbol.nom.text))
-		self.push()
+		self._push()
 
 	def constant(self, value):
 		if isinstance(value, bool):
-			emit(INSTRUCTION_FOR[value])
+			self.emit_ALU(value)
 		else:
 			emit("CONST")
 			if isinstance(value, str):
@@ -142,7 +144,7 @@ class VMFunctionScope(VMScope):
 				emit(value)
 			else:
 				assert False
-		self.push()
+		self._push()
 
 	def capture(self, symbol: ontology.Symbol) -> bool:
 		if symbol in self._local or symbol in self._captives:
@@ -151,9 +153,17 @@ class VMFunctionScope(VMScope):
 			self._captives[symbol] = len(self._captives)
 			return True
 		
-	def jump(self, ins):
+	def jump_if(self, ins):
 		emit(ins)
-		return self.emit_hole()
+		label = self.emit_hole()
+		self._pop()
+		return label
+		
+	def jump_always(self):
+		emit("JMP")
+		label = self.emit_hole()
+		self._depth = None
+		return label
 	
 	def cases(self, nr_cases):
 		emit("CASE")
@@ -168,7 +178,10 @@ class VMFunctionScope(VMScope):
 	def come_from(self, label):
 		(source, depth) = LABEL_MAP.pop(label)
 		assert source is self, "Improper Come-From"
-		self.reset(depth)
+		if self._depth is None:
+			self._depth = depth
+		else:
+			assert self._depth == depth, "Inconsistent Come-From %d != %d"%(self._depth, depth)
 		emit("come_from", label)
 		LABEL_QUEUE.append(label)
 
@@ -198,13 +211,13 @@ class VMFunctionScope(VMScope):
 	def display(self):
 		assert self._depth == 1, self.depth()
 		emit("DISPLAY")
-		self.pop()
+		self._pop()
 	
 	def ascend_to(self, depth:int):
 		assert self._depth >= depth
 		if self._depth > depth:
 			emit("ASCEND", self._depth - depth)
-			self.reset(depth)
+			self._depth = depth
 	
 	def emit_call(self, tail, arity):
 		if tail:
@@ -213,6 +226,45 @@ class VMFunctionScope(VMScope):
 		else:
 			emit("CALL")
 			self._depth -= arity
+	
+	def emit_pop(self):
+		emit("POP")
+		self._pop()
+
+	def emit_return(self):
+		emit("RETURN")
+		self._depth = None
+
+	def emit_snap(self):
+		emit("SNAP")
+		self._depth = None
+	
+	def emit_nil(self):
+		emit("NIL")
+		self._push()
+	
+	def emit_snoc(self):
+		emit("SNOC")
+		self._pop()
+
+	@staticmethod
+	def emit_field(key):
+		emit("FIELD", quote(key))
+	
+	def emit_ALU(self, glyph):
+		opcode, stack_effect = INSTRUCTION_FOR[glyph]
+		emit(opcode)
+		self._depth += stack_effect
+	
+	def make_thunk(self, xlat, expr):
+		# Implicitly becomes a THUNK instruction:
+		emit("[")
+		inner = VMFunctionScope(self)
+		xlat.force(expr, inner)
+		inner.emit_snap()
+		inner.emit_epilogue()
+		emit("]")
+		self._push()
 
 def write_record(names:Iterable[str], nom:ontology.Nom, tag:int):
 	emit("(")
@@ -233,7 +285,11 @@ def close_structure(nom:ontology.Nom, tag:int):
 	emit(")")
 	print()
 
+def might_be_a_thunk(expr: syntax.Expr):
+	return isinstance(expr, syntax.FieldReference) or (isinstance(expr, syntax.Lookup) and isinstance(expr.ref.dfn, syntax.FormalParameter))
 
+def handles_tails(expr: syntax.Expr):
+	return isinstance(expr, (syntax.Lookup, syntax.Call, syntax.Cond, syntax.MatchExpr))
 
 class Translation(Visitor):
 	def __init__(self):
@@ -298,88 +354,100 @@ class Translation(Visitor):
 		inner.nl()
 		inner.emit_preamble(fn)
 		self.write_functions(fn.where, inner)
-		self.visit(fn.expr, inner, True)
+		self.tail_call(fn.expr, inner)
 		inner.emit_epilogue()
+	
+	def delay(self, expr:syntax.Expr, scope:VMFunctionScope):
+		"""
+		Similar policy (for now) to the version in the simple evaluator:
+		Literals and references/look-ups do not get thunked.
+		However, the latter may already refer to a thunk in certain cases.
+		"""
+		if isinstance(expr, syntax.Literal):
+			self.visit(expr, scope)
+		elif isinstance(expr, syntax.Lookup):
+			self.visit(expr, scope, False)
+		else:
+			scope.make_thunk(self, expr)
+	
+	def force(self, expr:syntax.Expr, scope:VMFunctionScope):
+		"""
+		Respond to the fact that params and fields may harbor thunks.
+		"""
+		if handles_tails(expr):
+			self.visit(expr, scope, False)
+		else:
+			self.visit(expr, scope)
+		if might_be_a_thunk(expr):
+			emit("FORCE")
+	
+	def tail_call(self, expr:syntax.Expr, scope:VMFunctionScope):
+		if handles_tails(expr):
+			self.visit(expr, scope, True)
+		else:
+			self.visit(expr, scope)
+			if might_be_a_thunk(expr): emit("FORCE")
+			scope.emit_return()
 
-	def write_begin_expression(self, expr, scope:VMFunctionScope):
+	def write_begin_expression(self, expr:syntax.Expr, scope:VMFunctionScope):
 		scope.nl()
-		self.visit(expr, scope, False)
+		self.force(expr, scope)
 		scope.display()
 	
-	def visit_Lookup(self, lu:syntax.Lookup, scope:VMFunctionScope, tail:bool):
-		self.visit(lu.ref, scope, tail)
-
 	@staticmethod
-	def visit_PlainReference(ref:syntax.PlainReference, scope:VMFunctionScope, tail:bool):
-		sym = ref.dfn
+	def visit_Lookup(lu:syntax.Lookup, scope:VMFunctionScope, tail:bool):
+		sym = lu.ref.dfn
 		scope.load(sym)
 		if isinstance(sym, syntax.UserFunction) and not sym.params:
 			scope.emit_call(tail, 0)
-		else:
-			post(tail)
+		elif tail:
+			if isinstance(sym, syntax.FormalParameter):
+				emit("FORCE")
+			scope.emit_return()
 
-	def visit_BinExp(self, it: syntax.BinExp, scope:VMFunctionScope, tail:bool):
-		self.visit(it.lhs, scope, False)
-		self.visit(it.rhs, scope, False)
-		emit(INSTRUCTION_FOR[it.glyph])
-		scope.pop()
-		post(tail)
+	def visit_BinExp(self, it: syntax.BinExp, scope:VMFunctionScope):
+		self.force(it.lhs, scope)
+		self.force(it.rhs, scope)
+		scope.emit_ALU(it.glyph)
 	
-	def visit_ShortCutExp(self, it: syntax.ShortCutExp, scope:VMFunctionScope, tail:bool):
-		self.visit(it.lhs, scope, False)
-		label = scope.jump(INSTRUCTION_FOR[it.glyph])
-		scope.pop()
-		self.visit(it.rhs, scope, False)
+	def visit_ShortCutExp(self, it: syntax.ShortCutExp, scope:VMFunctionScope):
+		self.force(it.lhs, scope)
+		label = scope.jump_if(SHORTCUTS[it.glyph])
+		self.force(it.rhs, scope)
 		scope.come_from(label)
-		post(tail)
 	
-	def visit_UnaryExp(self, ux:syntax.UnaryExp, scope:VMFunctionScope, tail:bool):
-		self.visit(ux.arg, scope, False)
-		emit(INSTRUCTION_FOR[ux.glyph])
-		post(tail)
+	def visit_UnaryExp(self, ux:syntax.UnaryExp, scope:VMFunctionScope):
+		self.force(ux.arg, scope)
+		scope.emit_ALU(ux.glyph)
 
 	@staticmethod
-	def visit_Literal(l:syntax.Literal, scope:VMFunctionScope, tail:bool):
+	def visit_Literal(l:syntax.Literal, scope:VMFunctionScope):
 		scope.constant(l.value)
-		post(tail)
 
 	def visit_Call(self, call:syntax.Call, scope:VMFunctionScope, tail:bool):
-		# Order of operations here is meaningless because it must be pure.
-		# Sort of.
-		depth = scope.depth()
 		for arg in call.args:
-			self.visit(arg, scope, False)
-		self.visit(call.fn_exp, scope, False)
+			self.delay(arg, scope)
+		self.force(call.fn_exp, scope)
 		scope.emit_call(tail, len(call.args))
-		scope.reset(depth)
-		scope.push()
-
+	
 	def visit_Cond(self, cond:syntax.Cond, scope:VMFunctionScope, tail:bool):
-		# This is super-simplistic for now.
-		# It just has to work, not be hyper-optimized.
-		depth = scope.depth()
-		self.visit(cond.if_part, scope, False)
-		assert scope.depth() == depth + 1
-		
-		label_else = scope.jump("JF")
-		scope.pop()
-		self.visit(cond.then_part, scope, tail)
+		self.force(cond.if_part, scope)
+		label_else = scope.jump_if("JF")
 		if tail:
+			self.tail_call(cond.then_part, scope)
 			scope.come_from(label_else)
-			self.visit(cond.else_part, scope, True)
-		
+			self.tail_call(cond.else_part, scope)
 		else:
-			assert scope.depth() == depth + 1
-			after = scope.jump("JMP")
+			self.force(cond.then_part, scope)
+			after = scope.jump_always()
 			scope.come_from(label_else)
-			emit("POP")
-			scope.pop()
-			self.visit(cond.else_part, scope, False)
+			scope.emit_pop()
+			self.force(cond.else_part, scope)
 			scope.come_from(after)
 
 	def visit_MatchExpr(self, mx:syntax.MatchExpr, scope:VMFunctionScope, tail:bool):
 		scope.alias(mx.subject)
-		self.visit(mx.subject.expr, scope, False)
+		self.force(mx.subject.expr, scope)
 		depth = scope.depth()
 		nr_cases = len(mx.variant.subtypes)
 		cases = scope.cases(nr_cases)
@@ -389,32 +457,31 @@ class Translation(Visitor):
 			scope.come_from(cases[tag])
 			cases[tag] = None
 			self.write_functions(alt.where, scope)
-			self.visit(alt.sub_expr, scope, tail)
-			if not tail:
+			if tail:
+				self.tail_call(alt.sub_expr, scope)
+			else:
+				self.force(alt.sub_expr, scope)
 				scope.ascend_to(depth)
-				after.append(scope.jump("JMP"))
+				after.append(scope.jump_always())
 		if mx.otherwise is not None:
 			for tag, label in enumerate(cases):
 				if label is not None:
 					scope.come_from(label)
-			self.visit(mx.otherwise, scope, tail)
-			if not tail:
+			if tail:
+				self.tail_call(mx.otherwise, scope)
+			else:
+				self.force(mx.otherwise, scope)
 				scope.ascend_to(depth)
 		for label in after:
 			scope.come_from(label)
 		pass
 	
-	def visit_FieldReference(self, fr:syntax.FieldReference, scope:VMFunctionScope, tail:bool):
+	def visit_FieldReference(self, fr:syntax.FieldReference, scope:VMFunctionScope):
 		self.visit(fr.lhs, scope, False)
-		emit("FIELD")
-		emit(quote(fr.field_name.key()))
-		post(tail)
+		scope.emit_field(fr.field_name.key())
 
-	def visit_ExplicitList(self, el:syntax.ExplicitList, scope:VMFunctionScope, tail:bool):
-		emit("NIL")
-		scope.push()
+	def visit_ExplicitList(self, el:syntax.ExplicitList, scope:VMFunctionScope):
+		scope.emit_nil()
 		for item in reversed(el.elts):
-			self.visit(item, scope, False)
-			emit("SNOC")
-			scope.pop()
-		post(tail)
+			self.delay(item, scope)
+			scope.emit_snoc()
