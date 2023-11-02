@@ -17,6 +17,8 @@ Tombstones are as key=NULL and value TRUE.
 
 DEFINE_VECTOR_CODE(Table, Entry)
 
+#define WRAP(index, capacity) ( (index) & ( (capacity) -1 ) )
+
 static Entry *findEntry(Entry *entries, size_t capacity, String *key) {
 	/*
 	Implementation Notes:
@@ -28,7 +30,7 @@ static Entry *findEntry(Entry *entries, size_t capacity, String *key) {
 	(Hypothesis: Churn on the data bus.)
 	*/
 
-	size_t index = key->hash % capacity;
+	size_t index = WRAP(key->hash, capacity);
 	Entry *tombstone = NULL;
 
 	for (;;) {
@@ -48,7 +50,7 @@ static Entry *findEntry(Entry *entries, size_t capacity, String *key) {
 			return entry;
 		}
 
-		index = (index + 1) % capacity;
+		index = WRAP(index + 1, capacity);
 	}
 }
 
@@ -129,7 +131,7 @@ void tableAddAll(Table *from, Table *to) {
 Entry *tableFindString(Table *table, const char *chars, size_t length, uint32_t hash) {
 	if (table->cnt == 0) return NULL;
 
-	size_t index = hash % table->cap;
+	size_t index = WRAP(hash, table->cap);
 	for (;;) {
 		Entry *entry = &table->at[index];
 		if (entry->key == NULL) {
@@ -143,7 +145,7 @@ Entry *tableFindString(Table *table, const char *chars, size_t length, uint32_t 
 			return entry;
 		}
 
-		index = (index + 1) % table->cap;
+		index = WRAP(index + 1, table->cap);
 	}
 }
 
