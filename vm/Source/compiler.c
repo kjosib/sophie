@@ -201,7 +201,6 @@ static void parse_function_block() {
 }
 
 static Closure *closure_for_global(Function *function) {
-	if (function->nr_captures) error("Global functions cannot have captures!");
 	push(CLOSURE_VAL(function));
 	close_function(&TOP);
 	return pop().as.ptr;

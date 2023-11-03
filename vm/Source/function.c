@@ -62,6 +62,6 @@ void close_function(Value *stack_slot) {
 	// fn is now invalid, as there's been a collection
 	closure->function = stack_slot->as.ptr;
 	memset(closure->captives, 0, capture_size);
-	*stack_slot = CLOSURE_VAL(closure);
+	*stack_slot = closure->function->arity ? CLOSURE_VAL(closure) : THUNK_VAL(closure);
 }
 

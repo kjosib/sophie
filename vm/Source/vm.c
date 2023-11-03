@@ -93,10 +93,12 @@ __declspec(noreturn) void runtimeError(byte *vpc, Value *base, const char *forma
 
 static inline bool isTwoNumbers() { return IS_NUMBER(TOP) && IS_NUMBER(SND); }
 
-static void capture_closure(Closure *closure, int first, Value *base) {
+static void capture_closure(Closure *closure, Value *base) {
 	// Precondition: *closure points to a fresh Closure object with no captures.
 	Function *fn = closure->function;
-	for (int index = first; index < fn->nr_captures; index++) {
+	int index = 0;
+	if (!fn->arity) closure->captives[index++] = NIL_VAL;
+	for (; index < fn->nr_captures; index++) {
 		Capture capture = fn->captures[index];
 		Value *capture_base = capture.is_local ? base : CLOSURE->captives;
 		closure->captives[index] = capture_base[capture.offset];
@@ -181,15 +183,13 @@ dispatch:
 			memcpy(slot, constants+constant_index, sizeof(Value) * nr_closures);
 			vm.stackTop += nr_closures;
 			for (int index = 0; index < nr_closures; index++) close_function(&slot[index]);
-			for (int index = 0; index < nr_closures; index++) capture_closure(AS_CLOSURE(slot[index]), 0, base);
+			for (int index = 0; index < nr_closures; index++) capture_closure(AS_CLOSURE(slot[index]), base);
 			NEXT;
 		}
 		case OP_THUNK: {
 			push(constants[READ_BYTE()]);
 			close_function(&TOP);
-			AS_CLOSURE(TOP)->captives[0] = NIL_VAL;
-			capture_closure(AS_CLOSURE(TOP), 1, base);
-			TOP.type = VAL_THUNK;
+			capture_closure(AS_CLOSURE(TOP), base);
 			NEXT;
 		}
 		case OP_NIL: push_global(nil); NEXT;
@@ -234,7 +234,7 @@ dispatch:
 			}
 			NEXT;
 		case OP_EXEC:
-			if (IS_CLOSURE(TOP)) {
+			if (IS_CLOSURE(TOP) | IS_THUNK(TOP)) {
 				Closure *subsequent = vm.trace->closure = AS_CLOSURE(pop());
 				constants = subsequent->function->chunk.constants.at;
 				vpc = subsequent->function->chunk.code.at;
