@@ -91,17 +91,6 @@ __declspec(noreturn) void runtimeError(byte *vpc, Value *base, const char *forma
 }
 
 
-static void concatenate() {
-	String *dst = new_String(AS_STRING(SND)->length + AS_STRING(TOP)->length);
-	// Allocation took place: Refresh pointers.
-	String *a = AS_STRING(SND);
-	String *b = AS_STRING(TOP);
-	memcpy(dst->text, a->text, a->length);
-	memcpy(dst->text + a->length, b->text, b->length);
-	SND.as.ptr = intern_String(dst);
-	pop();
-}
-
 static inline bool isTwoNumbers() { return IS_NUMBER(TOP) && IS_NUMBER(SND); }
 
 static void capture_closure(Closure *closure, int first, Value *base) {
@@ -213,7 +202,7 @@ dispatch:
 		case OP_GREATER:  BINARY_OP(BOOL_VAL, > );
 		case OP_LESS:     BINARY_OP(BOOL_VAL, < );
 		case OP_POWER:
-				SND = NUMBER_VAL(pow(AS_NUMBER(SND), AS_NUMBER(TOP)));
+				SND = NUMBER_VAL(pow(num(SND), num(TOP)));
 				pop();
 				NEXT;
 		case OP_MULTIPLY: BINARY_OP(NUMBER_VAL, * );
@@ -224,7 +213,7 @@ dispatch:
 			TOP = BOOL_VAL(!AS_BOOL(TOP));
 			NEXT;
 		case OP_NEGATE:
-			TOP = NUMBER_VAL(-AS_NUMBER(TOP));
+			TOP = NUMBER_VAL(-num(TOP));
 		case OP_CALL:
 			if (IS_CLOSURE(TOP)) push(run(AS_CLOSURE(pop())));  // The callee will clean the stack.
 			else if (IS_CTOR(TOP)) {

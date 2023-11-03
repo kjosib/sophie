@@ -4,6 +4,19 @@
 
 /***********************************************************************************/
 
+
+static Value concatenate(Value *args) {
+	args[0] = force(args[0]);
+	args[1] = force(args[1]);
+	String *dst = new_String(AS_STRING(args[0])->length + AS_STRING(args[1])->length);
+	// Allocation took place: Refresh pointers.
+	String *a = AS_STRING(args[0]);
+	String *b = AS_STRING(args[1]);
+	memcpy(dst->text, a->text, a->length);
+	memcpy(dst->text + a->length, b->text, b->length);
+	return GC_VAL(intern_String(dst));
+}
+
 static Value clock_native(Value *args) {
 	return NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
 }
@@ -61,6 +74,7 @@ void install_native_functions() {
 	defineNative("abs", 1, abs_native);
 	defineNative("sqrt", 1, sqrt_native);
 	defineNative("fib_native", 1, fib_native);
+	defineNative("strcat", 2, concatenate);
 #ifdef DEBUG_PRINT_GLOBALS
 	tableDump(&vm.globals);
 #endif // DEBUG_PRINT_GLOBALS
