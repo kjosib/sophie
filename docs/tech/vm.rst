@@ -697,3 +697,20 @@ I think the next semantic to port would be :doc:`lazy evaluation <lazy>`.
 Without :doc:`strictness analysis <strict>`, I expect it would slow things down considerably.
 So it will soon be time to make a strictness pass.
 
+3 November 2023
+---------------
+
+Laziness works. Mostly.
+
+There is still a small hole in the design that can sometime cause over-eager evaluation.
+But the main thing is thunks do all the right things, and you can force thunks in the FFI as needed.
+The ability to force thunks also means the VM becomes re-entrant:
+It takes a ``Closure *`` and returns a ``Value``.
+This fact will also enable call-backs from native code into Sophie code at some point.
+Right now the re-entrant-ness is a bit rough-and-ready:
+Each ``CALL`` instruction results in action on the C stack.
+
+One thing may feel left out, if you're looking from the perspective of a TCL or Python background:
+The VM has no way to signal errors. And for the foreseeable future, that's the answer.
+The code should not generate errors: They've been mostly ruled out in the type system.
+Anything left is a panic.

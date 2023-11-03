@@ -21,33 +21,31 @@ static char *readFile(const char *path) {
 	return buffer;
 }
 
-static void runFile(const char *path) {
-	char *source = readFile(path);
-	InterpretResult result = interpret(source);
-	free(source);
-
-	if (result == INTERPRET_COMPILE_ERROR) exit(65);
-	if (result == INTERPRET_RUNTIME_ERROR) exit(70);
+static void run_program(const char *path) {
+		init_gc();
+		initVM(); // This first so that the string table is initialized first, before its first sweep.
+		initLexicon();
+		install_native_functions();
+		char *source = readFile(path);
+		Closure *program = compile(source);
+		free(source);
+		// Maybe unload the compiler here and save a few bytes?
+		run(program);
+		freeVM();
 }
 
 int main(int argc, const char *argv[]) {
-	init_gc();
-	initVM(); // This first so that the string table is initialized first, before its first sweep.
-	initLexicon();
-
 	if (argc == 2) {
-		runFile(argv[1]);
+		run_program(argv[1]);
+		exit(0);
 	}
 	else {
 		fprintf(stderr, "Usage: %s /path/to/intermediate/code\n", argv[0]);
 		exit(64);
 	}
-
-	freeVM();
-	return 0;
 }
 
-void crashAndBurn(char *format, ...) {
+__declspec(noreturn) void crashAndBurn(char *format, ...) {
 	va_list args;
 	va_start(args, format);
 	fputs("\n***\n ***\n  ***   ***   Giving up because ", stderr);

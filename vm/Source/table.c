@@ -72,7 +72,7 @@ static void adjustCapacity(Table *table, size_t capacity) {
 		table->cnt++;
 	}
 
-	FREE_ARRAY(Entry, table->at, table->cap);
+	FREE_ARRAY(Entry, table->at);
 	table->at = entries;
 	table->cap = capacity;
 }
@@ -112,10 +112,10 @@ bool tableSet(Table *table, String *key, Value value) {
 	return isNewKey;
 }
 
-bool table_set_from_C(Table *table, char *text, Value value) {
+void table_set_from_C(Table *table, char *text, Value value) {
 	if (text) {
 		String *key = import_C_string(text, strlen(text));
-		return tableSet(table, key, value);
+		tableSet(table, key, value);
 	}
 }
 

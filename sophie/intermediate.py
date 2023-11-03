@@ -173,6 +173,7 @@ class VMFunctionScope(VMScope):
 		return [self.emit_hole() for _ in range(nr_cases)]
 	
 	def emit_hole(self):
+		assert self._depth is not None
 		label = LABEL_QUEUE.pop()
 		emit("hole", label)
 		LABEL_MAP[label] = (self, self._depth)
@@ -240,10 +241,6 @@ class VMFunctionScope(VMScope):
 		emit("RETURN")
 		self._depth = None
 
-	def emit_snap(self):
-		emit("SNAP")
-		self._depth = None
-	
 	def emit_nil(self):
 		emit("NIL")
 		self._push()
@@ -266,7 +263,7 @@ class VMFunctionScope(VMScope):
 		emit("[")
 		inner = VMFunctionScope(self, True)
 		xlat.force(expr, inner)
-		inner.emit_snap()
+		inner.emit_return()
 		inner.emit_epilogue()
 		emit("]")
 		self._push()
@@ -291,7 +288,10 @@ def close_structure(nom:ontology.Nom, tag:int):
 	print()
 
 def might_be_a_thunk(expr: syntax.Expr):
-	return isinstance(expr, syntax.FieldReference) or (isinstance(expr, syntax.Lookup) and isinstance(expr.ref.dfn, syntax.FormalParameter))
+	if isinstance(expr, syntax.FieldReference): return True
+	if isinstance(expr, syntax.Lookup):
+		dfn = expr.ref.dfn
+		return isinstance(dfn, syntax.FormalParameter)
 
 def handles_tails(expr: syntax.Expr):
 	return isinstance(expr, (syntax.Lookup, syntax.Call, syntax.ShortCutExp, syntax.Cond, syntax.MatchExpr))
@@ -355,7 +355,7 @@ class Translation(Visitor):
 			emit("}" if fn is last else ";")
 		outer.nl()
 
-	def write_one_function(self, fn, inner:VMFunctionScope):
+	def write_one_function(self, fn:syntax.UserFunction, inner:VMFunctionScope):
 		inner.nl()
 		inner.emit_preamble(fn)
 		self.write_functions(fn.where, inner)
@@ -369,9 +369,9 @@ class Translation(Visitor):
 		However, the latter may already refer to a thunk in certain cases.
 		"""
 		if isinstance(expr, syntax.Literal):
-			self.visit(expr, scope)
+			scope.constant(expr.value)
 		elif isinstance(expr, syntax.Lookup):
-			self.visit(expr, scope, False)
+			self.visit_Lookup(expr, scope, False, False)
 		else:
 			scope.make_thunk(self, expr)
 	
@@ -379,19 +379,27 @@ class Translation(Visitor):
 		"""
 		Respond to the fact that params and fields may harbor thunks.
 		"""
-		if handles_tails(expr):
+		if isinstance(expr, syntax.Literal):
+			scope.constant(expr.value)
+		elif isinstance(expr, syntax.Lookup):
+			self.visit_Lookup(expr, scope, False, True)
+		elif handles_tails(expr):
 			self.visit(expr, scope, False)
 		else:
 			self.visit(expr, scope)
-		if might_be_a_thunk(expr):
 			emit("FORCE")
 	
 	def tail_call(self, expr:syntax.Expr, scope:VMFunctionScope):
-		if handles_tails(expr):
+		if isinstance(expr, syntax.Literal):
+			scope.constant(expr.value)
+			scope.emit_return()
+		elif isinstance(expr, syntax.Lookup):
+			self.visit_Lookup(expr, scope, True, True)
+		elif handles_tails(expr):
 			self.visit(expr, scope, True)
 		else:
 			self.visit(expr, scope)
-			if might_be_a_thunk(expr): emit("FORCE")
+			emit("FORCE")
 			scope.emit_return()
 
 	def write_begin_expression(self, expr:syntax.Expr, scope:VMFunctionScope):
@@ -400,15 +408,17 @@ class Translation(Visitor):
 		scope.display()
 	
 	@staticmethod
-	def visit_Lookup(lu:syntax.Lookup, scope:VMFunctionScope, tail:bool):
+	def visit_Lookup(lu:syntax.Lookup, scope:VMFunctionScope, tail:bool, force:bool):
 		sym = lu.ref.dfn
 		scope.load(sym)
 		if isinstance(sym, syntax.UserFunction) and not sym.params:
 			scope.emit_call(tail, 0)
-		elif tail:
-			if isinstance(sym, syntax.FormalParameter):
+		else:
+			if force and isinstance(sym, syntax.FormalParameter):
 				emit("FORCE")
-			scope.emit_return()
+			if tail:
+				assert force
+				scope.emit_return()
 
 	def visit_BinExp(self, it: syntax.BinExp, scope:VMFunctionScope):
 		self.force(it.lhs, scope)
@@ -430,10 +440,6 @@ class Translation(Visitor):
 	def visit_UnaryExp(self, ux:syntax.UnaryExp, scope:VMFunctionScope):
 		self.force(ux.arg, scope)
 		scope.emit_ALU(ux.glyph)
-
-	@staticmethod
-	def visit_Literal(l:syntax.Literal, scope:VMFunctionScope):
-		scope.constant(l.value)
 
 	def visit_Call(self, call:syntax.Call, scope:VMFunctionScope, tail:bool):
 		for arg in call.args:

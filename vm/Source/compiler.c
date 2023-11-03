@@ -81,7 +81,8 @@ void initLexicon() {
 	table_set_from_C(&lexicon, "come_from", PTR_VAL(come_from));
 }
 
-static void push_new_scope(Scope *outer) {
+static void push_new_scope() {
+	Scope *outer = current;
 	current = malloc(sizeof(Scope));
 	if (current == NULL) crashAndBurn("oom");
 	current->outer = outer;
@@ -97,7 +98,7 @@ static void pop_scope() {
 
 static void initCompiler() {
 	memset(holes, 0, sizeof(holes));
-	push_new_scope(NULL);
+	current = NULL;
 }
 
 
@@ -137,7 +138,7 @@ static void checkSizeLimits() {
 }
 
 static Function *parse_rest_of_function(byte arity, String *name) {
-	appendValueArray(&current->chunk.constants, GC_VAL(name));
+	push(GC_VAL(name));
 	parse_instructions();
 	emit(OP_PANIC);
 	checkSizeLimits();
@@ -166,7 +167,7 @@ static void parse_thunk() {
 	emit((byte)current->chunk.constants.cnt);
 
 	Scope *outer = current;
-	push_new_scope(outer);
+	push_new_scope();
 	Function *function = parse_rest_of_function(0, import_C_string("<thunk>", 7));
 	appendValueArray(&outer->chunk.constants, GC_VAL(function));
 	consume(TOKEN_RIGHT_BRACKET, "expected right-bracket.");
@@ -178,8 +179,7 @@ static Function *parse_normal_function() {
 	// That way the right garbage collection things happen automatically.
 	advance();
 	byte arity = parseByte("arity");
-	String *name = parseString();
-	return parse_rest_of_function(arity, name);
+	return parse_rest_of_function(arity, parseString());
 }
 
 static void parse_function_block() {
@@ -188,7 +188,7 @@ static void parse_function_block() {
 	emit((byte)current->chunk.constants.cnt);
 
 	Scope *outer = current;
-	push_new_scope(outer);
+	push_new_scope();
 	int fn_count = 0;
 	do {
 		fn_count++;
@@ -202,7 +202,7 @@ static void parse_function_block() {
 
 static Closure *closure_for_global(Function *function) {
 	if (function->nr_captures) error("Global functions cannot have captures!");
-	push(GC_VAL(function));
+	push(CLOSURE_VAL(function));
 	close_function(&TOP);
 	return pop().as.ptr;
 }
@@ -210,7 +210,7 @@ static Closure *closure_for_global(Function *function) {
 static void parse_global_functions() {
 	do {
 		Closure *closure = closure_for_global(parse_normal_function());
-		defineGlobal(name_of_function(closure->function), GC_VAL(closure));
+		defineGlobal(name_of_function(closure->function), CLOSURE_VAL(closure));
 	} while (predictToken(TOKEN_SEMICOLON));
 	consume(TOKEN_RIGHT_BRACE, "expected semicolon or right-brace.");
 }
@@ -239,7 +239,7 @@ static void parse_record() {
 	Value constructor;
 	if (nr_fields) {
 		push(GC_VAL(name));
-		constructor = GC_VAL(new_constructor(tag, nr_fields));
+		constructor = CTOR_VAL(new_constructor(tag, nr_fields));
 		// new_constructor(...) pops all those strings off the VM stack,
 		// so there's no need to do it here.
 	}
@@ -257,9 +257,8 @@ static void parseScript() {
 	}
 	while (predictToken(TOKEN_LEFT_BRACE)) parse_global_functions();
 	initChunk(&current->chunk);
-	appendValueArray(&current->chunk.constants, GC_VAL(import_C_string("<script>", 8)));
 	parse_instructions();
-	emit(OP_QUIT);
+	emit(OP_RETURN);
 #ifdef DEBUG_PRINT_CODE
 	disassembleChunk(&current->chunk, "<script>");
 #endif
@@ -270,8 +269,10 @@ Closure *compile(const char *source) {
 	initScanner(source);
 	initCompiler();
 	advance();
+	push_new_scope();
 	parseScript();
 	consume(TOKEN_EOF, "expected end of file.");
+	push(GC_VAL(import_C_string("<script>", 8)));
 	Closure *closure = closure_for_global(newFunction(TYPE_SCRIPT, &current->chunk, 0, 0));
 	pop_scope();
 	return closure;

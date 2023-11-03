@@ -9,10 +9,6 @@ uint32_t hashString(const char *text, size_t length) {
 	return hash;
 }
 
-void bad_callee() {
-	crashAndBurn("Tried to call a non-callable. The type system should have prevented this.");
-}
-
 static void blacken_string(String *string) {}
 
 static size_t size_string(String *string) {
@@ -24,9 +20,8 @@ static void display_string(String *string) {
 }
 
 GC_Kind KIND_String = {
-	.call = bad_callee,
-	.exec = bad_callee,
 	.display = display_string,
+	.deeply = display_string,
 	.blacken = blacken_string,
 	.size = size_string,
 };
@@ -77,9 +72,8 @@ String *import_C_string(const char *text, size_t length) {
 }
 
 
-void printObject(GC *item) {
-	item->kind->display(item);
-}
+void printObject(GC *item) { item->kind->display(item); }
+void printObjectDeeply(GC *item) { item->kind->deeply(item); }
 
 bool is_string(void *item) {
 	return ((GC*)item)->kind == &KIND_String;

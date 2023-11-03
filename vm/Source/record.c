@@ -7,23 +7,21 @@ Support for record-types.
 #include "common.h"
 
 
-static inline size_t enough_space(int nr_fields) {
-	return sizeof(Instance) + sizeof(Value) * nr_fields;
+static void display_instance(Instance *instance) {
+	printf("{%s:%d}", instance->constructor->name->text, instance->constructor->nr_fields);
 }
 
-
-static void display_instance(Instance *instance) {
-#ifdef DEBUG_TRACE_EXECUTION
-	printf("{%s:%d}", instance->constructor->name->text, instance->constructor->nr_fields);
-#else
+static void display_instance_deeply(Instance *instance) {
 	printf("{%s:", instance->constructor->name->text);
 	int nr_fields = instance->constructor->nr_fields;
+	push(GC_VAL(instance));
 	for (int index = 0; index < nr_fields; index++) {
 		printf(" ");
-		printValue(instance->fields[index]);
+		instance = (Instance *)AS_PTR(TOP);
+		printValueDeeply(instance->fields[index]);
 	}
+	pop();
 	printf("}");
-#endif // DEBUG_TRACE_EXECUTION
 }
 
 static void blacken_instance(Instance *instance) {
@@ -32,37 +30,16 @@ static void blacken_instance(Instance *instance) {
 }
 
 static size_t size_instance(Instance *instance) {
-	return enough_space(instance->constructor->nr_fields);
+	return size_for_nr_fields(instance->constructor->nr_fields);
 }
 
 GC_Kind KIND_Instance = {
-	.call = bad_callee,
-	.exec = bad_callee,
 	.display = display_instance,
+	.deeply = display_instance_deeply,
 	.blacken = blacken_instance,
 	.size = size_instance,
 };
 
-static Instance *construct() {
-	int nr_fields = ((Constructor *)(TOP.as.ptr))->nr_fields;
-	Instance *instance = gc_allocate(&KIND_Instance, enough_space(nr_fields));
-	instance->constructor = pop().as.ptr;
-	memcpy(&instance->fields, vm.stackTop - nr_fields, sizeof(Value) * nr_fields);
-	return instance;
-}
-
-static void call_constructor() {
-	Instance *instance = construct();
-	Value *slot = vm.stackTop - instance->constructor->nr_fields;
-	*slot = GC_VAL(instance);
-	vm.stackTop = slot + 1;
-}
-
-static void exec_constructor() {
-	*vm.frame->base = GC_VAL(construct());
-	vm.stackTop = vm.frame->base + 1;
-	vm.frame--;
-}
 
 static void display_constructor(Constructor *constructor) {
 	printf("(%s/%d)", constructor->name->text, constructor->nr_fields);
@@ -78,9 +55,8 @@ static size_t size_constructor(Constructor *constructor) {
 }
 
 GC_Kind KIND_Constructor = {
-	.call = call_constructor,
-	.exec = exec_constructor,
 	.display = display_constructor,
+	.deeply = display_constructor,
 	.blacken = blacken_constructor,
 	.size = size_constructor,
 };
