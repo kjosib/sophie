@@ -255,6 +255,10 @@ class VMFunctionScope(VMScope):
 	def emit_snoc(self):
 		emit("SNOC")
 		self._pop()
+	
+	def emit_panic(self):
+		emit("PANIC")
+		self._depth = None
 
 	@staticmethod
 	def emit_field(key):
@@ -497,3 +501,7 @@ class Translation(Visitor):
 		for item in reversed(el.elts):
 			self.delay(item, scope)
 			scope.emit_snoc()
+
+	def visit_Absurdity(self, _:syntax.Absurdity, scope:VMFunctionScope):
+		scope.emit_panic()
+		
