@@ -67,15 +67,6 @@ That means ``CALL`` turns into ``EXEC`` and also prevents jumps to ``RETURN`` in
   *visit_Foo* methods. They use this to decide how to compile the relevant parts.
 
 .. note::
-    There's actually a small problem here:
-    Look-ups of zero-argument functions currently always evaluate eagerly, which is wrong.
-    Such a function, used as a parameter to another function, should be a thunk.
-    But the best solution involves a change to the VM.
-    What ought to happen is the zero-arg functions become thunks at the closure-capture stage.
-    So to evaluate these, we'd use a ``FORCE`` rather than a ``CALL``.
-    In tail-position, an ``EXEC`` instruction would have to handle thunks.
-
-.. note::
     No function can *return* a thunk. It wouldn't make sense!
     A function's return value is only computed if it's needed,
     but thunks are only appropriate when the need isn't yet clear.

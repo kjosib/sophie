@@ -85,13 +85,17 @@ class VMGlobalScope(VMScope):
 		return False
 
 	def emit_captured(self, captives: list[ontology.Symbol]):
-		assert not captives
+		for sym in captives:
+			assert sym is None
+			emit("*")
 
 	def declare(self, symbol: ontology.Symbol):
 		return
 
 class VMFunctionScope(VMScope):
 	""" Encapsulates VM mechanics around the stack, parameters, closure capture, jumps, etc. """
+	
+	_captives : dict[Optional[ontology.Symbol], int]
 	
 	def __init__(self, outer:VMScope, is_thunk:bool):
 		self._outer = outer
@@ -180,13 +184,13 @@ class VMFunctionScope(VMScope):
 		return label
 	
 	def come_from(self, label):
+		emit("come_from", label)
 		(source, depth) = LABEL_MAP.pop(label)
 		assert source is self, "Improper Come-From"
 		if self._depth is None:
 			self._depth = depth
 		else:
 			assert self._depth == depth, "Inconsistent Come-From %d != %d"%(self._depth, depth)
-		emit("come_from", label)
 		LABEL_QUEUE.append(label)
 
 	def emit_preamble(self, fn:syntax.UserFunction):
@@ -227,8 +231,7 @@ class VMFunctionScope(VMScope):
 	
 	def emit_call(self, tail, arity):
 		if tail:
-			emit("EXEC")
-			self._depth = None
+			self.emit_exec()
 		else:
 			emit("CALL")
 			self._depth -= arity
@@ -239,6 +242,10 @@ class VMFunctionScope(VMScope):
 
 	def emit_return(self):
 		emit("RETURN")
+		self._depth = None
+
+	def emit_exec(self):
+		emit("EXEC")
 		self._depth = None
 
 	def emit_nil(self):
@@ -287,11 +294,9 @@ def close_structure(nom:ontology.Nom, tag:int):
 	emit(")")
 	print()
 
-def might_be_a_thunk(expr: syntax.Expr):
-	if isinstance(expr, syntax.FieldReference): return True
-	if isinstance(expr, syntax.Lookup):
-		dfn = expr.ref.dfn
-		return isinstance(dfn, syntax.FormalParameter)
+def symbol_harbors_thunks(sym:ontology.Symbol):
+	if isinstance(sym, syntax.FormalParameter): return True
+	if isinstance(sym, syntax.UserFunction) and not sym.params: return True
 
 def handles_tails(expr: syntax.Expr):
 	return isinstance(expr, (syntax.Lookup, syntax.Call, syntax.ShortCutExp, syntax.Cond, syntax.MatchExpr))
@@ -313,7 +318,7 @@ class Translation(Visitor):
 			self.write_functions(module.outer_functions, root)
 		
 		# Write all begin-expressions:
-		scope = VMFunctionScope(root, False)
+		scope = VMFunctionScope(root, True)
 		self.visit_Module(roadmap.preamble, scope)
 		for module in roadmap.each_module:
 			self.visit_Module(module, scope)
@@ -350,12 +355,12 @@ class Translation(Visitor):
 		emit("{")
 		last = fns[-1]
 		for fn in fns:
-			inner = VMFunctionScope(outer, False)
-			self.write_one_function(fn, inner)
+			self.write_one_function(fn, outer)
 			emit("}" if fn is last else ";")
 		outer.nl()
 
-	def write_one_function(self, fn:syntax.UserFunction, inner:VMFunctionScope):
+	def write_one_function(self, fn:syntax.UserFunction, outer:VMScope):
+		inner = VMFunctionScope(outer, not fn.params)
 		inner.nl()
 		inner.emit_preamble(fn)
 		self.write_functions(fn.where, inner)
@@ -371,7 +376,7 @@ class Translation(Visitor):
 		if isinstance(expr, syntax.Literal):
 			scope.constant(expr.value)
 		elif isinstance(expr, syntax.Lookup):
-			self.visit_Lookup(expr, scope, False, False)
+			scope.load(expr.ref.dfn)
 		else:
 			scope.make_thunk(self, expr)
 	
@@ -382,24 +387,26 @@ class Translation(Visitor):
 		if isinstance(expr, syntax.Literal):
 			scope.constant(expr.value)
 		elif isinstance(expr, syntax.Lookup):
-			self.visit_Lookup(expr, scope, False, True)
+			sym = expr.ref.dfn
+			scope.load(sym)
+			if symbol_harbors_thunks(sym):
+				emit("FORCE")
 		elif handles_tails(expr):
 			self.visit(expr, scope, False)
 		else:
 			self.visit(expr, scope)
-			emit("FORCE")
 	
 	def tail_call(self, expr:syntax.Expr, scope:VMFunctionScope):
 		if isinstance(expr, syntax.Literal):
 			scope.constant(expr.value)
 			scope.emit_return()
 		elif isinstance(expr, syntax.Lookup):
-			self.visit_Lookup(expr, scope, True, True)
+			scope.load(expr.ref.dfn)
+			scope.emit_exec()
 		elif handles_tails(expr):
 			self.visit(expr, scope, True)
 		else:
 			self.visit(expr, scope)
-			emit("FORCE")
 			scope.emit_return()
 
 	def write_begin_expression(self, expr:syntax.Expr, scope:VMFunctionScope):
@@ -407,19 +414,6 @@ class Translation(Visitor):
 		self.force(expr, scope)
 		scope.display()
 	
-	@staticmethod
-	def visit_Lookup(lu:syntax.Lookup, scope:VMFunctionScope, tail:bool, force:bool):
-		sym = lu.ref.dfn
-		scope.load(sym)
-		if isinstance(sym, syntax.UserFunction) and not sym.params:
-			scope.emit_call(tail, 0)
-		else:
-			if force and isinstance(sym, syntax.FormalParameter):
-				emit("FORCE")
-			if tail:
-				assert force
-				scope.emit_return()
-
 	def visit_BinExp(self, it: syntax.BinExp, scope:VMFunctionScope):
 		self.force(it.lhs, scope)
 		self.force(it.rhs, scope)
@@ -496,7 +490,8 @@ class Translation(Visitor):
 	def visit_FieldReference(self, fr:syntax.FieldReference, scope:VMFunctionScope):
 		self.force(fr.lhs, scope)
 		scope.emit_field(fr.field_name.key())
-
+		emit("FORCE")
+		
 	def visit_ExplicitList(self, el:syntax.ExplicitList, scope:VMFunctionScope):
 		scope.emit_nil()
 		for item in reversed(el.elts):
