@@ -33,96 +33,113 @@ expression and then update the value of the thunk.
 Reserve capture-slot zero to represent the value of a snapped thunk.
 Perhaps it starts as ``NIL_VAL`` (not Sophie's ``nil``). This requires coordination.
 
-It seems worthwhile to tag ``Value`` structures as containing a thunk.
+It seems worthwhile to tag ``Value`` structures as containing a thunk, as distinct from an ordinary closure.
 Thus, the ``ValueType`` enumeration gets a new entry ``VAL_THUNK``.
 To keep the GC fast I arrange that every value-type >= ``VAL_GC`` is considered a GC-able pointer.
 What was an equality comparison becomes a simple inequality:
 Either way it's one instruction and presumably one machine cycle.
 
-Creating Thunks...
-===================
 
-at Run-Time
--------------
+Compiling with Thunks
+=======================
 
-The VM will need something like:
+I've taken a surprisingly straightforward adaptation of the semantics in the Python-based runtime.
+The new ``intermediate.py`` translator has three new interesting methods: ``delay``, ``force``,
+and ``tail_call``. Each performs gentle introspection on the syntactic category of an expression
+before deciding how to compile said expression.
+
+The ``delay`` operation compiles literals and look-ups for eager evaluation.
+Everything else gets wrapped up as a thunk. Textually in the pseudo-assembly code,
+that looks like a regular function but inside square brackets instead of curlies,
+and with no explicit name or arity.
+
+* A call-expression compiles its actual-parameters using the ``delay`` form.
+
+The ``force`` operation compiles a syntax form for eager evaluation,
+expecting more instructions to follow in the same function's code vector.
+
+* Most other things are compiled in ``force`` mode, because generally they're needed.
+
+The ``tail_call`` operation is similar to ``force`` but with an implied return after evaluation.
+That means ``CALL`` turns into ``EXEC`` and also prevents jumps to ``RETURN`` instructions.
+
+* Forms that can do something special in tail-call position take a ``tail`` flag in their
+  *visit_Foo* methods. They use this to decide how to compile the relevant parts.
+
+.. note::
+    There's actually a small problem here:
+    Look-ups of zero-argument functions currently always evaluate eagerly, which is wrong.
+    Such a function, used as a parameter to another function, should be a thunk.
+    But the best solution involves a change to the VM.
+    What ought to happen is the zero-arg functions become thunks at the closure-capture stage.
+    So to evaluate these, we'd use a ``FORCE`` rather than a ``CALL``.
+    In tail-position, an ``EXEC`` instruction would have to handle thunks.
+
+.. note::
+    No function can *return* a thunk. It wouldn't make sense!
+    A function's return value is only computed if it's needed,
+    but thunks are only appropriate when the need isn't yet clear.
+    So any return-value that *might* be a thunk, *must* be forced.
+
+Run-Time Operations on Thunks
+===============================
+
+Creating Thunks
+----------------
+
+The VM has a ``THUNK`` instruction, which works roughly like...
 
 .. code-block:: C
 
     case OP_THUNK: {
-        push(CONSTANT(READ_BYTE()));  // Push, because the next step allocates...
+        push(CONSTANT(READ_BYTE()));
         convert_to_thunk(&TOP);
         NEXT;
     }
 
-
-at Compile-Time
------------------
-
-I'll use square brackets to delimit the code of a thunk.
-Most of the internals are very similar to those of a named function.
-
-The pseudo-compiler ``intermediate.py`` must be adjusted.
-All uses of ``self.visit(subexpression, ...)`` which can possibly be in lazy position
-perhaps call ``self.lazy(subexpression, ...)`` instead.
-And eventually that method must respect strictness analysis.
-
+The constant is a ``Function`` object.
+The ``convert_to_thunk`` operation is basically closure-capture,
+but leaving a ``NIL`` in place at capture-slot zero.
 
 Eliminating Thunks
-===================
+-------------------
 
-Some expressions statically cannot yield thunks. These include literal constants,
-names of data types, the results of logical operators, and (at least for now) arithmetic.
-Some other expressions might be proven eager, but that's a future problem.
-
-Other expressions potentially could yield thunks, but they're in a position where a thunk
-is not sufficient. In those cases, ``intermediate.py`` can emit a ``FORCE`` instruction.
-
-Anyway, I posit a couple of VM instructions along these lines:
+The VM has an instruction like this:
 
 .. code-block:: C
 
     case OP_FORCE: {
-        if (IS_THUNK(TOP)) {
-            Closure *thunk = TOP.as.ptr;
-            if (IS_NIL(thunk->captives[0])) { // Thunk has yet to be evaluated.
-                vm.frame->ip = vpc;     // Standard calling sequence.
-                thunk->header.kind->call();
-				vpc = vm.frame->ip;
+        TOP = force(TOP);
+        NEXT;
+    }
+
+And yes, this means the VM is reentrant.
+Anything can call ``force(a_value)`` and get back a non-thunk.
+The code looks like:
+
+.. code-block:: C
+
+    Value force(Value value) {
+        if (IS_THUNK(value)) {
+            if (IS_NIL(AS_CLOSURE(value)->captives[0])) {
+                // Thunk has yet to be snapped.
+                push(value);
+                Value snapped = run(AS_CLOSURE(value));
+                AS_CLOSURE(pop())->captives[0] = snapped;
+                return snapped;
             }
-            else TOP = thunk->captives[0];
+            else return AS_CLOSURE(value)->captives[0];
         }
-        NEXT;
-    }
-    
-    case OP_SNAP: {
-        assert(! IS_THUNK(TOP));  // Compiler should put a FORCE instruction before a SNAP if appropriate.
-        assert(IS_THUNK(vm.frame->base[-1]));
-        vm.frame->base[-1] = vm.frame->closure->captives[0] = TOP;
-        vm.stackTop = vm.frame->base;
-        vm.frame--;
-        vpc = vm.frame->ip;
-        NEXT;
+        else return value;
     }
 
-Observation
------------
+.. note::
+    There is a small infelicity here.
 
-No function ought to ever *return* a thunk. It wouldn't make sense!
-A function's return value is only computed if it's needed,
-but thunks are only appropriate when the need isn't yet clear.
+    This design prevents re-evaluating the same thunk twice,
+    but it tends to keep the original thunk data-structure around
+    because the ``FORCE`` op-code works on the top-of-stack.
+    Normally we'd like to force either parameters or fields,
+    and update the original source if possible.
 
-
-Compiling in the Company of Thunks
-===================================
-
-It will be necessary in certain places to emit a ``FORCE`` instruction.
-
-The most obvious approach is to make each code-generation method return
-a flag indicating if it *might* have generated a thunk, and then the caller
-can force it if necessary. However, suppose we know the caller will force
-the result of a branching conditional form: then the callee can force on
-behalf of the caller, and this way only force if strictly necessary.
-This pushes the information to where it's most precise.
-
-
+    So at some point, I may change that.
