@@ -258,6 +258,7 @@ dispatch:
 		}
 		case OP_FORCE:
 			TOP = force(TOP);
+			assert(!IS_THUNK(TOP));
 			NEXT;
 		case OP_DISPLAY:
 			printValueDeeply(TOP);

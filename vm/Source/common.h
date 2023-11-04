@@ -455,7 +455,7 @@ static inline Value pop() {
 /* compiler.h */
 
 void initLexicon();
-Closure *compile(const char *source);
+Value compile(const char *source);
 
 /* native.h */
 
@@ -471,5 +471,7 @@ typedef struct {
 #define AS_NATIVE(value) ((Native *)AS_PTR(value))
 
 Native *newNative(byte arity, NativeFn function);
+
+Value concatenate(Value *args);
 
 void install_native_functions();

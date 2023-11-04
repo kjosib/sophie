@@ -27,10 +27,10 @@ static void run_program(const char *path) {
 		initLexicon();
 		install_native_functions();
 		char *source = readFile(path);
-		Closure *program = compile(source);
+		Value program = compile(source);
 		free(source);
 		// Maybe unload the compiler here and save a few bytes?
-		run(program);
+		run(AS_CLOSURE(program));
 		freeVM();
 }
 

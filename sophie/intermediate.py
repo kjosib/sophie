@@ -273,8 +273,7 @@ class VMFunctionScope(VMScope):
 		# Implicitly becomes a THUNK instruction:
 		emit("[")
 		inner = VMFunctionScope(self, True)
-		xlat.force(expr, inner)
-		inner.emit_return()
+		xlat.tail_call(expr, inner)
 		inner.emit_epilogue()
 		emit("]")
 		self._push()
@@ -303,7 +302,12 @@ def symbol_harbors_thunks(sym:ontology.Symbol):
 	if isinstance(sym, syntax.UserFunction) and not sym.params: return True
 
 def handles_tails(expr: syntax.Expr):
-	return isinstance(expr, (syntax.Lookup, syntax.Call, syntax.ShortCutExp, syntax.Cond, syntax.MatchExpr))
+	return isinstance(expr, (syntax.Call, syntax.ShortCutExp, syntax.Cond, syntax.MatchExpr))
+
+def is_eager(expr: syntax.Expr):
+	"""Basically, loads that are guaranteed not to be a thunk. So match-subjects mainly..."""
+	if isinstance(expr, syntax.Lookup):
+		return not symbol_harbors_thunks(expr.ref.dfn)
 
 class Translation(Visitor):
 	def __init__(self):
@@ -381,6 +385,11 @@ class Translation(Visitor):
 			scope.constant(expr.value)
 		elif isinstance(expr, syntax.Lookup):
 			scope.load(expr.ref.dfn)
+		elif isinstance(expr, syntax.FieldReference) and is_eager(expr.lhs):
+			self.force(expr.lhs, scope)
+			scope.emit_field(expr.field_name.key())
+		elif isinstance(expr, syntax.ExplicitList):
+			self.visit_ExplicitList(expr, scope)
 		else:
 			scope.make_thunk(self, expr)
 	
@@ -390,11 +399,6 @@ class Translation(Visitor):
 		"""
 		if isinstance(expr, syntax.Literal):
 			scope.constant(expr.value)
-		elif isinstance(expr, syntax.Lookup):
-			sym = expr.ref.dfn
-			scope.load(sym)
-			if symbol_harbors_thunks(sym):
-				emit("FORCE")
 		elif handles_tails(expr):
 			self.visit(expr, scope, False)
 		else:
@@ -404,9 +408,6 @@ class Translation(Visitor):
 		if isinstance(expr, syntax.Literal):
 			scope.constant(expr.value)
 			scope.emit_return()
-		elif isinstance(expr, syntax.Lookup):
-			scope.load(expr.ref.dfn)
-			scope.emit_exec()
 		elif handles_tails(expr):
 			self.visit(expr, scope, True)
 		else:
@@ -491,6 +492,13 @@ class Translation(Visitor):
 			scope.come_from(label)
 		pass
 	
+	@staticmethod
+	def visit_Lookup(expr:syntax.Lookup, scope:VMFunctionScope):
+		sym = expr.ref.dfn
+		scope.load(sym)
+		if symbol_harbors_thunks(sym):
+			emit("FORCE")
+	
 	def visit_FieldReference(self, fr:syntax.FieldReference, scope:VMFunctionScope):
 		self.force(fr.lhs, scope)
 		scope.emit_field(fr.field_name.key())
@@ -502,6 +510,7 @@ class Translation(Visitor):
 			self.delay(item, scope)
 			scope.emit_snoc()
 
-	def visit_Absurdity(self, _:syntax.Absurdity, scope:VMFunctionScope):
+	@staticmethod
+	def visit_Absurdity(_:syntax.Absurdity, scope:VMFunctionScope):
 		scope.emit_panic()
 		
