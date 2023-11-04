@@ -50,6 +50,9 @@ Some things are going well:
 
 Some things are in progress:
 
+* A [C-based Virtual-Machine](https://github.com/kjosib/sophie/tree/main/vm) can run Sophie code at a respectable speed.
+  It reads a "compiled" form which you can generate with a command-line like `sophie -x your/sophie/program.sg > program.is`.
+  It's far from complete, but making progress.  
 * SDL bindings (via PyGame for now). See for example this [graphical mouse-chaser](https://github.com/kjosib/sophie/blob/main/examples/games/mouse.sg).
 
 Certain things are not started yet:
