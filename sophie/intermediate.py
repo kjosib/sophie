@@ -1,18 +1,19 @@
 """
-This part is currently a work in progress. 
+This is still a work in progress. 
 
-Probably assign every module a name consisting of minimal distinctive prefix.
-Then give every function and constructor a mangled name based on its module and any surrounding scopes.
-In the process, may as well work out the static depth of every function.
-	- There's the textual static depth, and then there's the minimal static depth.
-	- Type-checker may contribute to minimal static depth because it's based on the DependencyPass.
-It will soon enough be necessary to solve an FFI for basic things.
-The static-depth information will be useful for look-up operations.
-	- local parameters emit an instruction with an offset from BP.
-	- For outer parameters, I'm going to attempt closure captive a'la CLOX.
-	- Globals can look up by name. The VM P-ASM may eventually precompute the hash lookup. 
-	- locally-nested functions: The *code* is a global; the *closure* presumably becomes a local variable.
-	- peers and uncles presumably equate to non-local (outer) variables.
+The concept here is to emit text which the VM can read as a (low-ish level) language.
+This is mostly a tree-walk (beginning in class Translation, method visit_RoadMap)
+but there is some cleverness to support tail-call elimination and the thunks that
+implement lazy evaluation.
+
+You can invoke this code on a Sophie program using the -x command-line flag to the main
+Sophie interpreter. That still subjects your program to all normal syntax and type checks,
+but if it passes, then emit corresponding heaps of VM code on standard output.
+
+Major current holes:
+
+1. No support for module name-spacing yet.
+2. No support for actor-model stuff yet.
 
 """
 
