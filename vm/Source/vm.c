@@ -214,6 +214,7 @@ dispatch:
 			NEXT;
 		case OP_NEGATE:
 			TOP = NUMBER_VAL(-num(TOP));
+			NEXT;
 		case OP_CALL:
 			if (IS_CLOSURE(TOP)) push(run(AS_CLOSURE(pop())));  // The callee will clean the stack.
 			else if (IS_CTOR(TOP)) {
