@@ -137,8 +137,7 @@ static void checkSizeLimits() {
 	if (current->chunk.constants.cnt > UINT8_MAX) error("function has too many constants");
 }
 
-static Function *parse_rest_of_function(byte arity, String *name) {
-	push(GC_VAL(name));
+static Function *parse_rest_of_function(byte arity) {
 	parse_instructions();
 	emit(OP_PANIC);
 	checkSizeLimits();
@@ -168,7 +167,9 @@ static void parse_thunk() {
 
 	Scope *outer = current;
 	push_new_scope();
-	Function *function = parse_rest_of_function(0, import_C_string("<thunk>", 7));
+	// Name thunks for their containing function, so duplicate TOP:
+	push(TOP);
+	Function *function = parse_rest_of_function(0);
 	appendValueArray(&outer->chunk.constants, GC_VAL(function));
 	consume(TOKEN_RIGHT_BRACKET, "expected right-bracket.");
 	pop_scope();
@@ -179,7 +180,8 @@ static Function *parse_normal_function() {
 	// That way the right garbage collection things happen automatically.
 	advance();
 	byte arity = parseByte("arity");
-	return parse_rest_of_function(arity, parseString());
+	push(GC_VAL(parseString()));
+	return parse_rest_of_function(arity);
 }
 
 static void parse_function_block() {
@@ -200,16 +202,16 @@ static void parse_function_block() {
 	emit(fn_count);
 }
 
-static Closure *closure_for_global(Function *function) {
+static Value closure_for_global(Function *function) {
 	push(CLOSURE_VAL(function));
 	close_function(&TOP);
-	return pop().as.ptr;
+	return pop();
 }
 
 static void parse_global_functions() {
 	do {
-		Closure *closure = closure_for_global(parse_normal_function());
-		defineGlobal(name_of_function(closure->function), CLOSURE_VAL(closure));
+		Value closure = closure_for_global(parse_normal_function());
+		defineGlobal(name_of_function(AS_CLOSURE(closure)->function), closure);
 	} while (predictToken(TOKEN_SEMICOLON));
 	consume(TOKEN_RIGHT_BRACE, "expected semicolon or right-brace.");
 }
@@ -256,6 +258,7 @@ static void parseScript() {
 	}
 	while (predictToken(TOKEN_LEFT_BRACE)) parse_global_functions();
 	initChunk(&current->chunk);
+	push(GC_VAL(import_C_string("<script>", 8)));
 	parse_instructions();
 	emit(OP_RETURN);
 #ifdef DEBUG_PRINT_CODE
@@ -264,15 +267,14 @@ static void parseScript() {
 }
 
 
-Closure *compile(const char *source) {
+Value compile(const char *source) {
 	initScanner(source);
 	initCompiler();
 	advance();
 	push_new_scope();
 	parseScript();
 	consume(TOKEN_EOF, "expected end of file.");
-	push(GC_VAL(import_C_string("<script>", 8)));
-	Closure *closure = closure_for_global(newFunction(TYPE_SCRIPT, &current->chunk, 0, 0));
+	Value closure = closure_for_global(newFunction(TYPE_SCRIPT, &current->chunk, 0, 0));
 	pop_scope();
 	return closure;
 }

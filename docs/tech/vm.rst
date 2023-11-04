@@ -697,7 +697,7 @@ I think the next semantic to port would be :doc:`lazy evaluation <lazy>`.
 Without :doc:`strictness analysis <strict>`, I expect it would slow things down considerably.
 So it will soon be time to make a strictness pass.
 
-3 November 2023
+2 November 2023
 ---------------
 
 Laziness works. Mostly.
@@ -714,3 +714,45 @@ One thing may feel left out, if you're looking from the perspective of a TCL or 
 The VM has no way to signal errors. And for the foreseeable future, that's the answer.
 The code should not generate errors: They've been mostly ruled out in the type system.
 Anything left is a panic.
+
+3 November 2023
+---------------
+
+Getting laziness right in the VM was rather like whack-a-mole.
+I lost count of the irksome bugs and trouble-spots.
+But on the plus side, I finally put together a batch testing script
+to quickly run a whole bunch of things and see how they all behave.
+
+Oh, and thunks are clearly not free.
+I kept around a copy of the intermediate code for the Fibonacci benchmark
+before and after thunks. The new version takes about 2.5x longer with thunks.
+But it's still 100x faster than Sophie-on-Python, so it's hard to complain.
+
+That's about it for the pure-functional core of Sophie's new VM.
+There's plenty left to work on, but this represents a milestone.
+
+Here are some open problems, in no particular order:
+
+* Modules. Right now there is but one global namespace. A simple name-mangling scheme would work.
+* Message-passing -- starting with a console-actor.
+* User-Defined Actors.
+* Source line numbers. On the off chance something goes wrong, a cross-reference is most helpful.
+* Pre-link global functions at load-time rather than hash look-ups during execution.
+* Numeric field offsets. This could save cycles where a record-type is statically known.
+* Tuning the dial on eager evaluation. This may help with performance.
+* NaN-boxing.
+* Thread-Safe Generational GC with Actors in mind.
+* Actual threads.
+* Arrays. (The semantics would be tied into the actor-oriented side.)
+* Useful libraries of bindings, data types, and subroutines.
+* Affordances such as keyword highlighting in a few common editors.
+* A more direct connection between the VM and the compiler. (Perhaps the one invokes the other?)
+* Self-hosting some or all of the compiler.
+* A means to install the VM as any other language runtime.
+* A killer app.
+
+Some ideas for bindings:
+
+* Games. Presumably SDL.
+* Typical OS and filesystem things.
+* More prosaic applications. Perhaps QT.
