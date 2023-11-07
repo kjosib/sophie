@@ -245,6 +245,10 @@ class VMFunctionScope(VMScope):
 		emit("RETURN")
 		self._depth = None
 
+	def emit_force_return(self):
+		emit("FORCE_RETURN")
+		self._depth = None
+
 	def emit_exec(self):
 		emit("EXEC")
 		self._depth = None
@@ -400,6 +404,11 @@ class Translation(Visitor):
 		"""
 		if isinstance(expr, syntax.Literal):
 			scope.constant(expr.value)
+		elif isinstance(expr, syntax.Lookup):
+			sym = expr.ref.dfn
+			scope.load(sym)
+			if symbol_harbors_thunks(sym):
+				emit("FORCE")
 		elif handles_tails(expr):
 			self.visit(expr, scope, False)
 		else:
@@ -409,6 +418,13 @@ class Translation(Visitor):
 		if isinstance(expr, syntax.Literal):
 			scope.constant(expr.value)
 			scope.emit_return()
+		elif isinstance(expr, syntax.Lookup):
+			sym = expr.ref.dfn
+			scope.load(sym)
+			if symbol_harbors_thunks(sym):
+				scope.emit_force_return()
+			else:
+				scope.emit_return()
 		elif handles_tails(expr):
 			self.visit(expr, scope, True)
 		else:
@@ -492,13 +508,6 @@ class Translation(Visitor):
 		for label in after:
 			scope.come_from(label)
 		pass
-	
-	@staticmethod
-	def visit_Lookup(expr:syntax.Lookup, scope:VMFunctionScope):
-		sym = expr.ref.dfn
-		scope.load(sym)
-		if symbol_harbors_thunks(sym):
-			emit("FORCE")
 	
 	def visit_FieldReference(self, fr:syntax.FieldReference, scope:VMFunctionScope):
 		self.force(fr.lhs, scope)

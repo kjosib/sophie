@@ -268,11 +268,11 @@ typedef struct {
 	GC header;
 	Constructor *constructor;
 	Value fields[];
-} Instance;
+} Record;
 
 
 static inline size_t size_for_nr_fields(int nr_fields) {
-	return sizeof(Instance) + sizeof(Value) * nr_fields;
+	return sizeof(Record) + sizeof(Value) * nr_fields;
 }
 
 Constructor *new_constructor(int tag, int nr_fields);
@@ -280,7 +280,7 @@ Constructor *new_constructor(int tag, int nr_fields);
 #define AS_CTOR(value) ((Constructor*)AS_PTR(value))
 
 extern GC_Kind KIND_Constructor;
-extern GC_Kind KIND_Instance;
+extern GC_Kind KIND_Record;
 
 /* scanner.h */
 
@@ -339,52 +339,7 @@ static inline bool predictToken(TokenType type) { return type == parser.current.
 bool maybe_token(TokenType type);
 
 /* isa.h */
-
-typedef enum {
-	OP_PANIC,
-	OP_CONSTANT,
-	OP_POP,
-	OP_NIL,
-	OP_TRUE,
-	
-	OP_FALSE,
-	OP_GLOBAL,
-	OP_LOCAL,
-	OP_CAPTIVE,
-	OP_CLOSURE,
-	
-	OP_EQUAL,
-	OP_GREATER,
-	OP_LESS,
-	OP_POWER,
-	OP_MULTIPLY,
-
-	OP_DIVIDE,
-	OP_MODULUS,
-	OP_INTDIV,
-	OP_INTMOD,
-	OP_ADD,
-	
-	OP_SUBTRACT,
-	OP_NOT,
-	OP_NEGATE,
-	OP_CALL,
-	OP_EXEC,
-	
-	OP_RETURN,
-	OP_JF,
-	OP_JT,
-	OP_JMP,
-	OP_CASE,
-
-	OP_FORCE,
-	OP_DISPLAY,
-	OP_FIELD,
-	OP_SNOC,
-	OP_THUNK,
-	
-	NR_OPCODES,
-} OpCode;
+#include "opcodes.h"
 
 DEFINE_VECTOR_TYPE(Labels, uint16_t)
 
