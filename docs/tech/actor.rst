@@ -82,6 +82,39 @@ Normal records don't need this.
 Fortunately the syntax distinguishes actor-fields from record-fields,
 so corresponding pseudo-opcodes can deal with an actor having a different layout from a normal record.
 
+Something along these lines for the data structure:
+
+.. code-block:: C
+
+    typedef struct {
+        GC header;
+        String *name;
+        Table field_offset;
+        Table msg_handler;
+        byte nr_fields;
+    } ActorDef;
+
+    typedef struct {
+        GC header;
+        ActorDef *actor_dfn;
+        Value fields[];
+    } ActorTemplate;
+
+    typedef struct {
+        GC header;
+        ActorDef *actor_dfn;
+        ValueArray message_queue;
+        byte spin_lock;  // Not strictly necessary before threads.
+        Value fields[];
+    } Actor;
+
+In practice that ``ValueArray message_queue`` is a place-holder. It will get something going,
+but it's a bit bulky when not in use. A garbage-collected vector might be more apropos,
+but that implies creating a vector type -- which is not necessarily a bad thing.
+I will probably want those at user-level eventually.
+
+Also, that ``byte spin_lock`` is but window dressing until threads happen.
+
 Compiling Methods
 ------------------
 
@@ -119,6 +152,21 @@ to put the gap in the right place.
 
 Oh, and that means another ``grey_the_...`` for the GC. 
 
+.. code-block:: C
+
+    typedef struct {
+        GC header;
+        Actor *self;
+        Value *callable;
+        Value payload[];
+    } Message;
+
+This can work either for bound-methods or populated messages.
+The GC header field will indicate which is which, enabling GC to work correctly around it.
+Conversely the only way this gets dispatched is if it has the *correct*-sized payload,
+so the worker thread can simply assume ``message->callable`` encodes the arity
+either as a ``Closure`` or as a ``Native`` structure.
+
 Oversimplified Driver Loop
 ----------------------------
 
@@ -132,6 +180,14 @@ Shall I look up the correct closure at the time the message is bound,
 or keep it symbolic until the actor handles the message?
 Most times it probably won't make much difference.
 My instinct says the first way is probably slightly more efficient.
+
+The Console: A "System" Actor
+-------------------------------
+
+I expect the simplest approach is to install native functions as message handlers
+in what's otherwise a perfectly ordinary actor of anonymous "class".
+The part that "calls" messages can be made to cooperate.
+
 
 Threads
 ==========
