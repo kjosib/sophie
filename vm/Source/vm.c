@@ -117,12 +117,12 @@ static void push_global(String *key) {
 }
 
 
-static Instance *construct() {
+static Record *construct() {
 	int nr_fields = AS_CTOR(TOP)->nr_fields;
-	Instance *instance = gc_allocate(&KIND_Instance, size_for_nr_fields(nr_fields));
-	instance->constructor = AS_CTOR(pop());
-	memcpy(&instance->fields, vm.stackTop - nr_fields, sizeof(Value) * nr_fields);
-	return instance;
+	Record *record = gc_allocate(&KIND_Record, size_for_nr_fields(nr_fields));
+	record->constructor = AS_CTOR(pop());
+	memcpy(&record->fields, vm.stackTop - nr_fields, sizeof(Value) * nr_fields);
+	return record;
 }
 
 static double num(Value it) {
@@ -218,9 +218,9 @@ dispatch:
 		case OP_CALL:
 			if (IS_CLOSURE(TOP)) push(run(AS_CLOSURE(pop())));  // The callee will clean the stack.
 			else if (IS_CTOR(TOP)) {
-				Instance *instance = construct();
-				Value *slot = vm.stackTop - instance->constructor->nr_fields;
-				*slot = GC_VAL(instance);
+				Record *record = construct();
+				Value *slot = vm.stackTop - record->constructor->nr_fields;
+				*slot = GC_VAL(record);
 				vm.stackTop = slot + 1;
 			}
 			else if (IS_NATIVE(TOP)) {
@@ -252,6 +252,26 @@ dispatch:
 				YIELD(native->function(vm.stackTop - native->arity));
 			}
 			else runtimeError(vpc, base, "EXEC needs a callable object; got val %s.", valKind[TOP.type]);
+		case OP_FORCE_RETURN: {
+			if (IS_THUNK(TOP)) {
+				Closure *subsequent = vm.trace->closure = AS_CLOSURE(pop());
+				// Has it been snapped?
+				if (IS_NIL(subsequent->captives[0])) {
+					// No...
+					// Treat this like an exec / tail-call, but easier since arity is zero by definition.
+					constants = subsequent->function->chunk.constants.at;
+					vpc = subsequent->function->chunk.code.at;
+					vm.stackTop = base;
+					NEXT;
+				}
+				else {
+					// Yes...
+					YIELD(subsequent->captives[0]);
+					NEXT;
+				}
+			}
+			// else fall-through to OP_RETURN;
+		}
 		case OP_RETURN: {
 			assert(! IS_THUNK(TOP));  // Return values are needed values! Don't thunk them.
 			YIELD(TOP);
@@ -283,8 +303,8 @@ dispatch:
 				tag = TOP.as.tag;
 				break;
 			case VAL_GC: {
-				Instance *instance = TOP.as.ptr;
-				tag = instance->constructor->tag;
+				Record *record = TOP.as.ptr;
+				tag = record->constructor->tag;
 				break;
 			}
 			default:
@@ -296,11 +316,11 @@ dispatch:
 		}
 		case OP_FIELD: {
 			assert(TOP.type == VAL_GC);
-			Instance *instance = TOP.as.ptr;
-			assert(instance->header.kind == &KIND_Instance);
-			Table *field_offset = &instance->constructor->field_offset;
+			Record *record = TOP.as.ptr;
+			assert(record->header.kind == &KIND_Record);
+			Table *field_offset = &record->constructor->field_offset;
 			tableGet(field_offset, AS_STRING(constants[READ_BYTE()]), &TOP);
-			TOP = instance->fields[TOP.as.tag];
+			TOP = record->fields[TOP.as.tag];
 			NEXT;
 		}
 		case OP_SNOC: {
@@ -310,10 +330,10 @@ dispatch:
 			SND = tmp;
 			// Construct a "cons" in the usual way
 			push_global(cons);
-			Instance *instance = construct();
+			Record *record = construct();
 			// Fix up the stack
 			pop();
-			TOP = GC_VAL(instance);
+			TOP = GC_VAL(record);
 			// And begone
 			NEXT;
 		}

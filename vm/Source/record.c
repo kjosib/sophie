@@ -7,37 +7,37 @@ Support for record-types.
 #include "common.h"
 
 
-static void display_instance(Instance *instance) {
-	printf("{%s:%d}", instance->constructor->name->text, instance->constructor->nr_fields);
+static void display_record(Record *record) {
+	printf("{%s:%d}", record->constructor->name->text, record->constructor->nr_fields);
 }
 
-static void display_instance_deeply(Instance *instance) {
-	printf("{%s:", instance->constructor->name->text);
-	int nr_fields = instance->constructor->nr_fields;
-	push(GC_VAL(instance));
+static void display_record_deeply(Record *record) {
+	printf("{%s:", record->constructor->name->text);
+	int nr_fields = record->constructor->nr_fields;
+	push(GC_VAL(record));
 	for (int index = 0; index < nr_fields; index++) {
 		printf(" ");
-		instance = (Instance *)AS_PTR(TOP);
-		printValueDeeply(instance->fields[index]);
+		record = (Record *)AS_PTR(TOP);
+		printValueDeeply(record->fields[index]);
 	}
 	pop();
 	printf("}");
 }
 
-static void blacken_instance(Instance *instance) {
-	darken_in_place(&instance->constructor);
-	darkenValues(instance->fields, instance->constructor->nr_fields);
+static void blacken_record(Record *record) {
+	darken_in_place(&record->constructor);
+	darkenValues(record->fields, record->constructor->nr_fields);
 }
 
-static size_t size_instance(Instance *instance) {
-	return size_for_nr_fields(instance->constructor->nr_fields);
+static size_t size_record(Record *record) {
+	return size_for_nr_fields(record->constructor->nr_fields);
 }
 
-GC_Kind KIND_Instance = {
-	.display = display_instance,
-	.deeply = display_instance_deeply,
-	.blacken = blacken_instance,
-	.size = size_instance,
+GC_Kind KIND_Record = {
+	.display = display_record,
+	.deeply = display_record_deeply,
+	.blacken = blacken_record,
+	.size = size_record,
 };
 
 
