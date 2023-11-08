@@ -30,6 +30,7 @@ static void run_program(const char *path) {
 		Value program = compile(source);
 		free(source);
 		// Maybe unload the compiler here and save a few bytes?
+		vm_capture_preamble_specials();
 		run(AS_CLOSURE(program));
 		freeVM();
 }

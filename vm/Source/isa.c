@@ -20,7 +20,11 @@ static void asmConstant(Chunk *chunk) {
 
 static void asmString(Chunk *chunk) {
 	size_t index = appendValueArray(&chunk->constants, GC_VAL(parseString()));
-	if (index > UINT8_MAX) error("too many constants in a chunk");
+	appendCode(&chunk->code, (byte)(index));
+}
+
+static void asmGlobal(Chunk *chunk) {
+	size_t index = appendValueArray(&chunk->constants, GLOBAL_VAL(parseString()));
 	appendCode(&chunk->code, (byte)(index));
 }
 
@@ -83,6 +87,7 @@ static int disCase(Chunk *chunk, int offset) {
 AddressingMode modeSimple = { asmSimple, disSimple };
 AddressingMode modeConstant = { asmConstant, disConstant };
 AddressingMode modeString = { asmString, disConstant };
+AddressingMode modeGlobal = { asmGlobal, disConstant };
 AddressingMode modeImmediate = { asmImmediate, disImmediate };
 AddressingMode modeJump = {asmSimple, disJump};
 AddressingMode modeClosure = {asmNotByHand, disClosure};
@@ -96,7 +101,7 @@ Instruction instruction[] = {
 	[OP_NIL] = {"NIL", &modeSimple},
 	[OP_TRUE] = {"TRUE", &modeSimple},
 	[OP_FALSE] = {"FALSE", &modeSimple},
-	[OP_GLOBAL] = {"GLOBAL", &modeString},
+	[OP_GLOBAL] = {"GLOBAL", &modeGlobal},
 	[OP_LOCAL] = {"LOCAL", &modeImmediate},
 	[OP_CAPTIVE] = {"CAPTIVE", &modeImmediate},
 	[OP_CLOSURE] = {"CLOSURE", &modeClosure},

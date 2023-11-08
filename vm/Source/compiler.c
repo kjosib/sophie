@@ -137,7 +137,7 @@ static void checkSizeLimits() {
 	if (current->chunk.constants.cnt > UINT8_MAX) error("function has too many constants");
 }
 
-static Function *parse_rest_of_function(byte arity) {
+static Value parse_rest_of_function(byte arity) {
 	parse_instructions();
 	emit(OP_PANIC);
 	checkSizeLimits();
@@ -158,7 +158,7 @@ static Function *parse_rest_of_function(byte arity) {
 #ifdef DEBUG_PRINT_CODE
 	disassembleChunk(&function->chunk, name_of_function(function)->text);
 #endif
-	return function;
+	return FN_VAL(function);
 }
 
 static void parse_thunk() {
@@ -169,13 +169,12 @@ static void parse_thunk() {
 	push_new_scope();
 	// Name thunks for their containing function, so duplicate TOP:
 	push(TOP);
-	Function *function = parse_rest_of_function(0);
-	appendValueArray(&outer->chunk.constants, GC_VAL(function));
+	appendValueArray(&outer->chunk.constants, parse_rest_of_function(0));
 	consume(TOKEN_RIGHT_BRACKET, "expected right-bracket.");
 	pop_scope();
 }
 
-static Function *parse_normal_function() {
+static Value parse_normal_function() {
 	// The function's name goes in the first constant entry.
 	// That way the right garbage collection things happen automatically.
 	advance();
@@ -194,16 +193,15 @@ static void parse_function_block() {
 	int fn_count = 0;
 	do {
 		fn_count++;
-		Function *function = parse_normal_function();
-		appendValueArray(&outer->chunk.constants, GC_VAL(function));
+		appendValueArray(&outer->chunk.constants, parse_normal_function());
 	} while (predictToken(TOKEN_SEMICOLON));
 	consume(TOKEN_RIGHT_BRACE, "expected semicolon or right-brace.");
 	pop_scope();
 	emit(fn_count);
 }
 
-static Value closure_for_global(Function *function) {
-	push(CLOSURE_VAL(function));
+static Value closure_for_global(Value function) {
+	push(function);
 	close_function(&TOP);
 	return pop();
 }
@@ -266,6 +264,16 @@ static void parseScript() {
 #endif
 }
 
+static void snap_global_pointers(Function *fn) {
+	if (fn->visited) return;
+	fn->visited = true;
+	for (int index = 0; index < fn->chunk.constants.cnt; index++) {
+		Value *item = &fn->chunk.constants.at[index];
+		if (IS_GLOBAL(*item)) *item = tableGet(&vm.globals, AS_STRING(*item));
+		if (IS_CLOSURE(*item) || IS_THUNK(*item)) snap_global_pointers(AS_CLOSURE(*item)->function);
+		else if (IS_FN(*item)) snap_global_pointers(AS_FN(*item));
+	}
+}
 
 Value compile(const char *source) {
 	initScanner(source);
@@ -274,8 +282,10 @@ Value compile(const char *source) {
 	push_new_scope();
 	parseScript();
 	consume(TOKEN_EOF, "expected end of file.");
-	Value closure = closure_for_global(newFunction(TYPE_SCRIPT, &current->chunk, 0, 0));
+	Value function = FN_VAL(newFunction(TYPE_SCRIPT, &current->chunk, 0, 0));
+	Value closure = closure_for_global(function);
 	pop_scope();
+	snap_global_pointers(AS_CLOSURE(closure)->function);
 	return closure;
 }
 

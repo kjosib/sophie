@@ -99,6 +99,8 @@ typedef enum {
 	VAL_CLOSURE, // And why not exploit the tags to full effect?
 	VAL_NATIVE,
 	VAL_CTOR,
+	VAL_FN,      // Not-closed function. Found in constant tables.
+	VAL_GLOBAL,  // Global reference; used only during compiling.
 } ValueType;
 
 
@@ -122,6 +124,8 @@ typedef struct {
 #define IS_CLOSURE(value) ((value).type == VAL_CLOSURE)
 #define IS_NATIVE(value)  ((value).type == VAL_NATIVE)
 #define IS_CTOR(value)    ((value).type == VAL_CTOR)
+#define IS_FN(value)      ((value).type == VAL_FN)
+#define IS_GLOBAL(value)  ((value).type == VAL_GLOBAL)
 
 #define AS_BOOL(value)    ((value).as.boolean)
 #define AS_NUMBER(value)  ((value).as.number)
@@ -139,6 +143,8 @@ typedef struct {
 #define THUNK_VAL(object)   ((Value){VAL_THUNK, {.ptr = object}})
 #define NATIVE_VAL(object)  ((Value){VAL_NATIVE, {.ptr = object}})
 #define CTOR_VAL(object)    ((Value){VAL_CTOR, {.ptr = object}})
+#define FN_VAL(object)      ((Value){VAL_FN, {.ptr = object}})
+#define GLOBAL_VAL(object)    ((Value){VAL_GLOBAL, {.ptr = object}})
 
 DEFINE_VECTOR_TYPE(ValueArray, Value)
 
@@ -208,7 +214,7 @@ typedef struct {
 
 DEFINE_VECTOR_TYPE(Table, Entry)
 
-bool tableGet(Table *table, String *key, Value *value);
+Value tableGet(Table *table, String *key);
 bool tableSet(Table *table, String *key, Value value);
 void table_set_from_C(Table *table, char *text, Value value);
 void tableAddAll(Table *from, Table *to);
@@ -236,6 +242,7 @@ typedef struct  {
 	byte arity;
 	byte nr_captures;
 	byte fn_type;
+	bool visited;
 	Chunk chunk;
 	Capture captures[];
 } Function;
@@ -253,6 +260,7 @@ Function *newFunction(FunctionType fn_type, Chunk *chunk, byte arity, byte nr_ca
 String *name_of_function(Function *function);
 
 #define AS_CLOSURE(value) ((Closure *)AS_PTR(value))
+#define AS_FN(value) ((Function *)AS_PTR(value))
 
 /* record.h */
 
@@ -278,6 +286,7 @@ static inline size_t size_for_nr_fields(int nr_fields) {
 Constructor *new_constructor(int tag, int nr_fields);
 
 #define AS_CTOR(value) ((Constructor*)AS_PTR(value))
+#define AS_RECORD(value) ((Record*)AS_PTR(value))
 
 extern GC_Kind KIND_Constructor;
 extern GC_Kind KIND_Record;
@@ -406,6 +415,7 @@ static inline Value pop() {
 #define TOP (vm.stackTop[-1])
 #define SND (vm.stackTop[-2])
 
+void vm_capture_preamble_specials();
 
 /* compiler.h */
 

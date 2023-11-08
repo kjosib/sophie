@@ -7,8 +7,8 @@
 
 
 VM vm;
-static String *cons;
-static String *nil;
+static Value cons;
+static Value nil;
 
 static void grey_the_vm_roots() {
 	// Grey the value stack
@@ -22,8 +22,8 @@ static void grey_the_vm_roots() {
 		}
 	}
 	// Grey the special cases "cons" and "nil"
-	darken_in_place(&cons);
-	darken_in_place(&nil);
+	darkenValue(&cons);
+	darkenValue(&nil);
 }
 
 
@@ -42,9 +42,17 @@ void initVM() {
 	resetStack();
 	initTable(&vm.globals);
 	initTable(&vm.strings);
-	cons = import_C_string("cons", 4);
-	nil = import_C_string("nil", 3);
+	cons = nil = NIL_VAL;
 	gc_install_roots(grey_the_vm_roots);
+}
+
+static Value global_from_C(const char *text) {
+	return tableGet(&vm.globals, import_C_string(text, strlen(text)));
+}
+
+void vm_capture_preamble_specials() {
+	cons = global_from_C("cons");
+	nil = global_from_C("nil");
 }
 
 void freeVM() {
@@ -107,17 +115,8 @@ static void capture_closure(Closure *closure, Value *base) {
 }
 
 
-static void push_global(String *key) {
-	if (tableGet(&vm.globals, key, vm.stackTop)) {
-		vm.stackTop++;
-	}
-	else {
-		crashAndBurn("Missing global: %s", key->text);
-	}
-}
-
-
 static Record *construct() {
+	assert(IS_CTOR(TOP));
 	int nr_fields = AS_CTOR(TOP)->nr_fields;
 	Record *record = gc_allocate(&KIND_Record, size_for_nr_fields(nr_fields));
 	record->constructor = AS_CTOR(pop());
@@ -162,11 +161,11 @@ dispatch:
 		switch (READ_BYTE()) {
 		case OP_PANIC:
 			runtimeError(vpc, base, "PANIC instruction encountered.");
+		case OP_GLOBAL:  // Fall-through to OP_CONSTANT
 		case OP_CONSTANT:
 			push(constants[READ_BYTE()]);
 			NEXT;
 		case OP_POP: pop(); NEXT;
-		case OP_GLOBAL: push_global(AS_STRING(constants[READ_BYTE()])); NEXT;
 		case OP_LOCAL: {
 			int index = READ_BYTE();
 			assert(base + index < vm.stackTop);  // Some day, let compiler.c discern max stack usage per function, and check only once.
@@ -192,7 +191,7 @@ dispatch:
 			capture_closure(AS_CLOSURE(TOP), base);
 			NEXT;
 		}
-		case OP_NIL: push_global(nil); NEXT;
+		case OP_NIL: push(nil); NEXT;
 		case OP_TRUE: push(BOOL_VAL(true)); NEXT;
 		case OP_FALSE: push(BOOL_VAL(false)); NEXT;
 		case OP_EQUAL:
@@ -303,8 +302,7 @@ dispatch:
 				tag = TOP.as.tag;
 				break;
 			case VAL_GC: {
-				Record *record = TOP.as.ptr;
-				tag = record->constructor->tag;
+				tag = AS_RECORD(TOP)->constructor->tag;
 				break;
 			}
 			default:
@@ -316,11 +314,11 @@ dispatch:
 		}
 		case OP_FIELD: {
 			assert(TOP.type == VAL_GC);
-			Record *record = TOP.as.ptr;
+			Record *record = AS_RECORD(TOP);
 			assert(record->header.kind == &KIND_Record);
 			Table *field_offset = &record->constructor->field_offset;
-			tableGet(field_offset, AS_STRING(constants[READ_BYTE()]), &TOP);
-			TOP = record->fields[TOP.as.tag];
+			int offset = tableGet(field_offset, AS_STRING(constants[READ_BYTE()])).as.tag;
+			TOP = record->fields[offset];
 			NEXT;
 		}
 		case OP_SNOC: {
@@ -329,7 +327,7 @@ dispatch:
 			TOP = SND;
 			SND = tmp;
 			// Construct a "cons" in the usual way
-			push_global(cons);
+			push(cons);
 			Record *record = construct();
 			// Fix up the stack
 			pop();
