@@ -77,14 +77,10 @@ static void adjustCapacity(Table *table, size_t capacity) {
 	table->cap = capacity;
 }
 
-bool tableGet(Table *table, String *key, Value *value) {
-	if (table->cnt == 0) return false;
-
+Value tableGet(Table *table, String *key) {
+	if (table->cnt == 0) return NIL_VAL;
 	Entry *entry = findEntry(table->at, table->cap, key);
-	if (entry->key == NULL) return false;
-
-	*value = entry->value;
-	return true;
+	return (entry->key == NULL) ? NIL_VAL : entry->value;
 }
 
 bool tableSet(Table *table, String *key, Value value) {

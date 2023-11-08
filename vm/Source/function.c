@@ -47,6 +47,7 @@ Function *newFunction(FunctionType fn_type, Chunk *chunk, byte arity, byte nr_ca
 	function->arity = arity;
 	function->nr_captures = nr_captures;
 	function->fn_type = fn_type;
+	function->visited = false;
 	function->chunk = *chunk;
 	initChunk(chunk);
 	return function;

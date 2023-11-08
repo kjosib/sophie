@@ -737,7 +737,7 @@ Here are some open problems, in no particular order:
 * Message-passing -- starting with a console-actor.
 * User-Defined Actors.
 * Source line numbers. On the off chance something goes wrong, a cross-reference is most helpful.
-* Pre-link global functions at load-time rather than hash look-ups during execution.
+* [DONE] Pre-link global functions at load-time rather than hash look-ups during execution.
 * Numeric field offsets. This could save cycles where a record-type is statically known.
 * Tuning the dial on eager evaluation. This may help with performance.
 * NaN-boxing.
@@ -756,3 +756,13 @@ Some ideas for bindings:
 * Games. Presumably SDL.
 * Typical OS and filesystem things.
 * More prosaic applications. Perhaps QT.
+
+7 November 2023
+---------------
+
+Something nice today. I made a small change in the VM.
+It now pre-computes all the global look-ups before run-time.
+This brings the thunk-less Fibonacci benchmark down to about 5.25 seconds in release mode.
+That's about seventeen percent faster than before.
+The thunk-ful version now comes in at 14.3 seconds, which is only about six percent
+slower than Python's strictly-evaluated version.
