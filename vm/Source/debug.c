@@ -1,4 +1,5 @@
 #include "common.h"
+#include "prep.h"
 
 void disassembleChunk(Chunk *chunk, const char *name) {
 	printf("== %s ==\n", name);

@@ -1,5 +1,10 @@
 ﻿#include <stdarg.h>
 #include "common.h"
+#include "prep.h"
+
+#ifdef _WIN32
+#pragma warning(disable : 4996)  /* Stop irrelevant warning about fopen on MS compilers */
+#endif
 
 static char *readFile(const char *path) {
 	FILE *file = fopen(path, "rb");
@@ -24,14 +29,15 @@ static char *readFile(const char *path) {
 static void run_program(const char *path) {
 		init_gc();
 		initVM(); // This first so that the string table is initialized first, before its first sweep.
-		initLexicon();
+		init_actor_model();
 		install_native_functions();
+		initLexicon();
 		char *source = readFile(path);
-		Value program = compile(source);
+		compile(source);
 		free(source);
 		// Maybe unload the compiler here and save a few bytes?
 		vm_capture_preamble_specials();
-		run(AS_CLOSURE(program));
+		run(AS_CLOSURE(pop()));
 		freeVM();
 }
 
@@ -41,6 +47,7 @@ int main(int argc, const char *argv[]) {
 		exit(0);
 	}
 	else {
+		printf("%.17g\n", 1e23);
 		fprintf(stderr, "Usage: %s /path/to/intermediate/code\n", argv[0]);
 		exit(64);
 	}

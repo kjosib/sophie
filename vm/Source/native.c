@@ -38,6 +38,29 @@ static Value sqrt_native(Value *args) {
 	return NUMBER_VAL(sqrt(AS_NUMBER(force(args[0]))));
 }
 
+
+static Value native_echo(Value *args) {
+	// Expect args[0] to be a (thunk of a) list of strings.
+	// (Eventually I'll cure the thunking problem.)
+
+	for (;;) {
+		if (IS_THUNK(args[0])) args[0] = force(args[0]);
+		if (IS_ENUM(args[0])) break;
+		push(force(AS_RECORD(args[0])->fields[0]));
+		fputs(AS_STRING(TOP)->text, stdout);
+	}
+
+	return NIL_VAL;
+}
+
+static Value native_read(Value *args) {
+	crashAndBurn("read is not yet implemented");
+}
+
+static Value native_random(Value *args) {
+	crashAndBurn("random is not yet implemented");
+}
+
 /***********************************************************************************/
 
 static void display_native(Native *native) { printf("<fn %s>", native->name->text); }
@@ -53,20 +76,36 @@ GC_Kind KIND_Native = {
 	.size = size_native,
 };
 
-Native *newNative(byte arity, NativeFn function) {
+static void create_native(const char *name, byte arity, NativeFn function) {
+	push_C_string(name);
 	Native *native = gc_allocate(&KIND_Native, sizeof(Native));
 	native->arity = arity;
 	native->function = function;
-	native->name = NULL;
-	return native;
+	native->name = AS_STRING(TOP);
+	TOP = NATIVE_VAL(native);
+}
+
+static void install_native() {
+	push(GC_VAL(AS_NATIVE(TOP)->name));
+	defineGlobal();
+	pop();
 }
 
 static void defineNative(const char *name, byte arity, NativeFn function) {
-	push(GC_VAL(import_C_string(name, strlen(name))));
-	Native *native = newNative(arity, function);
-	native->name = AS_STRING(TOP);
-	defineGlobal(native->name, NATIVE_VAL(native));
-	pop();
+	create_native(name, arity, function);
+	install_native();
+}
+
+static void install_method() {
+	ActorDef *dfn = AS_ACTOR_DFN(SND);
+	String *key = AS_NATIVE(TOP)->name;
+	bool was_new = tableSet(&dfn->msg_handler, key, pop());
+	if (!was_new) crashAndBurn("already installed %s into %s", key->text, dfn->name->text);
+}
+
+static void create_native_method(const char *name, byte arity, NativeFn function) {
+	create_native(name, arity, function);
+	install_method();
 }
 
 void install_native_functions() {
@@ -75,6 +114,29 @@ void install_native_functions() {
 	defineNative("sqrt", 1, sqrt_native);
 	defineNative("fib_native", 1, fib_native);
 	defineNative("strcat", 2, concatenate);
+
+	// Now let me try to create the console.
+	// It starts with the class definition:
+
+	push_C_string("Console");
+	define_actor(0);
+	push(GC_VAL(AS_ACTOR_DFN(TOP)->name));
+	defineGlobal();
+
+	// Next up, define some methods:
+	create_native_method("echo", 1, native_echo);
+	create_native_method("read", 1, native_read);
+	create_native_method("random", 1, native_random);
+
+	// Finally, create the actor itself.
+	make_template_from_dfn();
+	make_actor_from_template();
+
+	push_C_string("console");
+	defineGlobal();
+	pop();
+
+
 #ifdef DEBUG_PRINT_GLOBALS
 	tableDump(&vm.globals);
 #endif // DEBUG_PRINT_GLOBALS

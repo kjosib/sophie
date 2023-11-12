@@ -1,4 +1,5 @@
 #include "common.h"
+#include "prep.h"
 
 typedef struct {
 	const char *start;

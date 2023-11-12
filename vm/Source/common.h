@@ -111,6 +111,7 @@ typedef struct {
 		double number;
 		int tag;
 		void *ptr;
+		GC *gc;
 	} as;
 } Value;
 
@@ -131,7 +132,7 @@ typedef struct {
 #define AS_NUMBER(value)  ((value).as.number)
 #define AS_ENUM(value)    ((value).as.tag)
 #define AS_PTR(value)     ((value).as.ptr)
-#define AS_GC(value)      ((GC*)AS_PTR(value))
+#define AS_GC(value)      ((value).as.gc)
 
 #define NIL_VAL	            ((Value){VAL_NIL, {.number = 0}})
 #define BOOL_VAL(value)     ((Value){VAL_BOOL, {.boolean = value}})
@@ -144,7 +145,7 @@ typedef struct {
 #define NATIVE_VAL(object)  ((Value){VAL_NATIVE, {.ptr = object}})
 #define CTOR_VAL(object)    ((Value){VAL_CTOR, {.ptr = object}})
 #define FN_VAL(object)      ((Value){VAL_FN, {.ptr = object}})
-#define GLOBAL_VAL(object)    ((Value){VAL_GLOBAL, {.ptr = object}})
+#define GLOBAL_VAL(object)  ((Value){VAL_GLOBAL, {.ptr = object}})
 
 DEFINE_VECTOR_TYPE(ValueArray, Value)
 
@@ -152,7 +153,7 @@ void printValue(Value value);
 void printValueDeeply(Value value);
 bool valuesEqual(Value a, Value b);
 
-static inline darkenValue(Value *value) { if (IS_GC_ABLE(*value)) darken_in_place(&value->as.ptr); }
+static inline void darkenValue(Value *value) { if (IS_GC_ABLE(*value)) darken_in_place(&value->as.ptr); }
 void darkenValues(Value *at, size_t count);
 void darkenValueArray(ValueArray *vec);
 
@@ -199,6 +200,7 @@ uint32_t hashString(const char *key, size_t length);
 String *new_String(size_t length);
 String *intern_String(String *string);
 String *import_C_string(const char *chars, size_t length);
+void push_C_string(const char *name);
 void printObject(GC *item);
 void printObjectDeeply(GC *item);
 
@@ -222,6 +224,7 @@ Entry *tableFindString(Table *table, const char *chars, size_t length, uint32_t 
 bool tableDelete(Table *table, String *key);
 void darkenTable(Table *table);
 void tableDump(Table *table);
+void populate_field_offset_table(Table *table, int nr_fields);
 
 /* function.h */
 
@@ -279,11 +282,8 @@ typedef struct {
 } Record;
 
 
-static inline size_t size_for_nr_fields(int nr_fields) {
-	return sizeof(Record) + sizeof(Value) * nr_fields;
-}
-
-Constructor *new_constructor(int tag, int nr_fields);
+Record *construct_record();
+void make_constructor(int tag, int nr_fields);  // ( field_name ... ctor_name -- ctor )
 
 #define AS_CTOR(value) ((Constructor*)AS_PTR(value))
 #define AS_RECORD(value) ((Record*)AS_PTR(value))
@@ -291,81 +291,51 @@ Constructor *new_constructor(int tag, int nr_fields);
 extern GC_Kind KIND_Constructor;
 extern GC_Kind KIND_Record;
 
-/* scanner.h */
-
-typedef enum {
-	// Single-character tokens.
-	TOKEN_PIPE,
-	TOKEN_LEFT_PAREN, TOKEN_RIGHT_PAREN,
-	TOKEN_LEFT_BRACE, TOKEN_RIGHT_BRACE,
-	TOKEN_LEFT_BRACKET, TOKEN_RIGHT_BRACKET,
-	TOKEN_COMMA, TOKEN_DOT, TOKEN_MINUS, TOKEN_PLUS,
-	TOKEN_SEMICOLON, TOKEN_SLASH, TOKEN_STAR,
-	// One or two character tokens.
-	TOKEN_BANG, TOKEN_BANG_EQUAL,
-	TOKEN_EQUAL, TOKEN_EQUAL_EQUAL,
-	TOKEN_GREATER, TOKEN_GREATER_EQUAL,
-	TOKEN_LESS, TOKEN_LESS_EQUAL,
-	// Literals.
-	TOKEN_NAME, TOKEN_STRING, TOKEN_NUMBER,
-	// Keywords.
-
-	TOKEN_ERROR, TOKEN_EOF
-} TokenType;
+/* actor.h */
 
 typedef struct {
-	TokenType type;
-	const char *start;
-	size_t length;
-	int line;
-} Token;
-
-void initScanner(const char *source);
-Token scanToken();
-
-/* parser.h */
+	GC header;
+	String *name;
+	Table field_offset;
+	Table msg_handler;
+	byte nr_fields;
+} ActorDef;
 
 typedef struct {
-	Token current;
-	Token previous;
-	bool hadError;
-	bool panicMode;
-} Parser;
-
-extern Parser parser;
-
-void error(const char *message);
-void errorAtCurrent(const char *message);
-void advance();
-void consume(TokenType type, const char *message);
-double parseDouble(const char *message);
-byte parseByte(char *message);
-Value parseConstant();
-String *parseString();
-String *parseName();
-
-static inline bool predictToken(TokenType type) { return type == parser.current.type; }
-bool maybe_token(TokenType type);
-
-/* isa.h */
-#include "opcodes.h"
-
-DEFINE_VECTOR_TYPE(Labels, uint16_t)
-
-typedef void (*AsmFn)(Chunk *chunk);
-typedef int (*DisFn)(Chunk *chunk, int offset);
+	GC header;
+	ActorDef *actor_dfn;
+	Value fields[];
+} ActorTemplate;
 
 typedef struct {
-	AsmFn assemble;
-	DisFn disassemble;
-} AddressingMode;
+	// This looks very similar to a Record and/or an ActorTemplate.
+	// But those are coincidental and ephemeral similarities.
+	GC header;
+	ActorDef *actor_dfn;
+	Value fields[];
+} Actor;
 
 typedef struct {
-	char *name;
-	AddressingMode *operand;
-} Instruction;
+	GC header;
+	Actor *self;
+	Value *callable;
+	Value payload[];
+} Message;
 
-extern Instruction instruction[];
+
+void init_actor_model();
+void enqueue_message_from_top_of_stack();
+Message *dequeue_message();
+
+void define_actor(byte nr_fields);  // ( field_names... name -- dfn )
+void make_template_from_dfn();  // ( args... dfn -- tpl )
+void make_actor_from_template();  // ( tpl -- actor )
+
+#define AS_ACTOR_DFN(value) ((ActorDef*)AS_PTR(value))
+#define AS_ACTOR_TPL(value) ((ActorTemplate*)AS_PTR(value))
+#define AS_ACTOR(value) ((Actor*)AS_PTR(value))
+#define AS_MESSAGE(value) ((Message*)AS_PTR(value))
+
 
 /* vm.h */
 
@@ -391,8 +361,6 @@ typedef struct {
 } VM;
 
 
-void defineGlobal(String *name, Value value);
-
 extern VM vm;
 
 void initVM();
@@ -415,12 +383,16 @@ static inline Value pop() {
 #define TOP (vm.stackTop[-1])
 #define SND (vm.stackTop[-2])
 
+// Now some FORTH-style stack operators because keeping pointers
+// anywhere else is dangerous because allocation moves things around.
+
+static inline void swap() { Value v = TOP; TOP = SND; SND = v; }  // ( a b -- b a )
+static inline void dup() { push(TOP); }  // ( a -- a a )
+static inline void over() { push(SND); }  // ( a b -- a b a )
+
+void defineGlobal();  // ( value name -- value )
+
 void vm_capture_preamble_specials();
-
-/* compiler.h */
-
-void initLexicon();
-Value compile(const char *source);
 
 /* native.h */
 

@@ -71,6 +71,9 @@ String *import_C_string(const char *text, size_t length) {
 	}
 }
 
+void push_C_string(const char *name) {
+	push(GC_VAL(import_C_string(name, strlen(name))));
+}
 
 void printObject(GC *item) { item->kind->display(item); }
 void printObjectDeeply(GC *item) { item->kind->deeply(item); }

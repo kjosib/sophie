@@ -29,6 +29,10 @@ static void blacken_record(Record *record) {
 	darkenValues(record->fields, record->constructor->nr_fields);
 }
 
+static inline size_t size_for_nr_fields(int nr_fields) {
+	return sizeof(Record) + sizeof(Value) * nr_fields;
+}
+
 static size_t size_record(Record *record) {
 	return size_for_nr_fields(record->constructor->nr_fields);
 }
@@ -39,6 +43,15 @@ GC_Kind KIND_Record = {
 	.blacken = blacken_record,
 	.size = size_record,
 };
+
+Record *construct_record() {
+	assert(IS_CTOR(TOP));
+	int nr_fields = AS_CTOR(TOP)->nr_fields;
+	Record *record = gc_allocate(&KIND_Record, size_for_nr_fields(nr_fields));
+	record->constructor = AS_CTOR(pop());
+	memcpy(&record->fields, vm.stackTop - nr_fields, sizeof(Value) * nr_fields);
+	return record;
+}
 
 
 static void display_constructor(Constructor *constructor) {
@@ -62,16 +75,13 @@ GC_Kind KIND_Constructor = {
 };
 
 
-Constructor *new_constructor(int tag, int nr_fields) {
+void make_constructor(int tag, int nr_fields) {
 	Constructor *constructor = gc_allocate(&KIND_Constructor, sizeof(Constructor));
 	constructor->name = AS_STRING(pop());
 	constructor->tag = (byte)tag;
 	constructor->nr_fields = (byte)nr_fields;
-	initTable(&constructor->field_offset);
-	while (nr_fields--) {
-		tableSet(&constructor->field_offset, AS_STRING(pop()), ENUM_VAL(nr_fields));
-	}
-	return constructor;
+	populate_field_offset_table(&constructor->field_offset, nr_fields);
+	push(CTOR_VAL(constructor));
 }
 
 
