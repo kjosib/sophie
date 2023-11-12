@@ -1,4 +1,5 @@
 #include "common.h"
+#include "prep.h"
 
 #define NR_HOLES 4096
 
@@ -200,29 +201,28 @@ static void parse_function_block() {
 	emit(fn_count);
 }
 
-static Value closure_for_global(Value function) {
-	push(function);
-	close_function(&TOP);
-	return pop();
-}
 
 static void parse_global_functions() {
 	do {
-		Value closure = closure_for_global(parse_normal_function());
-		defineGlobal(name_of_function(AS_CLOSURE(closure)->function), closure);
+		push(parse_normal_function());
+		close_function(&TOP);
+		push(GC_VAL(name_of_function(AS_CLOSURE(TOP)->function)));
+		defineGlobal();
+		pop();
 	} while (predictToken(TOKEN_SEMICOLON));
 	consume(TOKEN_RIGHT_BRACE, "expected semicolon or right-brace.");
 }
 
 static Value tag_definition(int tag) {
 	crashAndBurn("Tagged Values are not yet fully supported");
+	defineGlobal();
 }
 
 static parse_tagged_value() {
 	int tag = parseByte("tag");
 	String *name = parseString();
 	push(GC_VAL(name));
-	defineGlobal(name, tag_definition(tag));
+	tag_definition(tag);
 	pop();
 }
 
@@ -233,19 +233,21 @@ static void parse_record() {
 		push(GC_VAL(parseName()));
 		nr_fields++;
 	}
-	int tag = parseByte("tag");
-	String *name = parseString();
-	Value constructor;
+	
 	if (nr_fields) {
-		push(GC_VAL(name));
-		constructor = CTOR_VAL(new_constructor(tag, nr_fields));
+		int tag = parseByte("tag");
+		push(GC_VAL(parseString()));
+		make_constructor(tag, nr_fields);
 		// new_constructor(...) pops all those strings off the VM stack,
 		// so there's no need to do it here.
+		push(GC_VAL(AS_CTOR(TOP)->name));
 	}
 	else {
-		constructor = ENUM_VAL(tag);
+		push(ENUM_VAL(parseByte("tag")));
+		push(GC_VAL(parseString()));
 	}
-	defineGlobal(name, constructor);
+	defineGlobal();
+	pop();
 	consume(TOKEN_RIGHT_PAREN, "expected ')'");
 }
 
@@ -275,17 +277,16 @@ static void snap_global_pointers(Function *fn) {
 	}
 }
 
-Value compile(const char *source) {
+void compile(const char *source) {
 	initScanner(source);
 	initCompiler();
 	advance();
 	push_new_scope();
 	parseScript();
 	consume(TOKEN_EOF, "expected end of file.");
-	Value function = FN_VAL(newFunction(TYPE_SCRIPT, &current->chunk, 0, 0));
-	Value closure = closure_for_global(function);
+	push(FN_VAL(newFunction(TYPE_SCRIPT, &current->chunk, 0, 0)));
 	pop_scope();
-	snap_global_pointers(AS_CLOSURE(closure)->function);
-	return closure;
+	close_function(&TOP);
+	snap_global_pointers(AS_CLOSURE(TOP)->function);
 }
 

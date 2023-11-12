@@ -2,6 +2,7 @@
 #include <math.h>
 #include <time.h>
 #include "common.h"
+#include "opcodes.h"
 
 #define CLOSURE (vm.trace->closure)
 
@@ -32,9 +33,11 @@ static void resetStack() {
 	vm.trace = vm.traces-1;
 }
 
-void defineGlobal(String *name, Value value) {
-	if (!tableSet(&vm.globals, name, value)) {
-		error("Global name already exists");
+void defineGlobal() {
+	String *name = AS_STRING(pop());
+	assert(is_string(name));
+	if (!tableSet(&vm.globals, name, TOP)) {
+		crashAndBurn("Global name \"%s\" already exists", name->text);
 	}
 }
 
@@ -114,15 +117,6 @@ static void capture_closure(Closure *closure, Value *base) {
 	// Postcondition: Captures have been copied per directives in *closure's function.
 }
 
-
-static Record *construct() {
-	assert(IS_CTOR(TOP));
-	int nr_fields = AS_CTOR(TOP)->nr_fields;
-	Record *record = gc_allocate(&KIND_Record, size_for_nr_fields(nr_fields));
-	record->constructor = AS_CTOR(pop());
-	memcpy(&record->fields, vm.stackTop - nr_fields, sizeof(Value) * nr_fields);
-	return record;
-}
 
 static double num(Value it) {
 	assert(IS_NUMBER(it));
@@ -217,7 +211,7 @@ dispatch:
 		case OP_CALL:
 			if (IS_CLOSURE(TOP)) push(run(AS_CLOSURE(pop())));  // The callee will clean the stack.
 			else if (IS_CTOR(TOP)) {
-				Record *record = construct();
+				Record *record = construct_record();
 				Value *slot = vm.stackTop - record->constructor->nr_fields;
 				*slot = GC_VAL(record);
 				vm.stackTop = slot + 1;
@@ -244,7 +238,7 @@ dispatch:
 				NEXT;
 			}
 			else if (IS_CTOR(TOP)) {
-				YIELD(GC_VAL(construct()));
+				YIELD(GC_VAL(construct_record()));
 			}
 			else if (IS_NATIVE(TOP)) {
 				Native *native = AS_NATIVE(pop());
@@ -322,13 +316,10 @@ dispatch:
 			NEXT;
 		}
 		case OP_SNOC: {
-			// Swap the top two elements;
-			Value tmp = TOP;
-			TOP = SND;
-			SND = tmp;
+			swap();
 			// Construct a "cons" in the usual way
 			push(cons);
-			Record *record = construct();
+			Record *record = construct_record();
 			// Fix up the stack
 			pop();
 			TOP = GC_VAL(record);

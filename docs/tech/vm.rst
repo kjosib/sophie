@@ -38,6 +38,36 @@ Here's an example:
 	412.311
 	412.311
 
+Status
+=======
+
+Here are some open problems, in no particular order:
+
+* Modules. Right now there is but one global namespace. A simple name-mangling scheme would work.
+* Message-passing -- starting with a console-actor.
+* User-Defined Actors.
+* Source line numbers. On the off chance something goes wrong, a cross-reference is most helpful.
+* [DONE] Pre-link global functions at load-time rather than hash look-ups during execution.
+* Numeric field offsets. This could save cycles where a record-type is statically known.
+* Tuning the dial on eager evaluation. This may help with performance.
+* NaN-boxing.
+* Thread-Safe Generational GC with Actors in mind.
+* Actual threads.
+* Arrays. (The semantics would be tied into the actor-oriented side.)
+* Useful libraries of bindings, data types, and subroutines.
+* Affordances such as keyword highlighting in a few common editors.
+* A more direct connection between the VM and the compiler. (Perhaps the one invokes the other?)
+* Self-hosting some or all of the compiler.
+* A means to install the VM as any other language runtime.
+* A killer app.
+
+Some ideas for bindings:
+
+* Games. Presumably SDL.
+* Typical OS and filesystem things.
+* More prosaic applications. Perhaps QT.
+
+
 Source Code
 ============
 
@@ -731,32 +761,6 @@ But it's still 100x faster than Sophie-on-Python, so it's hard to complain.
 That's about it for the pure-functional core of Sophie's new VM.
 There's plenty left to work on, but this represents a milestone.
 
-Here are some open problems, in no particular order:
-
-* Modules. Right now there is but one global namespace. A simple name-mangling scheme would work.
-* Message-passing -- starting with a console-actor.
-* User-Defined Actors.
-* Source line numbers. On the off chance something goes wrong, a cross-reference is most helpful.
-* [DONE] Pre-link global functions at load-time rather than hash look-ups during execution.
-* Numeric field offsets. This could save cycles where a record-type is statically known.
-* Tuning the dial on eager evaluation. This may help with performance.
-* NaN-boxing.
-* Thread-Safe Generational GC with Actors in mind.
-* Actual threads.
-* Arrays. (The semantics would be tied into the actor-oriented side.)
-* Useful libraries of bindings, data types, and subroutines.
-* Affordances such as keyword highlighting in a few common editors.
-* A more direct connection between the VM and the compiler. (Perhaps the one invokes the other?)
-* Self-hosting some or all of the compiler.
-* A means to install the VM as any other language runtime.
-* A killer app.
-
-Some ideas for bindings:
-
-* Games. Presumably SDL.
-* Typical OS and filesystem things.
-* More prosaic applications. Perhaps QT.
-
 7 November 2023
 ---------------
 
@@ -766,3 +770,93 @@ This brings the thunk-less Fibonacci benchmark down to about 5.25 seconds in rel
 That's about seventeen percent faster than before.
 The thunk-ful version now comes in at 14.3 seconds, which is only about six percent
 slower than Python's strictly-evaluated version.
+
+8 November 2023
+---------------
+
+The ``common.h`` file was getting unwieldy. I tried carving out several portions.
+
+9 November 2023
+---------------
+
+The dependencies between the various ``.h`` files are also unwieldy.
+In fact, this was the reason for cramming everything into a single ``common.h`` file in the first place.
+So thank heavens for version control.
+
+10 November 2023
+----------------
+
+Time to make some forward progress on actors. I'll start with an oversimplified message queue.
+It's just a vector. I *already know* that it won't be suitable once worker-threads enter the picture,
+but that's not today's problem.
+
+11 November 2023
+----------------
+
+Veterans' Day. I had breakfast courtesy of a local eatery. Not bad overall,
+but if I'd been paying for it I would have asked them to warm up the andouille sausage. 
+
+I noticed a GC bug which, by some miracle, I hadn't yet managed to trigger.
+The issue was some or another function holding a reference while calling another function
+that would allocate. In the world of moving GC, that's a recipe for a wild pointer.
+
+I'd like a convention which makes this kind of problem much easier to spot.
+To keep garbage-collectable objects on the VM stack as much as practical,
+I choose not to pass them around as parameters or return values to C functions.
+The exceptions are:
+
+* Named intermediates, where there are no function-calls *at all* intervening.
+* In the FFI, "native" bindings return a ``Value``. The VM will immediately put that value on the stack.
+* Some functions construct and return a new thing. The caller must immediately put this somewhere safe.
+
+To help this along, I've also added a few FORTH-style stack manipulation "words" (static inline void functions)
+to the ``common.h`` file. And finally, the prototypes for functions that manipulate the VM stack
+get FORTH-style stack-effect comments on their same line.
+
+I'm not going on a crusade to change everything at once.
+This will be a process. But for all *new* code, I'll take this approach.
+
+This approach may seem odd, but I believe it to be worthwhile as a means to
+eliminate an entire category of memory-safety mistakes.
+
+-----
+
+I made significant progress on actors today, at least in the VM:
+It now builds and initializes a ``console`` actor of ``Console`` type.
+Nothing uses it yet, but that will come soon enough.
+
+Incidentally, the first version crashed the collector.
+Eventually I tracked the problem to an (incomplete) structure-assignment into actor-class definitions.
+That set the GC header to ``NULL``, with predictable consequences.
+I don't know why I had that structure-assignment there, though.
+My best guess in retrospect is that I was trying to assign several fields in one statement,
+but C doesn't work that way. It must have been a brain-fart.
+
+In the process, I noticed another benefit of keeping broken-hearts confined to the GC header:
+Both actors and records rely on their respective definition objects (constructors,
+in the case of records) to tell how big they are, which is important for GC.
+Scribbling on the evacuated object's "old" data would clobber what might be needed later.
+This also indicates against compaction-in-place. One alternative would be to make the length-check
+sensitive to broken hearts, but that's another complication. Another would be to encode the size
+of heap objects directly in the header, but that makes every object bigger and I'd rather not.
+
+On the other hand, there are only so many object-types. A full pointer is not strictly necessary.
+One could pack a tag and a length just fine in a 64-bit word.
+Large objects go in the non-moving heap anyway, so this could take some indirection out of compaction.
+Still, it's a question for a profiler, and likely to be lost in the noise.
+
+-----
+
+Also, I got tired of seeing only six significant figures in my numbers.
+So I put a precision specifier in the line that prints floating-point values.
+
+Oddly, the MS C library doesn't always come up with the same "shortest" representations
+as what Python (3.9, on Windows) does for presumably the same values.
+To see an example, use the number ``1e23`` which displays as all nines e+22 on the MS implementation.
+Incidentally, there was a bug report on this very subject (and using this very example)
+filed against an early JVM back in the day. But for the moment I'll just live with it.
+
+12 November 2023
+----------------
+
+

@@ -1,3 +1,5 @@
+#pragma once
+
 typedef enum {
 	OP_PANIC,
 	OP_CONSTANT,

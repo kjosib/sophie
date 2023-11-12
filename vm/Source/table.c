@@ -179,3 +179,13 @@ void tableDump(Table *table) {
 		}
 	}
 }
+
+
+void populate_field_offset_table(Table *table, int nr_fields) {
+	initTable(table);
+	while (nr_fields--) {
+		tableSet(table, AS_STRING(pop()), ENUM_VAL(nr_fields));
+	}
+}
+
+
