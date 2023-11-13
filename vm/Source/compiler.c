@@ -271,7 +271,12 @@ static void snap_global_pointers(Function *fn) {
 	fn->visited = true;
 	for (int index = 0; index < fn->chunk.constants.cnt; index++) {
 		Value *item = &fn->chunk.constants.at[index];
-		if (IS_GLOBAL(*item)) *item = tableGet(&vm.globals, AS_STRING(*item));
+		if (IS_GLOBAL(*item)) {
+			String *key = AS_STRING(*item);
+			Value found = tableGet(&vm.globals, key);
+			if (IS_NIL(found)) crashAndBurn("global not found: %s", AS_STRING(*item)->text);
+			else *item = found;
+		}
 		if (IS_CLOSURE(*item) || IS_THUNK(*item)) snap_global_pointers(AS_CLOSURE(*item)->function);
 		else if (IS_FN(*item)) snap_global_pointers(AS_FN(*item));
 	}

@@ -132,6 +132,7 @@ Instruction instruction[] = {
 	[OP_FIELD] = {"FIELD", &modeString},
 	[OP_SNOC] = {"SNOC", &modeSimple},
 	[OP_THUNK] = {"THUNK", &modeThunk},
+	[OP_BIND] = {"BIND", &modeString},
 	//[] = {"", &modeSimple},
 };
 

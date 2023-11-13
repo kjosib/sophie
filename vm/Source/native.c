@@ -38,16 +38,32 @@ static Value sqrt_native(Value *args) {
 	return NUMBER_VAL(sqrt(AS_NUMBER(force(args[0]))));
 }
 
+static Value chr_native(Value *args) {
+	args[0] = force(args[0]);
+	String *dst = new_String(1);
+	dst->text[0] = AS_NUMBER(args[0]);
+	return GC_VAL(intern_String(dst));
+}
+
+static Value str_native(Value *args) {
+	double value = AS_NUMBER(force(args[0]));
+	int len = snprintf(NULL, 0, NUMBER_FORMAT, value);
+	String *dst = new_String(len);
+	snprintf(dst->text, len+1, NUMBER_FORMAT, value);
+	return GC_VAL(intern_String(dst));
+}
+
 
 static Value native_echo(Value *args) {
-	// Expect args[0] to be a (thunk of a) list of strings.
+	// Expect args[1] to be a (thunk of a) list of strings.
 	// (Eventually I'll cure the thunking problem.)
 
 	for (;;) {
-		if (IS_THUNK(args[0])) args[0] = force(args[0]);
-		if (IS_ENUM(args[0])) break;
-		push(force(AS_RECORD(args[0])->fields[0]));
-		fputs(AS_STRING(TOP)->text, stdout);
+		if (IS_THUNK(args[1])) args[1] = force(args[1]);
+		if (IS_ENUM(args[1])) break;
+		String *item = AS_STRING(force(AS_RECORD(args[1])->fields[0]));
+		fputs(item->text, stdout);
+		args[1] = AS_RECORD(args[1])->fields[1];
 	}
 
 	return NIL_VAL;
@@ -114,6 +130,8 @@ void install_native_functions() {
 	defineNative("sqrt", 1, sqrt_native);
 	defineNative("fib_native", 1, fib_native);
 	defineNative("strcat", 2, concatenate);
+	defineNative("chr", 1, chr_native);
+	defineNative("str", 1, str_native);
 
 	// Now let me try to create the console.
 	// It starts with the class definition:

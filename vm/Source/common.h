@@ -88,6 +88,8 @@ void *reallocate(void *pointer, size_t newSize);
 
 /* value.h */
 
+#define NUMBER_FORMAT "%.17g"
+
 typedef enum {
 	VAL_NIL,     // Not the same as Sophie's nil.
 	VAL_BOOL,    // Don't really need, as ENUM serves.
@@ -99,6 +101,8 @@ typedef enum {
 	VAL_CLOSURE, // And why not exploit the tags to full effect?
 	VAL_NATIVE,
 	VAL_CTOR,
+	VAL_BOUND,
+	VAL_MESSAGE,
 	VAL_FN,      // Not-closed function. Found in constant tables.
 	VAL_GLOBAL,  // Global reference; used only during compiling.
 } ValueType;
@@ -125,6 +129,7 @@ typedef struct {
 #define IS_CLOSURE(value) ((value).type == VAL_CLOSURE)
 #define IS_NATIVE(value)  ((value).type == VAL_NATIVE)
 #define IS_CTOR(value)    ((value).type == VAL_CTOR)
+#define IS_BOUND(value)   ((value).type == VAL_BOUND)
 #define IS_FN(value)      ((value).type == VAL_FN)
 #define IS_GLOBAL(value)  ((value).type == VAL_GLOBAL)
 
@@ -144,6 +149,8 @@ typedef struct {
 #define THUNK_VAL(object)   ((Value){VAL_THUNK, {.ptr = object}})
 #define NATIVE_VAL(object)  ((Value){VAL_NATIVE, {.ptr = object}})
 #define CTOR_VAL(object)    ((Value){VAL_CTOR, {.ptr = object}})
+#define BOUND_VAL(object)   ((Value){VAL_BOUND, {.ptr = object}})
+#define MESSAGE_VAL(object) ((Value){VAL_MESSAGE, {.ptr = object}})
 #define FN_VAL(object)      ((Value){VAL_FN, {.ptr = object}})
 #define GLOBAL_VAL(object)  ((Value){VAL_GLOBAL, {.ptr = object}})
 
@@ -318,18 +325,20 @@ typedef struct {
 typedef struct {
 	GC header;
 	Actor *self;
-	Value *callable;
+	Value callable;
 	Value payload[];
 } Message;
 
 
 void init_actor_model();
 void enqueue_message_from_top_of_stack();
-Message *dequeue_message();
 
 void define_actor(byte nr_fields);  // ( field_names... name -- dfn )
 void make_template_from_dfn();  // ( args... dfn -- tpl )
 void make_actor_from_template();  // ( tpl -- actor )
+void bind_method();  // ( actor callable -- bound_method )
+void apply_bound_method();  // ( args... bound_method -- message )
+void drain_the_queue();
 
 #define AS_ACTOR_DFN(value) ((ActorDef*)AS_PTR(value))
 #define AS_ACTOR_TPL(value) ((ActorTemplate*)AS_PTR(value))
