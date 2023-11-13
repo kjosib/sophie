@@ -859,4 +859,44 @@ filed against an early JVM back in the day. But for the moment I'll just live wi
 12 November 2023
 ----------------
 
+One additional case in the tree-walker sufficed to compile basic message-passing.
+There was considerably more to do on the VM side, but now message-passing works!
+Here's the ``games/99 bottles.sg`` example:
+
+.. code-block:: text
+
+    D:\Playground\sophie_test>sophie -x "\GitHub\sophie\examples\games\99 bottles.sg" > 99.is
+    
+    D:\Playground\sophie_test>d:\GitHub\sophie\vm\out\build\x64-debug\svm.exe 99.is
+    
+    5 bottles of soda on the wall,
+    5 bottles of soda.
+    
+    If one of those bottles should happen to fall,
+    4 bottles of soda on the wall,
+    4 bottles of soda.
+    
+    If one of those bottles should happen to fall,
+    3 bottles of soda on the wall,
+    3 bottles of soda.
+    
+    If one of those bottles should happen to fall,
+    2 bottles of soda on the wall,
+    2 bottles of soda.
+    
+    If one of those bottles should happen to fall,
+    1 bottles of soda on the wall,
+    1 bottles of soda.
+    
+    If one of those bottles should happen to fall,
+    no bottles of soda on the wall,
+    no bottles of soda.
+    
+    Go to the store and buy some more!
+    99 bottles of soda on the wall!
+
+This is still a minimal example: It only passes a single message,
+and to a system-defined actor at that.
+But it should be downhill for a little while now.
+
 

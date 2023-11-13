@@ -168,7 +168,8 @@ dispatch:
 		}
 
 		case OP_CAPTIVE: push(vm.trace->closure->captives[READ_BYTE()]); NEXT;
-		case OP_CLOSURE: {
+		case OP_CLOSURE:
+		{
 			// Initialize a run of closures. The underlying function definitions are in the constant table.
 			int constant_index = READ_BYTE();
 			int nr_closures = READ_BYTE();
@@ -209,26 +210,40 @@ dispatch:
 			TOP = NUMBER_VAL(-num(TOP));
 			NEXT;
 		case OP_CALL:
-			if (IS_CLOSURE(TOP)) push(run(AS_CLOSURE(pop())));  // The callee will clean the stack.
-			else if (IS_CTOR(TOP)) {
+			switch (TOP.type) {
+			case VAL_CLOSURE:
+				push(run(AS_CLOSURE(pop())));  // The callee will clean the stack.
+				NEXT;
+			case VAL_CTOR:
+			{
 				Record *record = construct_record();
 				Value *slot = vm.stackTop - record->constructor->nr_fields;
 				*slot = GC_VAL(record);
 				vm.stackTop = slot + 1;
+				NEXT;
 			}
-			else if (IS_NATIVE(TOP)) {
+			case VAL_NATIVE:
+			{
 				Native *native = AS_NATIVE(pop());
 				Value *slot = vm.stackTop - native->arity;
 				*slot = native->function(slot);
 				vm.stackTop = slot + 1;
+				NEXT;
 			}
-			else {
+			case VAL_BOUND:
+			{
+				apply_bound_method();
+				NEXT;
+			}
+			default:
 				printValue(TOP);
 				runtimeError(vpc, base, "CALL needs a callable object; got %s.", valKind[TOP.type]);
 			}
-			NEXT;
 		case OP_EXEC:
-			if (IS_CLOSURE(TOP) | IS_THUNK(TOP)) {
+			switch (TOP.type) {
+			case VAL_CLOSURE:
+			case VAL_THUNK:
+			{
 				Closure *subsequent = vm.trace->closure = AS_CLOSURE(pop());
 				constants = subsequent->function->chunk.constants.at;
 				vpc = subsequent->function->chunk.code.at;
@@ -237,15 +252,23 @@ dispatch:
 				vm.stackTop = base + arity;
 				NEXT;
 			}
-			else if (IS_CTOR(TOP)) {
+			case VAL_CTOR:
 				YIELD(GC_VAL(construct_record()));
-			}
-			else if (IS_NATIVE(TOP)) {
+			case VAL_NATIVE:
+			{
 				Native *native = AS_NATIVE(pop());
 				YIELD(native->function(vm.stackTop - native->arity));
 			}
-			else runtimeError(vpc, base, "EXEC needs a callable object; got val %s.", valKind[TOP.type]);
-		case OP_FORCE_RETURN: {
+			case VAL_BOUND:
+			{
+				apply_bound_method();
+				YIELD(TOP);
+			}
+			default:
+				runtimeError(vpc, base, "EXEC needs a callable object; got val %s.", valKind[TOP.type]);
+			}
+		case OP_FORCE_RETURN:
+		{
 			if (IS_THUNK(TOP)) {
 				Closure *subsequent = vm.trace->closure = AS_CLOSURE(pop());
 				// Has it been snapped?
@@ -265,7 +288,8 @@ dispatch:
 			}
 			// else fall-through to OP_RETURN;
 		}
-		case OP_RETURN: {
+		case OP_RETURN:
+		{
 			assert(! IS_THUNK(TOP));  // Return values are needed values! Don't thunk them.
 			YIELD(TOP);
 		}
@@ -274,10 +298,18 @@ dispatch:
 			assert(!IS_THUNK(TOP));
 			NEXT;
 		case OP_DISPLAY:
-			printValueDeeply(TOP);
-			pop();
-			printf("\n");
-			NEXT;
+			switch (TOP.type) {
+			case VAL_BOUND:
+			case VAL_MESSAGE:
+				enqueue_message_from_top_of_stack();
+				drain_the_queue();
+				NEXT;
+			default:
+				printValueDeeply(TOP);
+				pop();
+				printf("\n");
+				NEXT;
+			}
 		case OP_JF:
 			if (AS_BOOL(TOP)) SKIP_AND_POP();
 			else LEAP();
@@ -289,7 +321,8 @@ dispatch:
 		case OP_JMP:
 			LEAP();
 			NEXT;
-		case OP_CASE: {
+		case OP_CASE:
+		{
 			int tag;
 			switch (TOP.type) {
 			case VAL_ENUM:
@@ -306,7 +339,8 @@ dispatch:
 			LEAP();
 			NEXT;
 		}
-		case OP_FIELD: {
+		case OP_FIELD:
+		{
 			assert(TOP.type == VAL_GC);
 			Record *record = AS_RECORD(TOP);
 			assert(record->header.kind == &KIND_Record);
@@ -315,7 +349,8 @@ dispatch:
 			TOP = record->fields[offset];
 			NEXT;
 		}
-		case OP_SNOC: {
+		case OP_SNOC:
+		{
 			swap();
 			// Construct a "cons" in the usual way
 			push(cons);
@@ -324,6 +359,15 @@ dispatch:
 			pop();
 			TOP = GC_VAL(record);
 			// And begone
+			NEXT;
+		}
+		case OP_BIND:
+		{
+			// ( actor -- bound_method )
+			// Simple approach: Push the callable and then snap these into a bound message.
+			Table *msg_handler = &AS_ACTOR(TOP)->actor_dfn->msg_handler;
+			push(tableGet(msg_handler, AS_STRING(constants[READ_BYTE()])));
+			bind_method();
 			NEXT;
 		}
 		default:

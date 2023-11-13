@@ -75,14 +75,15 @@ void enqueue_message_from_top_of_stack() {
 	if (mq.gap == mq.front) grow_the_queue();
 }
 
-Message *dequeue_message() {
-	// Return NULL if none, perhaps?
-	if (mq.front == mq.gap) return NULL;
-	else {
-		Message *next = mq.buffer[mq.front];
-		mq.front = ahead(mq.front);
-		return next;
-	}
+static bool is_queue_empty() {
+	return mq.front == mq.gap;
+}
+
+static Message *dequeue_message() {
+	assert(!is_queue_empty());
+	Message *next = mq.buffer[mq.front];
+	mq.front = ahead(mq.front);
+	return next;
 }
 
 
@@ -175,4 +176,93 @@ void make_actor_from_template() {
 	actor->actor_dfn = AS_ACTOR_TPL(TOP)->actor_dfn;
 	memcpy(&actor->fields, &AS_ACTOR_TPL(TOP)->fields, payload_size);
 	TOP = GC_VAL(actor);
+}
+
+void display_bound(Message *msg) { printf("<bound method>"); }
+
+void blacken_bound(Message *msg) { darken_in_place(&msg->self); darkenValue(&msg->callable); }
+
+size_t size_bound(Message *msg) { return sizeof(Message); }
+
+static GC_Kind KIND_bound = {
+	.display = display_bound,
+	.deeply = display_bound,
+	.blacken = blacken_bound,
+	.size = size_bound,
+};
+
+void bind_method() {
+	Message *bound = gc_allocate(&KIND_bound, sizeof(Message));
+	bound->callable = pop();
+	bound->self = AS_ACTOR(TOP);
+	TOP = BOUND_VAL(bound);
+}
+
+static int arity_of_message(Message *msg) {
+	// Accepts a GC-able parameter but doesn't call anything and therefore can't allocate.
+	Value callable = msg->callable;
+	switch (callable.type) {
+	case VAL_CLOSURE:
+		return AS_CLOSURE(callable)->function->arity;
+	case VAL_NATIVE:
+		return AS_NATIVE(callable)->arity;
+	default:
+		crashAndBurn("bogus callable in bound method");
+	}
+}
+
+void display_message(Message *msg) { printf("<message>"); }
+
+void blacken_message(Message *msg) {
+	blacken_bound(msg);
+	darkenValues(msg->payload, arity_of_message(msg));
+}
+
+size_t size_message(Message *msg) {
+	int arity = arity_of_message(msg);
+	return sizeof(Message) + arity * sizeof(Value);
+}
+
+static GC_Kind KIND_message = {
+	.display = display_message,
+	.deeply = display_message,
+	.blacken = blacken_message,
+	.size = size_message,
+};
+
+void apply_bound_method() {
+	int arity = arity_of_message(AS_MESSAGE(TOP));
+	Message *msg = gc_allocate(&KIND_message, sizeof(Message) + arity * sizeof(Value));
+	Message *bound = AS_MESSAGE(pop());
+	msg->self = bound->self;
+	msg->callable = bound->callable;
+	memcpy(msg->payload, vm.stackTop - arity, arity * sizeof(Value));
+	vm.stackTop -= arity;
+	push(MESSAGE_VAL(msg));
+}
+
+static void run_one_message(Message *msg) {
+	Value *base = vm.stackTop;
+	push(GC_VAL(msg->self));
+	int arity = arity_of_message(msg);
+	memcpy(vm.stackTop, msg->payload, arity * sizeof(Value));
+	vm.stackTop += arity;
+	switch (msg->callable.type) {
+	case VAL_CLOSURE:
+		run(AS_CLOSURE(msg->callable));
+		break;
+	case VAL_NATIVE:
+	{
+		Native *native = AS_NATIVE(msg->callable);
+		native->function(base);
+		break;
+	}
+	default:
+		crashAndBurn("Bad message callable");
+	}
+	vm.stackTop = base;
+}
+
+void drain_the_queue() {
+	while (!is_queue_empty()) run_one_message(dequeue_message());
 }

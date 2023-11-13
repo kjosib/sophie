@@ -1,4 +1,3 @@
-#include <float.h>
 #include "common.h"
 
 DEFINE_VECTOR_CODE(ValueArray, Value)
@@ -8,7 +7,7 @@ static void print_simply(Value value) {
 switch (value.type) {
 	case VAL_NIL: printf("nil"); break;
 	case VAL_BOOL: printf(AS_BOOL(value) ? "true" : "false"); break;
-	case VAL_NUMBER: printf("%.*g", DBL_DECIMAL_DIG, AS_NUMBER(value)); break;
+	case VAL_NUMBER: printf(NUMBER_FORMAT, AS_NUMBER(value)); break;
 	case VAL_ENUM: printf("<enum: %d>", AS_ENUM(value)); break;
 	case VAL_PTR: printf("<ptr: %p>", AS_PTR(value)); break;
 	default: printf("<<%d>>", value.type);
@@ -56,4 +55,7 @@ char *valKind[] = {
 	[VAL_CLOSURE] = "closure",
 	[VAL_NATIVE] = "native function",
 	[VAL_CTOR] = "constructor",
+	[VAL_BOUND] = "bound method",
+	[VAL_FN] = "open function",
+	[VAL_GLOBAL] = "global reference",
 };

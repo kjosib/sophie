@@ -523,4 +523,8 @@ class Translation(Visitor):
 	@staticmethod
 	def visit_Absurdity(_:syntax.Absurdity, scope:VMFunctionScope):
 		scope.emit_panic()
-		
+	
+	def visit_BindMethod(self, expr:syntax.BindMethod, scope:VMFunctionScope):
+		self.force(expr.receiver, scope)
+		emit("BIND", quote(expr.method_name.key()))
+
