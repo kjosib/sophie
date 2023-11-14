@@ -1,6 +1,5 @@
 #pragma once
 
-#include "common.h"
 #include "opcodes.h"
 
 /* scanner.h */
@@ -60,24 +59,7 @@ static inline bool predictToken(TokenType type) { return type == parser.current.
 bool maybe_token(TokenType type);
 
 /* isa.h */
-#include "opcodes.h"
 
-DEFINE_VECTOR_TYPE(Labels, uint16_t)
-
-typedef void (*AsmFn)(Chunk *chunk);
-typedef int (*DisFn)(Chunk *chunk, int offset);
-
-typedef struct {
-	AsmFn assemble;
-	DisFn disassemble;
-} AddressingMode;
-
-typedef struct {
-	char *name;
-	AddressingMode *operand;
-} Instruction;
-
-extern Instruction instruction[];
 
 /* compiler.h */
 

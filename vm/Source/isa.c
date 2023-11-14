@@ -1,9 +1,6 @@
 #include "common.h"
 #include "prep.h"
 
-DEFINE_VECTOR_CODE(Labels, uint16_t)
-DEFINE_VECTOR_APPEND(Labels, uint16_t)
-
 static void asmSimple(Chunk *chunk) {
 }
 

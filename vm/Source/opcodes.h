@@ -1,4 +1,5 @@
 #pragma once
+#include "common.h"
 
 typedef enum {
 	OP_PANIC,
@@ -48,4 +49,21 @@ typedef enum {
 
 	NR_OPCODES,
 } OpCode;
+
+
+typedef void (*AsmFn)(Chunk *chunk);
+typedef int (*DisFn)(Chunk *chunk, int offset);
+
+typedef struct {
+	AsmFn assemble;
+	DisFn disassemble;
+} AddressingMode;
+
+typedef struct {
+	char *name;
+	AddressingMode *operand;
+} Instruction;
+
+extern Instruction instruction[];
+
 

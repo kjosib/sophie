@@ -117,11 +117,19 @@ static void capture_closure(Closure *closure, Value *base) {
 	// Postcondition: Captures have been copied per directives in *closure's function.
 }
 
-
-static double num(Value it) {
-	assert(IS_NUMBER(it));
+#ifdef _DEBUG
+static double x_num(byte *vpc, Value *base, Value it) {
+	if (!IS_NUMBER(it)) {
+		char *ins = instruction[vpc[-1]].name;
+		runtimeError(vpc, base, "Needed number for %s; got %s", ins, valKind[it.type]);
+	}
 	return AS_NUMBER(it);
 }
+#define num(it) x_num(vpc, base, it)
+#else
+#define num AS_NUMBER
+#endif // _DEBUG
+
 
 #define NEXT goto dispatch
 #define READ_BYTE() (*vpc++)
