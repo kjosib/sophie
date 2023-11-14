@@ -1,5 +1,5 @@
 #include "common.h"
-#include "prep.h"
+#include "opcodes.h"
 
 void disassembleChunk(Chunk *chunk, const char *name) {
 	printf("== %s ==\n", name);

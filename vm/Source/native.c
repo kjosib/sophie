@@ -38,21 +38,43 @@ static Value sqrt_native(Value *args) {
 	return NUMBER_VAL(sqrt(AS_NUMBER(force(args[0]))));
 }
 
+static Value len_native(Value *args) {
+	String *str = AS_STRING(force(args[0]));
+	return NUMBER_VAL((double)(str->length));
+}
+
 static Value chr_native(Value *args) {
 	args[0] = force(args[0]);
 	String *dst = new_String(1);
-	dst->text[0] = AS_NUMBER(args[0]);
+	dst->text[0] = (byte)(AS_NUMBER(args[0]));
+	return GC_VAL(intern_String(dst));
+}
+
+static Value mid_native(Value *args) {
+	// Force the arguments, which are all needed:
+	for (int i = 0; i < 3; i++) args[i] = force(args[i]);
+
+	// Figure which part of the input string to copy
+	size_t offset = (size_t)max(0, AS_NUMBER(args[1]));
+	size_t len_arg = (size_t)max(0, AS_NUMBER(args[2]));
+	size_t limit = AS_STRING(args[0])->length - offset;
+	size_t actual_len = min(limit, len_arg);
+
+	// Allocate the string
+	String *dst = new_String(actual_len);
+	memcpy(dst->text, AS_STRING(args[0])->text + offset, actual_len);
 	return GC_VAL(intern_String(dst));
 }
 
 static Value str_native(Value *args) {
 	double value = AS_NUMBER(force(args[0]));
-	int len = snprintf(NULL, 0, NUMBER_FORMAT, value);
+	size_t len = snprintf(NULL, 0, NUMBER_FORMAT, value);
 	String *dst = new_String(len);
 	snprintf(dst->text, len+1, NUMBER_FORMAT, value);
 	return GC_VAL(intern_String(dst));
 }
 
+/***********************************************************************************/
 
 static Value native_echo(Value *args) {
 	// Expect args[1] to be a (thunk of a) list of strings.
@@ -132,6 +154,8 @@ void install_native_functions() {
 	defineNative("strcat", 2, concatenate);
 	defineNative("chr", 1, chr_native);
 	defineNative("str", 1, str_native);
+	defineNative("len", 1, len_native);
+	defineNative("mid", 3, mid_native);
 
 	// Now let me try to create the console.
 	// It starts with the class definition:

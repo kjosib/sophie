@@ -899,4 +899,29 @@ This is still a minimal example: It only passes a single message,
 and to a system-defined actor at that.
 But it should be downhill for a little while now.
 
+13 November 2023
+----------------
 
+Added a few more native functions.
+I can now *almost* run the 2-3 tree algorithm demo in the VM.
+In release-mode it *does* run, but incorrectly.
+In debug-mode, the problem is obvious:
+The VM does not yet know how to compare strings for lexical order.
+
+This exposes one of the core conceits of using Python as a first-cut implementation language:
+I could previously cheat and define "less-than" as *whatever Python does,*
+and for that reason the *type* of the relational operators is also a bit of a cheat:
+I accept any two of *the same* type. But this is going to have to change.
+
+For the specific cases of numbers and strings, I can hack together some reasonable behavior.
+But right now there's nothing to stop you testing whether one *function* is the greater or lesser.
+That's nonsense.
+
+I actually intend for people to be able to define comparisons between members of derived types.
+More generally, some sort of multi-method system had long been the general plan.
+I just have not yet put any real thought into what that might look like.
+
+In any case, I'm going to have a design problem.
+Do I go with something like a *compare* method,
+or do I go with explicit *less-than* and *equals* and so forth?
+There are probably experiential lessons from Java, Python, and Ruby on this front.
