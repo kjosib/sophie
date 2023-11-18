@@ -20,7 +20,7 @@ from .stacking import RootFrame, Activation
 from .syntax import ValExpr
 from .calculus import (
 	TYPE_ENV,
-	SophieType, TypeVisitor,
+	SophieType, TypeVisitor, AdHocType,
 	OpaqueType, ProductType, ArrowType, TypeVariable,
 	RecordType, SumType, SubType, TaggedRecord, EnumType,
 	UDFType, UDAType, InterfaceType, MessageType, UserTaskType,
@@ -191,7 +191,7 @@ _literal_type_map : dict[type, OpaqueType] = {
 	float: primitive.literal_number,
 }
 
-OPS = {glyph:typ for glyph, (op, typ) in primitive.ops.items()}
+OPS = primitive.OP_TYPE
 
 class ManifestBuilder(Visitor):
 	"""Converts the syntax of manifest types into corresponding type-calculus objects."""
@@ -267,25 +267,30 @@ class Binder(Visitor):
 	Discovers (or fails) a substitution-of-variables (in the formal)
 	which makes the formal accept the actual as an instance.
 	"""
-	def __init__(self, engine:"DeductionEngine", env:TYPE_ENV, report:diagnostics.Report):
+	def __init__(self, engine:"DeductionEngine", env:TYPE_ENV):
 		self.gamma = {}
 		self.ok = True
 		self._engine = engine
 		self._dynamic_link = env
-		self._report = report
-		self._expr = None
+		self._task = None
 		self.why = None
 		
 	def fail(self, why:str):
 		self.ok = False
 		self.why = why
 	
+	def inputs(self, formal_types, actual_types, args):
+		for expr, need, got in zip(args, formal_types, actual_types):
+			if self.ok:
+				self.bind_param(expr, need, got)
+		return self
+	
 	def bind_param(self, expr, need, got):
-		if self.ok:
-			self._expr = expr
-			self.bind(need, got)
-			if not self.ok:
-				self._report.bad_type(self._dynamic_link, self._expr, need, got, self.why)
+		self._task = expr, need, got
+		self.bind(need, got)
+	
+	def complain(self, report:diagnostics.Report):
+		report.bad_type(self._dynamic_link, *self._task, self.why)
 				
 	def bind(self, formal: SophieType, actual: SophieType):
 		if actual in (BOTTOM, ERROR) or formal.number == actual.number:
@@ -707,32 +712,45 @@ class DeductionEngine(Visitor):
 		if ERROR in actual_types:
 			return ERROR
 		
-		def bind_formals(formal_types:Sequence[SophieType]) -> Binder:
-			b = Binder(self, env, self._report)
-			for expr, need, got in zip(args, formal_types, actual_types):
-				b.bind_param(expr, need, got)
-			return b
-		
 		env.pc = site
 		if callee_type.expected_arity() != len(args):
 			self._report.wrong_arity(env, site, callee_type.expected_arity(), args)
 			return ERROR
 		
+		if isinstance(callee_type, AdHocType):
+			return self._call_dynamic(callee_type, actual_types, args, env)
+		else:
+			return self._call_static(callee_type, actual_types, args, env)
+		
+	def _call_dynamic(self, ad_hoc:AdHocType, actual_types, args:Sequence[ValExpr], env:TYPE_ENV):
+		for candidate in ad_hoc.cases:
+			binder = Binder(self, env).inputs(candidate.arg.fields, actual_types, args)
+			if binder.ok:
+				return candidate.res.visit(Rewriter(binder.gamma))
+		self._report.no_applicable_method(env, actual_types)
+		return ERROR
+		
+	def _call_static(self, callee_type, actual_types, args:Sequence[ValExpr], env:TYPE_ENV):
+		
+		assert not isinstance(callee_type, AdHocType)
+		
 		if isinstance(callee_type, ArrowType):
-			binder = bind_formals(callee_type.arg.fields)
+			binder = Binder(self, env).inputs(callee_type.arg.fields, actual_types, args)
 			if binder.ok:
 				return callee_type.res.visit(Rewriter(binder.gamma))
 			else:
+				binder.complain(self._report)
 				return ERROR
 		
 		elif isinstance(callee_type, UDFType):
 			return self.apply_UDF(callee_type, actual_types, env)
 		
 		elif isinstance(callee_type, ParametricTemplateType):
-			binder = bind_formals(callee_type.args.fields)
+			binder = Binder(self, env).inputs(callee_type.args.fields, actual_types, args)
 			if binder.ok:
 				return ConcreteTemplateType(callee_type.uda, ProductType(actual_types), callee_type.frame)
 			else:
+				binder.complain(self._report)
 				return ERROR
 		
 		else:
@@ -747,7 +765,7 @@ class DeductionEngine(Visitor):
 		return self._call_site(expr, OPS[expr.glyph], (expr.lhs, expr.rhs), env)
 	
 	def visit_ShortCutExp(self, expr:syntax.ShortCutExp, env:TYPE_ENV) -> SophieType:
-		return self._call_site(expr, OPS[expr.glyph], (expr.lhs, expr.rhs), env)
+		return self._call_site(expr, primitive.logical_shortcut, (expr.lhs, expr.rhs), env)
 	
 	def visit_UnaryExp(self, expr: syntax.UnaryExp, env:TYPE_ENV) -> SophieType:
 		return self._call_site(expr, OPS[expr.glyph], (expr.arg,), env)

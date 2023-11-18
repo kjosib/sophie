@@ -925,3 +925,12 @@ In any case, I'm going to have a design problem.
 Do I go with something like a *compare* method,
 or do I go with explicit *less-than* and *equals* and so forth?
 There are probably experiential lessons from Java, Python, and Ruby on this front.
+
+
+16 November 2023
+----------------
+
+Not much to say about the VM right this minute.
+I've taken a digression to work on multiple-dispatch.
+The VM will eventually grow to support it,
+but for now the first step is to flesh out the language feature.

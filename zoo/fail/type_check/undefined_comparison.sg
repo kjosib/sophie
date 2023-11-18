@@ -1,0 +1,11 @@
+# One should be able to compare numbers, or compare strings,
+# but not compare things for which comparison is not defined.
+
+type:
+    point is (x: number, y:number);
+
+begin:
+    1 < 2;  # Yes/True
+    "Apple" < "Banana";  # Yes/True
+    point(1,2) < point(2,1);   # Type Error; 2-D points have no natural order.
+end.

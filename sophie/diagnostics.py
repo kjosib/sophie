@@ -302,6 +302,12 @@ class Report:
 		problem = [Annotation(udf.source_path, udf.head(), "This one.")]
 		self.issue(Pic(intro, problem+trace_stack(env)))
 
+	def no_applicable_method(self, env:TYPE_ENV, actual_types):
+		site = env.pc
+		intro = "I have no strategy for "+str(actual_types)
+		problem = [Annotation(env.path(), site.head(), "Here")]
+		self.issue(Pic(intro, problem+trace_stack(env)))
+
 	# Some things for just in case:
 	
 	def drat(self, env:TYPE_ENV, expr:Expr, exception):

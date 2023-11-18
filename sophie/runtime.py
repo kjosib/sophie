@@ -1,10 +1,28 @@
-import traceback
+import operator, traceback
 from typing import Any, Union, Sequence, Optional
 from . import syntax, primitive
 from .ontology import SELF
 from .stacking import Frame, Activation, RootFrame
 from .scheduler import MAIN_QUEUE, Task, Actor
 
+OP_IMPL = {
+	"^"   : operator.pow,
+	"*"   : operator.mul,
+	"/"   : operator.truediv,
+	"%"   : operator.mod,
+	"DIV" : operator.ifloordiv,
+	"MOD" : operator.imod,
+	"+"   : operator.add,
+	"-"   : operator.sub,
+	"Negative" : operator.neg,
+	"LogicalNot" : operator.not_,
+	"==" : operator.eq,
+	"!=" : operator.ne,
+	"<="  : operator.le,
+	"<" : operator.lt,
+	">="  : operator.ge,
+	">" : operator.gt,
+}
 STRICT_VALUE = Union[
 	int, float, str, dict,
 	"Procedure", "BoundMethod", "Message", "Step",
@@ -12,6 +30,10 @@ STRICT_VALUE = Union[
 LAZY_VALUE = Union[STRICT_VALUE, "Thunk"]
 ENV = Frame[LAZY_VALUE]
 VTABLE = object()
+SHORTCUT = {
+	"LogicalAnd":False,
+	"LogicalOr":True,
+}
 
 THREADED_ROOT = RootFrame()
 
@@ -44,7 +66,7 @@ def force(it:LAZY_VALUE) -> STRICT_VALUE:
 	While this will not return a thunk as such,
 	it may return a structure which contains thunks.
 	"""
-	while isinstance(it, Thunk):
+	if isinstance(it, Thunk):
 		it = it.force()
 	return it
 
@@ -74,15 +96,15 @@ def _eval_lookup(expr:syntax.Lookup, dynamic_env:ENV):
 		return static_env.assign(sym, value)
 
 def _eval_bin_exp(expr:syntax.BinExp, dynamic_env:ENV):
-	return OPS[expr.glyph](_strict(expr.lhs, dynamic_env), _strict(expr.rhs, dynamic_env))
+	return OP_IMPL[expr.glyph](_strict(expr.lhs, dynamic_env), _strict(expr.rhs, dynamic_env))
 
 def _eval_unary_exp(expr:syntax.UnaryExp, dynamic_env:ENV):
-	return OPS[expr.glyph](_strict(expr.arg, dynamic_env))
+	return OP_IMPL[expr.glyph](_strict(expr.arg, dynamic_env))
 
 def _eval_shortcut_exp(expr:syntax.ShortCutExp, dynamic_env:ENV):
 	lhs = _strict(expr.lhs, dynamic_env)
 	assert isinstance(lhs, bool)
-	return lhs if lhs == OPS[expr.glyph] else _strict(expr.rhs, dynamic_env)
+	return lhs if lhs == SHORTCUT[expr.glyph] else _strict(expr.rhs, dynamic_env)
 
 def _eval_call(expr:syntax.Call, dynamic_env:ENV):
 	procedure = _strict(expr.fn_exp, dynamic_env)
@@ -100,7 +122,6 @@ def _eval_field_ref(expr:syntax.FieldReference, dynamic_env:ENV):
 	if isinstance(lhs, dict):
 		try: return lhs[key]
 		except KeyError:
-			print(lhs)
 			raise
 	else:
 		return getattr(lhs, key)
@@ -185,7 +206,6 @@ for _k, _v in list(globals().items()):
 		_t = _v.__annotations__["expr"]
 		assert isinstance(_t, type), (_k, _t)
 		EVALUATE[_t] = _v
-OPS = {glyph:op for glyph, (op, typ) in primitive.ops.items()}
 
 ###############################################################################
 
@@ -204,6 +224,9 @@ class Closure(Function):
 	def __init__(self, static_link:ENV, udf:syntax.UserFunction):
 		self._static_link = static_link
 		self._udf = udf
+	
+	def __str__(self):
+		return str(self._udf)
 	
 	def _name(self): return self._udf.nom.text
 
