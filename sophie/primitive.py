@@ -4,61 +4,70 @@ Also, some bits used for operator syntax
 and the primitive literal types
 """
 
-from functools import lru_cache
 from .ontology import NS, Nom
-from .syntax import Opaque
-from . import calculus
+from . import calculus, syntax
 
 root_namespace = NS(place=None)
-ops = {}
+OP_TYPE = {}
 
 def _built_in_type(name:str) -> calculus.OpaqueType:
-	symbol = Opaque(Nom(name, None), ())
+	symbol = syntax.Opaque(Nom(name, None), ())
 	term = calculus.OpaqueType(symbol)
 	root_namespace[name] = symbol
 	return term
+
+def _arrow_of(typ: calculus.SophieType, arity:int) -> calculus.ArrowType:
+	assert arity > 0
+	product = calculus.ProductType((typ,) * arity).exemplar()
+	return calculus.ArrowType(product, typ).exemplar()
+
 literal_number = _built_in_type("number")
 literal_string = _built_in_type("string")
 literal_flag = _built_in_type("flag")
 literal_act = _built_in_type("act")
 literal_msg = _built_in_type("message")
-
-@lru_cache()
-def _arrow_of_math(arity:int) -> calculus.ArrowType:
-	return _arrow_of(literal_number, arity)
-
-def _arrow_of(typ: calculus.SophieType, arity:int) -> calculus.ArrowType:
-	assert arity > 0
-	return calculus.ArrowType(calculus.ProductType((typ,) * arity), typ)
+logical_shortcut = _arrow_of(literal_flag, 2)
 
 def _init():
-	import operator
-	binary = _arrow_of_math(2)
-	ops["PowerOf"] = operator.pow, binary
-	ops["Mul"] = operator.mul, binary
-	ops["FloatDiv"] = operator.truediv, binary
-	ops["FloatMod"] = operator.mod, binary
-	ops["IntDiv"] = operator.ifloordiv, binary
-	ops["IntMod"] = operator.imod, binary
-	ops["Add"] = operator.add, binary
-	ops["Sub"] = operator.sub, binary
+	def overload(glyph, arity):
+		symbol = syntax.Overload(Nom(glyph, None), arity)
+		OP_TYPE[glyph] = calculus.AdHocType(symbol)
+		
+	def relop_type(case):
+		pair = calculus.ProductType((case, case)).exemplar()
+		return calculus.ArrowType(pair, literal_flag).exemplar()
 	
-	variable = calculus.TypeVariable()
-	pair_of_same = calculus.ProductType((variable, variable))
-	comparison = calculus.ArrowType(pair_of_same, literal_flag)
-	ops["EQ"] = operator.eq, comparison
-	ops["NE"] = operator.ne, comparison
-	ops["LE"] = operator.le, comparison
-	ops["LT"] = operator.lt, comparison
-	ops["GE"] = operator.ge, comparison
-	ops["GT"] = operator.gt, comparison
+	math_op = _arrow_of(literal_number, 2)
 	
-	ops["Negative"] = operator.neg, _arrow_of_math(1)
-	ops["LogicalNot"] = operator.not_, _arrow_of(literal_flag, 1)
+	for op in '^ * / % DIV MOD + -'.split():
+		overload(op, 2)
+		OP_TYPE[op].cases.append(math_op)
 	
-	logical = _arrow_of(literal_flag, 2)
-	ops["LogicalAnd"] = False, logical
-	ops["LogicalOr"] = True, logical
+	numeric = relop_type(literal_number)
+	stringy = relop_type(literal_string)
+	flagged = relop_type(literal_flag)
+	
+	def eq(op):
+		rel(op)
+		OP_TYPE[op].cases.append(flagged)
+	
+	def rel(op):
+		overload(op, 2)
+		OP_TYPE[op].cases.append(numeric)
+		OP_TYPE[op].cases.append(stringy)
+
+	eq("==")
+	eq("!=")
+	rel("<=")
+	rel("<")
+	rel(">=")
+	rel(">")
+	
+	overload("Negative", 1)
+	OP_TYPE["Negative"].cases.append(_arrow_of(literal_number, 1))
+	
+	OP_TYPE["LogicalNot"] = _arrow_of(literal_flag, 1)
+	
 	
 _init()
 

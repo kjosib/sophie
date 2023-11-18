@@ -155,6 +155,14 @@ class UDFType(SophieType):
 		#       Only DeductionEngine.visit_Lookup creates these, so it could provide the capture.
 		super().__init__(object())
 
+class AdHocType(SophieType):
+	def __init__(self, overload:syntax.Overload):
+		super().__init__(overload)
+		self.overload = overload
+		self.cases = []
+	def visit(self, visitor:"TypeVisitor"): return visitor.on_ad_hoc(self)
+	def expected_arity(self) -> int: return self.overload.arity
+
 class UserTaskType(SophieType):
 	""" The type of a task-ified user-defined (parametric) function. """
 	def __init__(self, udf_type:UDFType):
@@ -227,6 +235,7 @@ class TypeVisitor:
 	def on_arrow(self, a:ArrowType): raise NotImplementedError(type(self))
 	def on_product(self, p:ProductType): raise NotImplementedError(type(self))
 	def on_udf(self, f:UDFType): raise NotImplementedError(type(self))
+	def on_ad_hoc(self, f:AdHocType): raise NotImplementedError(type(self))
 	def on_interface(self, it:InterfaceType): raise NotImplementedError(type(self))
 	def on_parametric_template(self, t:ParametricTemplateType): raise NotImplementedError(type(self))
 	def on_concrete_template(self, t:ConcreteTemplateType): raise NotImplementedError(type(self))
@@ -267,6 +276,8 @@ class Render(TypeVisitor):
 		return "(%s)"%(",".join(t.visit(self) for t in p.fields))
 	def on_udf(self, f: UDFType):
 		return "<%s/%d>"%(f.fn.nom.text, f.expected_arity())
+	def on_ad_hoc(self, f: AdHocType):
+		return "<%s/%d>"%(f.overload.nom.text, f.expected_arity())
 	def on_interface(self, it:InterfaceType):
 		return "<interface:%s>"%it.symbol.nom.text
 	def on_parametric_template(self, t: ParametricTemplateType):

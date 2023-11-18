@@ -99,6 +99,7 @@ class ZooOfFail(unittest.TestCase):
 			"num_plus_string",
 			"bad_message",
 			"omega",
+			"undefined_comparison",
 			"wrong_arity",
 		])
 	

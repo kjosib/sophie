@@ -192,7 +192,6 @@ class UserFunction(Term):
 	namespace: NS
 	params: Sequence[FormalParameter]
 	where: Sequence["UserFunction"]
-	def has_value_domain(self): return True
 	def head(self) -> slice: return self.nom.head()
 	def __repr__(self):
 		p = ", ".join(map(str, self.params))
@@ -223,7 +222,6 @@ class UserAgent(Term):
 	source_path: Path
 	field_space: NS
 	message_space: NS
-	def has_value_domain(self): return True
 	def head(self) -> slice: return self.nom.head()
 	def __init__(
 		self,
@@ -244,7 +242,6 @@ class UserAgent(Term):
 class Behavior(Term):
 	source_path: Path
 	namespace: NS
-	def has_value_domain(self): return True
 	def head(self) -> slice: return self.nom.head()
 	def __repr__(self):
 		p = ", ".join(map(str, self.params))
@@ -258,6 +255,13 @@ class Behavior(Term):
 		super().__init__(nom)
 		self.params = params or ()
 		self.expr = expr
+
+class Overload(Term):
+	# There's not yet a user-mode way to create one of these.
+	# So it is far from perfect.
+	def __init__(self, nom: Nom, arity:int):
+		super().__init__(nom)
+		self.arity = arity
 
 class Literal(ValExpr):
 	def __init__(self, value: Any, a_slice: slice):
@@ -311,21 +315,21 @@ class BinExp(ValExpr):
 
 def _be(glyph: str): return lambda a, o, b: BinExp(glyph, a, o, b)
 
-PowerOf = _be("PowerOf")
-Mul = _be("Mul")
-FloatDiv = _be("FloatDiv")
-FloatMod = _be("FloatMod")
-IntDiv = _be("IntDiv")
-IntMod = _be("IntMod")
-Add = _be("Add")
-Sub = _be("Sub")
+PowerOf = _be("^")
+Mul = _be("*")
+FloatDiv = _be("/")
+FloatMod = _be("%")
+IntDiv = _be("DIV")
+IntMod = _be("MOD")
+Add = _be("+")
+Sub = _be("-")
 
-EQ = _be("EQ")
-NE = _be("NE")
-LE = _be("LE")
-LT = _be("LT")
-GE = _be("GE")
-GT = _be("GT")
+EQ = _be("==")
+NE = _be("!=")
+LE = _be("<=")
+LT = _be("<")
+GE = _be(">=")
+GT = _be(">")
 
 class ShortCutExp(ValExpr):
 	def __init__(self, glyph: str, lhs: ValExpr, o:slice, rhs: ValExpr):
@@ -408,13 +412,12 @@ class Absurdity(ValExpr):
 def absurdAlternative(pattern:Nom, _head:slice, absurdity:Absurdity):
 	return Alternative(pattern, _head, absurdity, None)
 	
-class Subject(Symbol):
+class Subject(Term):
 	""" Within a match-case, a name must reach a different symbol with the particular subtype """
 	expr: ValExpr
 	def __init__(self, expr: ValExpr, nom: Nom):
 		super().__init__(nom)
 		self.expr = expr
-	def has_value_domain(self) -> bool: return True
 
 def simple_subject(nom:Nom):
 	return Subject(Lookup(PlainReference(nom)), nom)
@@ -438,11 +441,10 @@ class MatchExpr(ValExpr):
 	def head(self) -> slice:
 		return self.subject.head()
 
-class NewAgent(Symbol):
+class NewAgent(Term):
 	def __init__(self, nom:Nom, expr:ValExpr):
 		super().__init__(nom)
 		self.expr = expr
-	def has_value_domain(self) -> bool: return True
 
 class DoBlock(ValExpr):
 	namespace: NS  # WordDefiner fills

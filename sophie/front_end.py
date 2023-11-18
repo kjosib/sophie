@@ -174,6 +174,7 @@ _hint("name formals annotation = ● ;", """
 	But this is a computer program.
 """)
 _hint("name formals : name ● ???", "It seems to cut off after perhaps a type-annotation?")
+_hint("name type_parameters IS ( name : name ● ???", "Anticipated a comma or perhaps open-square-bracket here.")
 
 assert _best_hint("export_section import_section TYPE : name square_list(name) IS".split(), 'OPAQUE')
 
