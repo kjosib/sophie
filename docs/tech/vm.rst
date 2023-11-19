@@ -43,11 +43,11 @@ Status
 
 Here are some open problems, in no particular order:
 
+* [DONE] Pre-link global functions at load-time rather than hash look-ups during execution.
+* [PARTIAL] Message-passing -- starting with a console-actor.
 * Modules. Right now there is but one global namespace. A simple name-mangling scheme would work.
-* Message-passing -- starting with a console-actor.
 * User-Defined Actors.
 * Source line numbers. On the off chance something goes wrong, a cross-reference is most helpful.
-* [DONE] Pre-link global functions at load-time rather than hash look-ups during execution.
 * Numeric field offsets. This could save cycles where a record-type is statically known.
 * Tuning the dial on eager evaluation. This may help with performance.
 * NaN-boxing.
@@ -60,6 +60,8 @@ Here are some open problems, in no particular order:
 * Self-hosting some or all of the compiler.
 * A means to install the VM as any other language runtime.
 * A killer app.
+* Multiple Dispatch.
+* Operator Overloading.
 
 Some ideas for bindings:
 
@@ -856,9 +858,11 @@ To see an example, use the number ``1e23`` which displays as all nines e+22 on t
 Incidentally, there was a bug report on this very subject (and using this very example)
 filed against an early JVM back in the day. But for the moment I'll just live with it.
 
-12 November 2023
-----------------
+12 November 2023 - A Milestone!
+-------------------------------
 
+Sophie's VM passed its first message Sunday.
+It was to a system-defined `console` actor with a list of string snippets to print.
 One additional case in the tree-walker sufficed to compile basic message-passing.
 There was considerably more to do on the VM side, but now message-passing works!
 Here's the ``games/99 bottles.sg`` example:
@@ -899,6 +903,22 @@ This is still a minimal example: It only passes a single message,
 and to a system-defined actor at that.
 But it should be downhill for a little while now.
 
+I suppose that getting the remaining examples to run is but a small matter of programming.
+But an odd pattern in this points to an implementation challenge:
+I have front-end and (new) back-end as separate programs -- and in different languages.
+They collaborate by way of a crufy intermediate representation with one singular virtue:
+It's all text, so I can look upon it and even hack upon it with `notepad` or the like.
+
+The challenge is ergonomics. I prefer the load-and-go feel of original Sophie.
+It's two steps to run with the VM, and you have to know about redirection.
+I have no desire to translate the whole shebang to a single host language if I can avoid it.
+
+Is this vague idea **crazy** or **mad?** Could one embed a language into its own start-up sequence?
+Approximately, suppose the VM runs in the first instance a self-contained IR program which
+has does all the complicated front-end stuff for compiling a script into IR.
+But instead of writing the IR to a file, it (normally) invokes a native API that
+builds byte-code directly. And maybe with an escape hatch to dump the compiled IR to a text file instead.
+
 13 November 2023
 ----------------
 
@@ -934,3 +954,18 @@ Not much to say about the VM right this minute.
 I've taken a digression to work on multiple-dispatch.
 The VM will eventually grow to support it,
 but for now the first step is to flesh out the language feature.
+
+19 November 2023
+----------------
+
+I've decided. I plan to add the spaceship operator, ``<=>``, cribbed from Ruby.
+But rather than defining it to return a *number* with respect to zero,
+I'll have it return a member of an enumeration: ``less``, ``same``, or ``more``.
+
+What else is cool about having a decision is that it clarifies how to approach
+string comparisons in the VM. So I got that done, and now the 2-3 tree demo works.
+Perhaps after I add corresponding syntax, I'll convert the tree code to use it.
+
+Incidentally, I'm not planning to use the normal relational operators for
+partial orders like the subset relationship. Instead, for the short term
+normally-named functions will work.

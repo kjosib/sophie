@@ -53,7 +53,7 @@ int main(int argc, const char *argv[]) {
 	}
 }
 
-__declspec(noreturn) void crashAndBurn(char *format, ...) {
+__declspec(noreturn) void crashAndBurn(const char *format, ...) {
 	va_list args;
 	va_start(args, format);
 	fputs("\n***\n ***\n  ***   ***   Giving up because ", stderr);

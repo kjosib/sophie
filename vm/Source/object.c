@@ -19,11 +19,21 @@ static void display_string(String *string) {
 	printf("%s", string->text);
 }
 
+static void compare_string() {
+	int direction = strcmp(AS_STRING(SND)->text, AS_STRING(TOP)->text);
+	Order tag;
+	if (direction < 0) tag = LESS;
+	else if (direction == 0) tag = SAME;
+	else tag = MORE;
+	merge(ENUM_VAL(tag));
+}
+
 GC_Kind KIND_String = {
 	.display = display_string,
 	.deeply = display_string,
 	.blacken = blacken_string,
 	.size = size_string,
+	.compare = compare_string,
 };
 
 

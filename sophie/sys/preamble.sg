@@ -51,10 +51,18 @@ foreign "sophie.adapters.teletype_adapter"
 end;
 
 type:
+
+    order is case:
+        less;
+        same;
+        more;
+    esac;
+
 	list[x] is CASE:
 		 cons(head:x, tail:list[x]);
 		 nil;
 	ESAC;
+
 	maybe[x] is case:
 	    this(item:x);
 	    nope;
@@ -67,8 +75,9 @@ type:
 		read(!(string));
 		random(!(number));
 	end;
-	
+
 define:
+
 	id(x) = x;
 	any(xs) = case xs of nil -> no; cons -> xs.head or any(xs.tail); esac;
 	all(xs) = case xs of nil -> yes; cons -> xs.head and all(xs.tail); esac;

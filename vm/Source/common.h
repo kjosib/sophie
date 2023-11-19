@@ -22,6 +22,12 @@ Eventually I might enforce a consistent style. But for now, there are bigger fis
 #include <stddef.h>
 #include <stdint.h>
 
+typedef enum { // written to match the standard preamble's order type
+	LESS = 0,
+	SAME = 1,
+	MORE = 2,
+} Order;
+
 #ifdef _DEBUG
 //#define DEBUG_PRINT_GLOBALS
 //#define DEBUG_PRINT_CODE
@@ -39,7 +45,7 @@ Eventually I might enforce a consistent style. But for now, there are bigger fis
     void resize ## kind(kind* vec, size_t cap); \
     size_t  append ## kind(kind* vec, type item);
 
-__declspec(noreturn) void crashAndBurn(char *why, ...);
+__declspec(noreturn) void crashAndBurn(const char *why, ...);
 
 
 /* gc.h */
@@ -53,6 +59,7 @@ typedef struct {
 	Method deeply;
 	Method blacken;
 	SizeMethod size;
+	Verb compare;  // ( a b -- Order )
 } GC_Kind;
 
 typedef union {
@@ -351,6 +358,7 @@ void drain_the_queue();
 #define FRAMES_MAX 64
 #define STACK_MAX (FRAMES_MAX * BYTE_CARDINALITY)
 
+
 static inline uint16_t word_at(const char *ch) {
 	uint16_t *ptr = (uint16_t *)(ch);
 	return *ptr;
@@ -391,6 +399,8 @@ static inline Value pop() {
 
 #define TOP (vm.stackTop[-1])
 #define SND (vm.stackTop[-2])
+
+static inline void merge(Value v) { pop(); TOP = v; }
 
 // Now some FORTH-style stack operators because keeping pointers
 // anywhere else is dangerous because allocation moves things around.
