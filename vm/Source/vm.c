@@ -135,7 +135,6 @@ static double x_num(byte *vpc, Value *base, Value it) {
 #define READ_BYTE() (*vpc++)
 #define LEAP() do { vpc += word_at(vpc); } while (0)
 #define SKIP_AND_POP() do { pop(); vpc += 2; } while(0)
-#define BINARY_OP(valueType, op) do { SND = valueType(num(SND) op num(TOP)); pop(); NEXT; } while (0)
 #define YIELD(value) do { Value retval = (value); vm.stackTop = base; vm.trace--; return retval; } while (0)
 
 Value run(Closure *closure) {
@@ -198,25 +197,46 @@ dispatch:
 		case OP_TRUE: push(BOOL_VAL(true)); NEXT;
 		case OP_FALSE: push(BOOL_VAL(false)); NEXT;
 		case OP_EQUAL:
-			SND = BOOL_VAL(valuesEqual(SND, TOP));
-			pop();
-			NEXT;
-		case OP_GREATER:  BINARY_OP(BOOL_VAL, > );
-		case OP_LESS:     BINARY_OP(BOOL_VAL, < );
-		case OP_POWER:
-				SND = NUMBER_VAL(pow(num(SND), num(TOP)));
-				pop();
-				NEXT;
-		case OP_MULTIPLY: BINARY_OP(NUMBER_VAL, * );
-		case OP_DIVIDE:   BINARY_OP(NUMBER_VAL, / );
-		case OP_ADD:      BINARY_OP(NUMBER_VAL, + );
-		case OP_SUBTRACT: BINARY_OP(NUMBER_VAL, - );
-		case OP_NOT:
-			TOP = BOOL_VAL(!AS_BOOL(TOP));
-			NEXT;
-		case OP_NEGATE:
-			TOP = NUMBER_VAL(-num(TOP));
-			NEXT;
+			if (IS_NUMBER(SND)) merge(BOOL_VAL(AS_NUMBER(SND) == num(TOP)));
+			else if (IS_BOOL(SND)) merge(BOOL_VAL(AS_BOOL(SND) == AS_BOOL(TOP)));
+			else {
+				// For now, this must be a string.
+				assert(IS_GC_ABLE(SND));
+				assert(IS_GC_ABLE(TOP));
+				AS_GC(SND)->kind->compare();
+				TOP = BOOL_VAL(AS_ENUM(TOP) == SAME);
+			}
+		NEXT;
+		case OP_GREATER:
+			if (IS_NUMBER(SND)) merge(BOOL_VAL(AS_NUMBER(SND) > num(TOP)));
+			else {
+				// For now, this must be a string.
+				assert(IS_GC_ABLE(SND));
+				assert(IS_GC_ABLE(TOP));
+				AS_GC(SND)->kind->compare();
+				TOP = BOOL_VAL(AS_ENUM(TOP) == MORE);
+			}
+		NEXT;
+		case OP_LESS:
+			if (IS_NUMBER(SND)) merge(BOOL_VAL(num(SND) < num(TOP)));
+			else {
+				// For now, this must be a string.
+				assert(IS_GC_ABLE(SND));
+				assert(IS_GC_ABLE(TOP));
+				AS_GC(SND)->kind->compare();
+				TOP = BOOL_VAL(AS_ENUM(TOP) == LESS);
+			}
+		NEXT;
+		case OP_POWER: merge(NUMBER_VAL(pow(num(SND), num(TOP)))); NEXT;
+		case OP_MULTIPLY: merge(NUMBER_VAL(num(SND) * num(TOP))); NEXT;
+		case OP_DIVIDE: merge(NUMBER_VAL(num(SND) / num(TOP))); NEXT;
+		case OP_MODULUS: merge(NUMBER_VAL(fmod(num(SND), num(TOP)))); NEXT;
+		case OP_INTDIV: merge(NUMBER_VAL((int)num(SND) / (int)num(TOP))); NEXT;
+		case OP_INTMOD: merge(NUMBER_VAL((int)num(SND) % (int)num(TOP))); NEXT;
+		case OP_ADD: merge(NUMBER_VAL(num(SND) + num(TOP))); NEXT;
+		case OP_SUBTRACT: merge(NUMBER_VAL(num(SND) - num(TOP))); NEXT;
+		case OP_NOT: TOP = BOOL_VAL(!AS_BOOL(TOP)); NEXT;
+		case OP_NEGATE: TOP = NUMBER_VAL(-num(TOP)); NEXT;
 		case OP_CALL:
 			switch (TOP.type) {
 			case VAL_CLOSURE:
