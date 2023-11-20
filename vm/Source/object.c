@@ -20,11 +20,16 @@ static void display_string(String *string) {
 }
 
 static void compare_string() {
-	int direction = strcmp(AS_STRING(SND)->text, AS_STRING(TOP)->text);
+	// TODO: A comparison for equality alone ought not call strcmp,
+	// because strings are interned.
 	Order tag;
-	if (direction < 0) tag = LESS;
-	else if (direction == 0) tag = SAME;
-	else tag = MORE;
+	if (AS_STRING(SND) == AS_STRING(TOP)) tag = SAME;
+	else {
+		int direction = strcmp(AS_STRING(SND)->text, AS_STRING(TOP)->text);
+		if (direction < 0) tag = LESS;
+		else if (direction == 0) tag = SAME;
+		else tag = MORE;
+	}
 	merge(ENUM_VAL(tag));
 }
 
@@ -81,8 +86,8 @@ String *import_C_string(const char *text, size_t length) {
 	}
 }
 
-void push_C_string(const char *name) {
-	push(GC_VAL(import_C_string(name, strlen(name))));
+void push_C_string(const char *text) {
+	push(GC_VAL(import_C_string(text, strlen(text))));
 }
 
 void printObject(GC *item) { item->kind->display(item); }
