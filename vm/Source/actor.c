@@ -231,6 +231,7 @@ static GC_Kind KIND_message = {
 };
 
 void apply_bound_method() {
+	assert(IS_BOUND(TOP));
 	int arity = arity_of_message(AS_MESSAGE(TOP));
 	Message *msg = gc_allocate(&KIND_message, sizeof(Message) + arity * sizeof(Value));
 	Message *bound = AS_MESSAGE(pop());

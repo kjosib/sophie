@@ -26,16 +26,6 @@ void printValueDeeply(Value value) {
 	else print_simply(value);
 }
 
-bool valuesEqual(Value a, Value b) {
-	if (a.type != b.type) return false;
-	switch (a.type) {
-	case VAL_BOOL:   return AS_BOOL(a) == AS_BOOL(b);
-	case VAL_NUMBER: return AS_NUMBER(a) == AS_NUMBER(b);
-	case VAL_GC:    return AS_GC(a) == AS_GC(b);  // Pointer equality i.e. identity. This will change.
-	default:         return false;
-	}
-}
-
 void darkenValues(Value *at, size_t count) {
 	for (size_t index = 0; index < count; index++) darkenValue(&at[index]);
 }

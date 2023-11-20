@@ -165,7 +165,6 @@ DEFINE_VECTOR_TYPE(ValueArray, Value)
 
 void printValue(Value value);
 void printValueDeeply(Value value);
-bool valuesEqual(Value a, Value b);
 
 static inline void darkenValue(Value *value) { if (IS_GC_ABLE(*value)) darken_in_place(&value->as.ptr); }
 void darkenValues(Value *at, size_t count);
