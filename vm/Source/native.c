@@ -76,7 +76,7 @@ static Value str_native(Value *args) {
 
 /***********************************************************************************/
 
-static Value native_echo(Value *args) {
+static Value console_echo(Value *args) {
 	// Expect args[1] to be a (thunk of a) list of strings.
 	// (Eventually I'll cure the thunking problem.)
 
@@ -91,12 +91,35 @@ static Value native_echo(Value *args) {
 	return NIL_VAL;
 }
 
-static Value native_read(Value *args) {
-	crashAndBurn("read is not yet implemented");
+static Value console_read(Value *args) {
+	/*
+	Read a line of text from the console as a string,
+	and send it as the parameter to a given message.
+
+	Arbitrary-length input is rather a puzzle in C.
+	Short-term, I'll cheat and use a fixed-size buffer with fgets.
+	Later on, perhaps I build a list of chunks.
+	*/
+	static char buffer[1024];
+	fgets(buffer, sizeof(buffer), stdin);
+	push_C_string(buffer);
+	push(args[1]);
+	apply_bound_method();
+	enqueue_message_from_top_of_stack();
+	return NIL_VAL;
 }
 
-static Value native_random(Value *args) {
-	crashAndBurn("random is not yet implemented");
+static Value console_random(Value *args) {
+	/*
+	Similar to console_read, but less stringy.
+	Standard randomness in C is also problematic.
+	It will do for the moment,
+	but some day a better default random number generator would be nice.
+	*/
+	args[0] = NUMBER_VAL((double)rand() / RAND_MAX);
+	apply_bound_method();
+	enqueue_message_from_top_of_stack();
+	return NIL_VAL;
 }
 
 /***********************************************************************************/
@@ -166,9 +189,9 @@ void install_native_functions() {
 	defineGlobal();
 
 	// Next up, define some methods:
-	create_native_method("echo", 1, native_echo);
-	create_native_method("read", 1, native_read);
-	create_native_method("random", 1, native_random);
+	create_native_method("echo", 1, console_echo);
+	create_native_method("read", 1, console_read);
+	create_native_method("random", 1, console_random);
 
 	// Finally, create the actor itself.
 	make_template_from_dfn();
