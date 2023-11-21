@@ -140,9 +140,8 @@ expr -> integer | real | short_string | list_expr | case_expr | match_expr
 | expr '^' expr :PowerOf
 | expr '*' expr :Mul
 | expr '/' expr :FloatDiv
-| expr '%' expr :FloatMod
 | .expr .DIV .expr :IntDiv
-| .expr .MOD .expr :IntMod
+| .expr .MOD .expr :Modulo
 | expr '+' expr :Add
 | expr '-' expr :Sub
 | expr '==' expr :EQ
@@ -297,7 +296,7 @@ round_list(x) -> '(' comma_list(x) ')'
 %nonassoc  '!'
 %left '(' '[' '.'
 %right '^'
-%left '*' '/' '%' DIV MOD
+%left '*' '/' DIV MOD
 %left '+' '-'
 %left '<' '<=' '==' '!=' '>=' '>'
 %left NOT

@@ -39,7 +39,7 @@ def _init():
 	
 	math_op = _arrow_of(literal_number, 2)
 	
-	for op in '^ * / % DIV MOD + -'.split():
+	for op in '^ * / DIV MOD + -'.split():
 		overload(op, 2)
 		OP_TYPE[op].cases.append(math_op)
 	

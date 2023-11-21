@@ -6,11 +6,12 @@ __pycache__/
 
 # local bits
 *.automaton
-.idea/*
-.vscode/*
-vm/.vs/*
+.idea/
+.vscode/
+vm/.vs/
+vm/enc_temp_folder/
 docs/_build/
-vm/Source/.vscode/*
+vm/Source/.vscode/
 
 # C extensions
 *.so
