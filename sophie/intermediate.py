@@ -241,6 +241,10 @@ class VMFunctionScope(VMScope):
 		emit("POP")
 		self._pop()
 
+	def emit_perform(self):
+		emit("PERFORM")
+		self._pop()
+
 	def emit_return(self):
 		emit("RETURN")
 		self._depth = None
@@ -277,7 +281,7 @@ class VMFunctionScope(VMScope):
 	def make_thunk(self, xlat, expr):
 		# Implicitly becomes a THUNK instruction:
 		emit("[")
-		inner = VMFunctionScope(self, True)
+		inner = VMFunctionScope(self, is_thunk=True)
 		xlat.tail_call(expr, inner)
 		inner.emit_epilogue()
 		emit("]")
@@ -331,7 +335,7 @@ class Translation(Visitor):
 			self.write_functions(module.outer_functions, root)
 		
 		# Write all begin-expressions:
-		scope = VMFunctionScope(root, True)
+		scope = VMFunctionScope(root, is_thunk=True)
 		self.visit_Module(roadmap.preamble, scope)
 		for module in roadmap.each_module:
 			self.visit_Module(module, scope)
@@ -373,7 +377,7 @@ class Translation(Visitor):
 		outer.nl()
 
 	def write_one_function(self, fn:syntax.UserFunction, outer:VMScope):
-		inner = VMFunctionScope(outer, not fn.params)
+		inner = VMFunctionScope(outer, is_thunk=not fn.params)
 		inner.nl()
 		inner.emit_preamble(fn)
 		self.write_functions(fn.where, inner)
@@ -528,3 +532,20 @@ class Translation(Visitor):
 		self.force(expr.receiver, scope)
 		emit("BIND", quote(expr.method_name.key()))
 
+	def visit_DoBlock(self, do:syntax.DoBlock, outer:VMFunctionScope):
+		inner = VMFunctionScope(outer, is_thunk=False)
+		inner.nl()
+		emit('{ 0 "do"')
+		depth = inner.depth()
+		for step in do.steps:
+			self.force(step, inner)
+			inner.emit_perform()
+			assert inner.depth() == depth
+		inner.emit_return()
+		inner.emit_epilogue()
+		emit("}")
+	
+	def visit_AsTask(self, task:syntax.AsTask, scope:VMFunctionScope):
+		self.force(task.sub, scope)
+		emit("TASK")
+		
