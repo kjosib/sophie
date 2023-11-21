@@ -17,7 +17,7 @@ begin:
 
 "You can get integer division and remainder:"; 10 div 3; 10 mod 3;
 
-"There is also a concept of fractional remainder:"; 2.0 % 1.25;
+"There is also a concept of fractional remainder:"; 2.0 mod 1.25;
 
 "Scientific Notation is available:"; 1e-4; 6.02e23;
 
