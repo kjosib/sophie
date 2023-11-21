@@ -45,23 +45,27 @@ First, let the VM support the general case. Efficiency comes later.
 Compiling ``do``-Blocks
 -------------------------
 
-One thing that *would basically work* is to make each ``do``-block represent an anonymous
-zero-argument *action-function (not a thunk)* which, under the right conditions,
-gets activated precisely when it's time to invoke the corresponding behavior.
-The majority of those times are under the control of some other operating ``do``-block:
-Each *step* of that block evaluates its expression and then subsequently ``OP_DISPATCH``-es it.
-Well, with one exception: There should be a tail-dispatch (analogous to tail-call)
-which aggressively reclaims stack space.
+This is a puzzle. Here are the pieces:
 
-I currently think I need a distinct ``OP_DISPATCH`` (rather than normal call) because
-you can write a function which returns a bound-method, and locally that function's
-byte-code doesn't know whether to send that as a message directly (without payload)
-or if that message will be given arguments later. So it must return the thing as-is.
-If an ``OP_DISPATCH`` gets hold of it, then it goes to the queue with an empty payload.
-Conversely if it stumbles into the path of ``OP_CALL``, then it must be the sort that
-requires arguments and thus a nontrivial payload.
+* A *statement* like ``! do ... end;`` should cause the ``do ... end;`` part to become a scheduled message.
+* That means a ``do ... end;`` thing is a value that resembles a zero-argument closure.
+* Inside of ``do ... end;`` the ellipsis elides a sequence of statements.
+  Each *statement* is to evaluate an expression into an effect and then perform that effect.
+* Thus, the ``! foo`` syntax creates an effect from a closure called ``foo``,
+  and that effect is to bind ``foo`` into a message for the ambient background.
+  (Or, if ``foo`` happens to name a bound-method or existing 
+
+My current plan is to make a ``do``-block represent a zero-argument closure.
+Because that's not the same as a thunk, forcing it has no effect.
+The bytecode within such a closure will force, then perform, each step.
+
+That works, but leaves performance on the table. Suppose one block is inside another,
+perhaps controlled by a conditional. Then it need not be a separate closure,
+but could be inline byte-code instead.
 
 This results in a few minor inefficiencies, but in the name of progress I shall tolerate them for now.
+Perhaps a new compiling inflection (beyond ``delay``, ``force``, and ``tail``) would
+decrease cases of constructing a closure only to call it in the very next instruction.
 
 Compiling Actors
 ------------------
