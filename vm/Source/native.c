@@ -1,4 +1,4 @@
-#include <errno.h>
+#include <ctype.h>
 #include <math.h>
 #include <time.h>
 #include "common.h"
@@ -48,9 +48,15 @@ static Value floor_native(Value *args) {
 }
 
 static Value val_native(Value *args) {
-	errno = 0;
-	double d = strtod(AS_STRING(force(args[0]))->text, NULL);
-	if (errno) return vm.maybe_nope;
+	const char *text = AS_STRING(force(args[0]))->text;
+	// This is hinkey, but it will have to do for now.
+	// Ideally recognize exactly Sophie-format numbers such as with underscores...
+	while (isspace(*text)) text++; // Skip leading whitespace...
+	char *end = NULL;
+	double d = strtod(text, &end);
+	if (end == text) return vm.maybe_nope;
+	while (isspace(*end)) end++; // Skip trailing whitespace...
+	if (*end) return vm.maybe_nope;  // Reject trailing junk.
 	else {
 		push(NUMBER_VAL(d));
 		push(vm.maybe_this);
