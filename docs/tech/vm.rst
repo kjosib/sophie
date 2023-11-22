@@ -18,8 +18,8 @@ but then realized a structure reminiscent of FORTH would be preferable:
 
 
 .. contents::
-	:local:
-	:depth: 3
+    :local:
+    :depth: 3
 
 Quick Demo
 ============
@@ -28,15 +28,15 @@ Here's an example:
 
 .. code-block:: text
 
-	D:\Playground>sophie -x d:\GitHub\sophie\examples\mathematics\Newton_3.sg > newton
-	
-	D:\Playground>d:\GitHub\sophie\vm\out\build\x64-release\svm.exe newton
-	1.41421
-	1.41421
-	4.12311
-	4.12311
-	412.311
-	412.311
+    D:\Playground>sophie -x d:\GitHub\sophie\examples\mathematics\Newton_3.sg > newton
+    
+    D:\Playground>d:\GitHub\sophie\vm\out\build\x64-release\svm.exe newton
+    1.41421
+    1.41421
+    4.12311
+    4.12311
+    412.311
+    412.311
 
 Status
 =======
@@ -44,7 +44,7 @@ Status
 Here are some open problems, in no particular order:
 
 * [DONE] Pre-link global functions at load-time rather than hash look-ups during execution.
-* [PARTIAL] Message-passing -- starting with a console-actor.
+* [DONE] Message-passing -- starting with a console-actor.
 * Modules. Right now there is but one global namespace. A simple name-mangling scheme would work.
 * User-Defined Actors.
 * Source line numbers. On the off chance something goes wrong, a cross-reference is most helpful.
@@ -969,3 +969,63 @@ Perhaps after I add corresponding syntax, I'll convert the tree code to use it.
 Incidentally, I'm not planning to use the normal relational operators for
 partial orders like the subset relationship. Instead, for the short term
 normally-named functions will work.
+
+21 November 2023
+----------------
+
+Milestone: The VM can play simple text games!
+
+.. code-block:: text
+    
+    D:\Playground\sophie_test>sophie -x \GitHub\sophie\examples\games\guess_the_number.sg > guess.is
+
+    D:\Playground\sophie_test>\GitHub\sophie\vm\out\build\x64-release\svm guess.is
+    I have chosen a random number from 1 to 100.
+    
+    What is your guess? 50
+    Too high. Try a lower number.
+    What is your guess? 25
+    Too high. Try a lower number.
+    What is your guess? 12
+    Too high. Try a lower number.
+    What is your guess? 1
+    Too low. Try a higher number.
+    What is your guess? 6
+    Too low. Try a higher number.
+    What is your guess? 9
+    You win after 6 guesses!
+
+So that's cool.
+
+On the other hand, I've noticed some problems. For one thing, ``nan`` trivially wins:
+
+.. code-block:: text
+    
+    D:\Playground\sophie_test>\GitHub\sophie\vm\out\build\x64-release\svm guess.is
+    I have chosen a random number from 1 to 100.
+    
+    What is your guess? nan
+    You win after 1 guesses!
+
+And for another, non-numeric strings evidently fail to set errno:
+
+.. code-block:: text
+    
+    D:\Playground\sophie_test>\GitHub\sophie\vm\out\build\x64-release\svm guess.is
+    I have chosen a random number from 1 to 100.
+    
+    What is your guess? California
+    Too low. Try a higher number.
+    What is your guess?
+    Too low. Try a higher number.
+    What is your guess? ^Z
+    Too low. Try a higher number.
+    What is your guess? ^D
+    Too low. Try a higher number.
+    What is your guess? Too low. Try a higher number.
+    What is your guess? ^C
+    D:\Playground\sophie_test>
+
+One solution to both problems is a better-behaved pair of floating-point conversion functions.
+Maybe something simple will come up. It's a popular-enough topic.
+

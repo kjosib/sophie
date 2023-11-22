@@ -98,38 +98,46 @@ Instruction instruction[] = {
 	[OP_POP] = {"POP", &modeSimple},
 	[OP_NIL] = {"NIL", &modeSimple},
 	[OP_TRUE] = {"TRUE", &modeSimple},
+
 	[OP_FALSE] = {"FALSE", &modeSimple},
 	[OP_GLOBAL] = {"GLOBAL", &modeGlobal},
 	[OP_LOCAL] = {"LOCAL", &modeImmediate},
 	[OP_CAPTIVE] = {"CAPTIVE", &modeImmediate},
 	[OP_CLOSURE] = {"CLOSURE", &modeClosure},
+
 	[OP_EQUAL] = {"EQ", &modeSimple},
 	[OP_GREATER] = {"GT", &modeSimple},
 	[OP_LESS] = {"LT", &modeSimple},
 	[OP_POWER] = {"POW", &modeSimple},
 	[OP_MULTIPLY] = {"MUL", &modeSimple},
+	
 	[OP_DIVIDE] = {"DIV", &modeSimple},
-	[OP_MODULUS] = {"MOD", &modeSimple},
 	[OP_INTDIV] = {"IDIV", &modeSimple},
-	[OP_INTMOD] = {"IMOD", &modeSimple},
+	[OP_MODULUS] = {"MOD", &modeSimple},
 	[OP_ADD] = {"ADD", &modeSimple},
 	[OP_SUBTRACT] = {"SUB", &modeSimple},
+	
 	[OP_NOT] = {"NOT", &modeSimple},
 	[OP_NEGATE] = {"NEG", &modeSimple},
 	[OP_CALL] = {"CALL", &modeSimple},
 	[OP_EXEC] = {"EXEC", &modeSimple},
 	[OP_RETURN] = {"RETURN", &modeSimple},
+	
 	[OP_FORCE] = {"FORCE", &modeSimple},
 	[OP_FORCE_RETURN] = {"FORCE_RETURN", &modeSimple},
 	[OP_JF] = {"JF", &modeJump},
 	[OP_JT] = {"JT", &modeJump},
 	[OP_JMP] = {"JMP", &modeJump},
+	
 	[OP_CASE] = {"CASE", &modeCase},
 	[OP_DISPLAY] = {"DISPLAY", &modeSimple},
 	[OP_FIELD] = {"FIELD", &modeString},
 	[OP_SNOC] = {"SNOC", &modeSimple},
 	[OP_THUNK] = {"THUNK", &modeThunk},
+	
 	[OP_BIND] = {"BIND", &modeString},
+	[OP_TASK] = {"TASK", &modeSimple},
+	[OP_PERFORM] = {"PERFORM", &modeSimple},
 	//[] = {"", &modeSimple},
 };
 

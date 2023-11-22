@@ -15,7 +15,15 @@ switch (value.type) {
 }
 
 void printValue(Value value) {
-	if (IS_THUNK(value)) printf("*");
+	if (IS_THUNK(value)) {
+		Closure *closure = AS_CLOSURE(value);
+		if (!IS_NIL(closure->captives[0])) {
+			printf(":");
+			print_simply(closure->captives[0]);
+			return;
+		}
+		else printf("*");
+	}
 	if (IS_GC_ABLE(value)) printObject(AS_PTR(value));
 	else print_simply(value);
 }

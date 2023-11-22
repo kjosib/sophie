@@ -69,8 +69,12 @@ static size_t ahead(size_t index) {
 	return (index + 1) & (mq.capacity - 1);
 }
 
-void enqueue_message_from_top_of_stack() {
-	mq.buffer[mq.gap] = AS_MESSAGE(pop());
+void enqueue_message(Value message) {
+	assert(IS_MESSAGE(message) || IS_BOUND(message));
+#ifdef DEBUG_TRACE_QUEUE
+	printf("< Enqueue: (%d)\n", arity_of_message(AS_MESSAGE(message)));
+#endif // DEBUG_TRACE_QUEUE
+	mq.buffer[mq.gap] = AS_MESSAGE(message);
 	mq.gap = ahead(mq.gap);
 	if (mq.gap == mq.front) grow_the_queue();
 }
@@ -193,8 +197,18 @@ static GC_Kind KIND_bound = {
 
 void bind_method() {
 	Message *bound = gc_allocate(&KIND_bound, sizeof(Message));
-	bound->callable = pop();
-	bound->self = AS_ACTOR(TOP);
+	bound->self = AS_ACTOR(SND);
+	bound->callable = TOP;
+	SND = BOUND_VAL(bound);
+	pop();
+}
+
+void bind_task_from_closure() {
+	// Convert a closure to a bound method
+	assert(IS_CLOSURE(TOP));
+	Message *bound = gc_allocate(&KIND_bound, sizeof(Message));
+	bound->self = NULL;
+	bound->callable = TOP;
 	TOP = BOUND_VAL(bound);
 }
 
@@ -230,9 +244,17 @@ static GC_Kind KIND_message = {
 	.size = size_message,
 };
 
+
+static void force_stack_slots(Value *start, Value *stop) {
+	// This is somewhat a half-measure, because ideally messages should contain no thunks at any depth.
+	// But for the moment it will have to serve.
+	for (Value *p = start; p < stop; p++) *p = force(*p);
+}
+
 void apply_bound_method() {
 	assert(IS_BOUND(TOP));
 	int arity = arity_of_message(AS_MESSAGE(TOP));
+	force_stack_slots(&TOP - arity, &TOP);
 	Message *msg = gc_allocate(&KIND_message, sizeof(Message) + arity * sizeof(Value));
 	Message *bound = AS_MESSAGE(pop());
 	msg->self = bound->self;
@@ -243,15 +265,21 @@ void apply_bound_method() {
 }
 
 static void run_one_message(Message *msg) {
+#ifdef DEBUG_TRACE_QUEUE
+	printf("> Dequeue (%d)\n", arity_of_message(msg));
+#endif // DEBUG_TRACE_QUEUE
 	Value *base = vm.stackTop;
-	push(GC_VAL(msg->self));
+	if (msg->self != NULL) push(GC_VAL(msg->self));
 	int arity = arity_of_message(msg);
 	memcpy(vm.stackTop, msg->payload, arity * sizeof(Value));
 	vm.stackTop += arity;
 	switch (msg->callable.type) {
 	case VAL_CLOSURE:
-		run(AS_CLOSURE(msg->callable));
+	{
+		Value action = run(AS_CLOSURE(msg->callable));
+		perform(action);
 		break;
+	}
 	case VAL_NATIVE:
 	{
 		Native *native = AS_NATIVE(msg->callable);
@@ -262,6 +290,9 @@ static void run_one_message(Message *msg) {
 		crashAndBurn("Bad message callable");
 	}
 	vm.stackTop = base;
+#ifdef DEBUG_TRACE_QUEUE
+	printf("  <--->\n");
+#endif // DEBUG_TRACE_QUEUE
 }
 
 void drain_the_queue() {
