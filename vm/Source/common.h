@@ -32,6 +32,7 @@ typedef enum { // written to match the standard preamble's order type
 //#define DEBUG_PRINT_GLOBALS
 //#define DEBUG_PRINT_CODE
 //#define DEBUG_TRACE_EXECUTION
+//#define DEBUG_TRACE_QUEUE
 //#define DEBUG_STRESS_GC
 #endif // _DEBUG
 
@@ -137,6 +138,7 @@ typedef struct {
 #define IS_NATIVE(value)  ((value).type == VAL_NATIVE)
 #define IS_CTOR(value)    ((value).type == VAL_CTOR)
 #define IS_BOUND(value)   ((value).type == VAL_BOUND)
+#define IS_MESSAGE(value) ((value).type == VAL_MESSAGE)
 #define IS_FN(value)      ((value).type == VAL_FN)
 #define IS_GLOBAL(value)  ((value).type == VAL_GLOBAL)
 
@@ -243,6 +245,7 @@ void populate_field_offset_table(Table *table, int nr_fields);
 
 typedef enum {
 	TYPE_FUNCTION,
+	TYPE_MEMOIZED,
 	TYPE_SCRIPT,
 } FunctionType;
 
@@ -337,11 +340,12 @@ typedef struct {
 
 
 void init_actor_model();
-void enqueue_message_from_top_of_stack();
+void enqueue_message(Value message);
 
 void define_actor(byte nr_fields);  // ( field_names... name -- dfn )
 void make_template_from_dfn();  // ( args... dfn -- tpl )
 void make_actor_from_template();  // ( tpl -- actor )
+void bind_task_from_closure();  // ( closure -- message )
 void bind_method();  // ( actor callable -- bound_method )
 void apply_bound_method();  // ( args... bound_method -- message )
 void drain_the_queue();
@@ -374,6 +378,10 @@ typedef struct {
 	Value *stackTop;
 	Table globals;
 	Table strings;
+	Value cons;
+	Value nil;
+	Value maybe_this;
+	Value maybe_nope;
 } VM;
 
 
@@ -384,6 +392,7 @@ void freeVM();
 
 Value force(Value value);
 Value run(Closure *closure);
+void perform(Value action);
 
 static inline void push(Value value) {
 	*vm.stackTop = value;

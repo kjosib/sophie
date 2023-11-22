@@ -1,3 +1,4 @@
+#include <errno.h>
 #include <math.h>
 #include <time.h>
 #include "common.h"
@@ -36,6 +37,25 @@ static Value abs_native(Value *args) {
 
 static Value sqrt_native(Value *args) {
 	return NUMBER_VAL(sqrt(AS_NUMBER(force(args[0]))));
+}
+
+static Value int_native(Value *args) {
+	return NUMBER_VAL(trunc(AS_NUMBER(force(args[0]))));
+}
+
+static Value floor_native(Value *args) {
+	return NUMBER_VAL(floor(AS_NUMBER(force(args[0]))));
+}
+
+static Value val_native(Value *args) {
+	errno = 0;
+	double d = strtod(AS_STRING(force(args[0]))->text, NULL);
+	if (errno) return vm.maybe_nope;
+	else {
+		push(NUMBER_VAL(d));
+		push(vm.maybe_this);
+		return GC_VAL(construct_record());
+	}
 }
 
 static Value len_native(Value *args) {
@@ -105,7 +125,7 @@ static Value console_read(Value *args) {
 	push_C_string(buffer);
 	push(args[1]);
 	apply_bound_method();
-	enqueue_message_from_top_of_stack();
+	enqueue_message(pop());
 	return NIL_VAL;
 }
 
@@ -118,7 +138,7 @@ static Value console_random(Value *args) {
 	*/
 	args[0] = NUMBER_VAL((double)rand() / RAND_MAX);
 	apply_bound_method();
-	enqueue_message_from_top_of_stack();
+	enqueue_message(pop());
 	return NIL_VAL;
 }
 
@@ -173,8 +193,11 @@ void install_native_functions() {
 	defineNative("clock", 0, clock_native);
 	defineNative("abs", 1, abs_native);
 	defineNative("sqrt", 1, sqrt_native);
+	defineNative("int", 1, int_native);
+	defineNative("floor", 1, floor_native);
 	defineNative("fib_native", 1, fib_native);
 	defineNative("strcat", 2, concatenate);
+	defineNative("val", 1, val_native);
 	defineNative("chr", 1, chr_native);
 	defineNative("str", 1, str_native);
 	defineNative("len", 1, len_native);
@@ -192,6 +215,9 @@ void install_native_functions() {
 	create_native_method("echo", 1, console_echo);
 	create_native_method("read", 1, console_read);
 	create_native_method("random", 1, console_random);
+
+	// Oh yeah about that...
+	srand(time(NULL));
 
 	// Finally, create the actor itself.
 	make_template_from_dfn();

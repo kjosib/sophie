@@ -21,18 +21,17 @@ typedef enum {
 	OP_MULTIPLY,
 
 	OP_DIVIDE,
-	OP_MODULUS,
 	OP_INTDIV,
-	OP_INTMOD,
+	OP_MODULUS,
 	OP_ADD,
-
 	OP_SUBTRACT,
+
 	OP_NOT,
 	OP_NEGATE,
 	OP_CALL,
 	OP_EXEC,
-
 	OP_RETURN,
+
 	OP_FORCE,
 	OP_FORCE_RETURN,
 	OP_JF,
@@ -46,6 +45,8 @@ typedef enum {
 	OP_THUNK,
 	
 	OP_BIND,
+	OP_TASK,
+	OP_PERFORM,
 
 	NR_OPCODES,
 } OpCode;

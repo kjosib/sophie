@@ -148,6 +148,7 @@ static Value parse_rest_of_function(byte arity) {
 	// NB: current->chunk has just been re-initialized because the new function now owns the former contents of the chunk.
 	for (int index = 0; index < nr_captures; index++) {
 		if (maybe_token(TOKEN_STAR)) {
+			function->fn_type = TYPE_MEMOIZED;
 			function->captures[index] = (Capture){ .is_local = true, .offset=0 };
 		}
 		else {

@@ -8,8 +8,6 @@
 
 
 VM vm;
-static Value cons;
-static Value nil;
 
 static void grey_the_vm_roots() {
 	// Grey the value stack
@@ -22,9 +20,11 @@ static void grey_the_vm_roots() {
 			darken_in_place(&trace->closure);
 		}
 	}
-	// Grey the special cases "cons" and "nil"
-	darkenValue(&cons);
-	darkenValue(&nil);
+	// Grey the known special cases.
+	darkenValue(&vm.cons);
+	darkenValue(&vm.nil);
+	darkenValue(&vm.maybe_this);
+	darkenValue(&vm.maybe_nope);
 }
 
 
@@ -45,7 +45,7 @@ void initVM() {
 	resetStack();
 	initTable(&vm.globals);
 	initTable(&vm.strings);
-	cons = nil = NIL_VAL;
+	vm.cons = vm.nil = vm.maybe_this = vm.maybe_nope = NIL_VAL;
 	gc_install_roots(grey_the_vm_roots);
 }
 
@@ -54,8 +54,10 @@ static Value global_from_C(const char *text) {
 }
 
 void vm_capture_preamble_specials() {
-	cons = global_from_C("cons");
-	nil = global_from_C("nil");
+	vm.cons = global_from_C("cons");
+	vm.nil = global_from_C("nil");
+	vm.maybe_this = global_from_C("this");
+	vm.maybe_nope = global_from_C("nope");
 }
 
 void freeVM() {
@@ -108,13 +110,19 @@ static void capture_closure(Closure *closure, Value *base) {
 	// Precondition: *closure points to a fresh Closure object with no captures.
 	Function *fn = closure->function;
 	int index = 0;
-	if (!fn->arity) closure->captives[index++] = NIL_VAL;
+	if (fn->fn_type == TYPE_MEMOIZED) closure->captives[index++] = NIL_VAL;
 	for (; index < fn->nr_captures; index++) {
 		Capture capture = fn->captures[index];
 		Value *capture_base = capture.is_local ? base : CLOSURE->captives;
 		closure->captives[index] = capture_base[capture.offset];
 	}
 	// Postcondition: Captures have been copied per directives in *closure's function.
+}
+
+static double knuth_mod(double numerator, double denominator) {
+	double r = fmod(numerator, denominator);
+	bool C_is_wrong = (numerator < 0) != (denominator < 0);
+	return C_is_wrong ? r + denominator : r;
 }
 
 #ifdef _DEBUG
@@ -130,6 +138,21 @@ static double x_num(byte *vpc, Value *base, Value it) {
 #define num AS_NUMBER
 #endif // _DEBUG
 
+void perform(Value action) {
+	// Where all the action happens, so to speak.
+	switch (action.type)
+	{
+	case VAL_CLOSURE:
+		run(AS_CLOSURE(action));
+		break;
+	case VAL_MESSAGE:
+	case VAL_BOUND:
+		enqueue_message(action);
+		break;
+	default:
+		crashAndBurn("Can't yet handle a %s action.", valKind[action.type]);
+	}
+}
 
 #define NEXT goto dispatch
 #define READ_BYTE() (*vpc++)
@@ -193,7 +216,7 @@ dispatch:
 			capture_closure(AS_CLOSURE(TOP), base);
 			NEXT;
 		}
-		case OP_NIL: push(nil); NEXT;
+		case OP_NIL: push(vm.nil); NEXT;
 		case OP_TRUE: push(BOOL_VAL(true)); NEXT;
 		case OP_FALSE: push(BOOL_VAL(false)); NEXT;
 		case OP_EQUAL:
@@ -230,9 +253,8 @@ dispatch:
 		case OP_POWER: merge(NUMBER_VAL(pow(num(SND), num(TOP)))); NEXT;
 		case OP_MULTIPLY: merge(NUMBER_VAL(num(SND) * num(TOP))); NEXT;
 		case OP_DIVIDE: merge(NUMBER_VAL(num(SND) / num(TOP))); NEXT;
-		case OP_MODULUS: merge(NUMBER_VAL(fmod(num(SND), num(TOP)))); NEXT;
-		case OP_INTDIV: merge(NUMBER_VAL((int)num(SND) / (int)num(TOP))); NEXT;
-		case OP_INTMOD: merge(NUMBER_VAL((int)num(SND) % (int)num(TOP))); NEXT;
+		case OP_INTDIV: merge(NUMBER_VAL(floor(num(SND) / num(TOP)))); NEXT;
+		case OP_MODULUS: merge(NUMBER_VAL(knuth_mod(num(SND), num(TOP)))); NEXT;
 		case OP_ADD: merge(NUMBER_VAL(num(SND) + num(TOP))); NEXT;
 		case OP_SUBTRACT: merge(NUMBER_VAL(num(SND) - num(TOP))); NEXT;
 		case OP_NOT: TOP = BOOL_VAL(!AS_BOOL(TOP)); NEXT;
@@ -329,7 +351,7 @@ dispatch:
 			switch (TOP.type) {
 			case VAL_BOUND:
 			case VAL_MESSAGE:
-				enqueue_message_from_top_of_stack();
+				enqueue_message(pop());
 				drain_the_queue();
 				NEXT;
 			default:
@@ -381,7 +403,7 @@ dispatch:
 		{
 			swap();
 			// Construct a "cons" in the usual way
-			push(cons);
+			push(vm.cons);
 			Record *record = construct_record();
 			// Fix up the stack
 			pop();
@@ -398,6 +420,12 @@ dispatch:
 			bind_method();
 			NEXT;
 		}
+		case OP_TASK:
+			bind_task_from_closure();
+			NEXT;
+		case OP_PERFORM:
+			perform(pop());
+			NEXT;
 		default:
 			runtimeError(vpc, base, "Unrecognized instruction %d.", vpc[-1]);
 		}

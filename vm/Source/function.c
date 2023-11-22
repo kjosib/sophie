@@ -58,11 +58,11 @@ void close_function(Value *stack_slot) {
 	// Potentially several peers could refer to each other,
 	// so this can't capture yet.
 	// We do, however, need to clear out the captives array right quick to avoid confounding the garbage collector.
-	size_t capture_size = sizeof(Value) * ((Function *)(stack_slot->as.ptr))->nr_captures;
+	size_t capture_size = sizeof(Value) * AS_FN(*stack_slot)->nr_captures;
 	Closure *closure = gc_allocate(&KIND_Closure, sizeof(Closure) + capture_size);
 	// fn is now invalid, as there's been a collection
-	closure->function = stack_slot->as.ptr;
+	closure->function = AS_FN(*stack_slot);
 	memset(closure->captives, 0, capture_size);
-	*stack_slot = closure->function->arity ? CLOSURE_VAL(closure) : THUNK_VAL(closure);
+	*stack_slot = (closure->function->fn_type == TYPE_MEMOIZED) ? THUNK_VAL(closure) : CLOSURE_VAL(closure);
 }
 

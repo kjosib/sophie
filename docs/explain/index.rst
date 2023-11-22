@@ -14,8 +14,9 @@ help you understand what **Sophie** is *specified* to do with your code.
     :caption: Contents:
 
     actor
-    goals
     foreign
+    details
+    goals
     reasons
     future
     past
