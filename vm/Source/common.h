@@ -26,7 +26,7 @@ typedef enum { // written to match the standard preamble's order type
 	LESS = 0,
 	SAME = 1,
 	MORE = 2,
-} Order;
+} TotalOrder;
 
 #ifdef _DEBUG
 //#define DEBUG_PRINT_GLOBALS
@@ -60,7 +60,7 @@ typedef struct {
 	Method deeply;
 	Method blacken;
 	SizeMethod size;
-	Verb compare;  // ( a b -- Order )
+	Verb compare;  // ( a b -- TotalOrder )
 } GC_Kind;
 
 typedef union {

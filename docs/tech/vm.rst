@@ -1029,3 +1029,16 @@ And for another, non-numeric strings evidently fail to set errno:
 One solution to both problems is a better-behaved pair of floating-point conversion functions.
 Maybe something simple will come up. It's a popular-enough topic.
 
+22 November 2023
+----------------
+
+I made a few adjustments to the ``val(...)`` function so that only numbers convert.
+It still allows the infinities, but no more ``nan`` or other trailing junk.
+
+Also, I added the named mathematical constants from the preamble,
+which makes the ``some_arithmetic`` demo work.
+
+Next step will probably be name-mangling for module distinctions at the VM global scope.
+After that, I'd want to get user-defined actors working, but at the moment I only have one.
+That's the mouse chaser demo, which also relies on SDL. But there's an SDL demo without
+user-defined actors, so I guess that's the move.

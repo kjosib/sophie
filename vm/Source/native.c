@@ -1,3 +1,5 @@
+#define _USE_MATH_DEFINES
+
 #include <ctype.h>
 #include <math.h>
 #include <time.h>
@@ -50,13 +52,16 @@ static Value floor_native(Value *args) {
 static Value val_native(Value *args) {
 	const char *text = AS_STRING(force(args[0]))->text;
 	// This is hinkey, but it will have to do for now.
-	// Ideally recognize exactly Sophie-format numbers such as with underscores...
+	// Ideally recognize Sophie-format numbers specifically (e.g. with underscores)
+	// and leave out the other wacky formats C recognizes.
+	// (Can always expose strtod more directly.)
 	while (isspace(*text)) text++; // Skip leading whitespace...
 	char *end = NULL;
 	double d = strtod(text, &end);
 	if (end == text) return vm.maybe_nope;
 	while (isspace(*end)) end++; // Skip trailing whitespace...
 	if (*end) return vm.maybe_nope;  // Reject trailing junk.
+	if (isnan(d)) return vm.maybe_nope;  // Reject NaN input because it's not a number.
 	else {
 		push(NUMBER_VAL(d));
 		push(vm.maybe_this);
@@ -195,6 +200,12 @@ static void create_native_method(const char *name, byte arity, NativeFn function
 	install_method();
 }
 
+static void math_constant(const char *name, double value) {
+	push(NUMBER_VAL(value));
+	push_C_string(name);
+	defineGlobal();
+}
+
 void install_native_functions() {
 	defineNative("clock", 0, clock_native);
 	defineNative("abs", 1, abs_native);
@@ -209,13 +220,18 @@ void install_native_functions() {
 	defineNative("len", 1, len_native);
 	defineNative("mid", 3, mid_native);
 
+	math_constant("e", M_E);
+	math_constant("inf", HUGE_VAL);
+	math_constant("nan", NAN);
+	math_constant("pi", M_PI);
+	math_constant("tau", 2.0 * M_PI);
+
 	// Now let me try to create the console.
 	// It starts with the class definition:
 
 	push_C_string("Console");
 	define_actor(0);
 	push(GC_VAL(AS_ACTOR_DFN(TOP)->name));
-	defineGlobal();
 
 	// Next up, define some methods:
 	create_native_method("echo", 1, console_echo);
