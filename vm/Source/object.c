@@ -22,7 +22,7 @@ static void display_string(String *string) {
 static void compare_string() {
 	// TODO: A comparison for equality alone ought not call strcmp,
 	// because strings are interned.
-	Order tag;
+	TotalOrder tag;
 	if (AS_STRING(SND) == AS_STRING(TOP)) tag = SAME;
 	else {
 		int direction = strcmp(AS_STRING(SND)->text, AS_STRING(TOP)->text);

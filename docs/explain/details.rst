@@ -47,6 +47,14 @@ The better answer is probably to reflect Sophie's own number
 syntax in the basic number conversion utility function ``val``,
 and to provide for alternatives on request.
 
+I figure if I ever need a perfectly full-featured IEEE-754 compliant number parser,
+I can provide that under the name ``strtod``, perhaps in an IEEE_Float module.
+Meanwhile the ``val(...)`` function can assume decimal input.
+By the way, the Python equivalent is instructive: Locale can influence the
+decimal separator that C ``strtod`` expects, and some platforms apparently
+parse negative floats incorrectly. There are some fast FP-parser efforts out there.
+Perhaps I can adapt one to my desires without overstepping a license boundary.
+
 Random Numbers
 ---------------
 
@@ -54,5 +62,12 @@ Out of the box, C provides no excellent way to generate random numbers.
 The standard ``rand()`` function will do in a pinch for simple games,
 but soon I'd rather see something with better statistical properties.
 
-Apparently the recent C++ standard calls for a handful of nice generators.
-But I'm not using C++. I may end up using something simple from the 
+https://prng.di.unimi.it/ has the answers...
+Well, that and a good source of entropy at start-up.
+Apparently there are some nice Windows APIs for that explained at
+https://learn.microsoft.com/en-us/windows/win32/api/bcrypt/nf-bcrypt-bcryptgenrandom
+The trick is ``BCryptGenRandom(NULL, &state, sizeof(state), BCRYPT_USE_SYSTEM_PREFERRED_RNG)``.
+For Linux, reading from ``/dev/urandom`` is the obvious choice.
+And apparently unix-based Macs also support that mechanism.
+
+I suppose platform considerations happen eventually.
