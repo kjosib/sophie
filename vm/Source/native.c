@@ -168,7 +168,7 @@ GC_Kind KIND_Native = {
 	.size = size_native,
 };
 
-static void create_native(const char *name, byte arity, NativeFn function) {
+static void create_native(const char *name, byte arity, NativeFn function) {  // ( -- Native )
 	push_C_string(name);
 	Native *native = gc_allocate(&KIND_Native, sizeof(Native));
 	native->arity = arity;
@@ -180,27 +180,26 @@ static void create_native(const char *name, byte arity, NativeFn function) {
 static void install_native() {
 	push(GC_VAL(AS_NATIVE(TOP)->name));
 	defineGlobal();
-	pop();
 }
 
-static void defineNative(const char *name, byte arity, NativeFn function) {
+static void defineNative(const char *name, byte arity, NativeFn function) {  // ( -- )
 	create_native(name, arity, function);
 	install_native();
 }
 
-static void install_method() {
+static void install_method() {  // ( ActorDfn Native -- ActorDfn )
 	ActorDef *dfn = AS_ACTOR_DFN(SND);
 	String *key = AS_NATIVE(TOP)->name;
 	bool was_new = tableSet(&dfn->msg_handler, key, pop());
 	if (!was_new) crashAndBurn("already installed %s into %s", key->text, dfn->name->text);
 }
 
-static void create_native_method(const char *name, byte arity, NativeFn function) {
+static void create_native_method(const char *name, byte arity, NativeFn function) {  // ( ActorDfn -- ActorDfn )
 	create_native(name, arity, function);
 	install_method();
 }
 
-static void math_constant(const char *name, double value) {
+static void math_constant(const char *name, double value) {  // ( -- )
 	push(NUMBER_VAL(value));
 	push_C_string(name);
 	defineGlobal();
@@ -231,7 +230,6 @@ void install_native_functions() {
 
 	push_C_string("Console");
 	define_actor(0);
-	push(GC_VAL(AS_ACTOR_DFN(TOP)->name));
 
 	// Next up, define some methods:
 	create_native_method("echo", 1, console_echo);
@@ -247,7 +245,6 @@ void install_native_functions() {
 
 	push_C_string("console");
 	defineGlobal();
-	pop();
 
 
 #ifdef DEBUG_PRINT_GLOBALS

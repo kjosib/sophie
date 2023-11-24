@@ -12,12 +12,12 @@ see https://sophie.readthedocs.io/en/latest/tech/gc.html
 #ifdef DEBUG_STRESS_GC
 #define TOO_BIG 64
 #define INITIAL_ARENA_SIZE (3*TOO_BIG)
-#define GC_BALANCE 2
+#define GC_BALANCE 3
 
 #else
 #define TOO_BIG 512
 #define INITIAL_ARENA_SIZE (32*TOO_BIG)
-#define GC_BALANCE 3
+#define GC_BALANCE 7
 #endif // DEBUG_STRESS_GC
 
 
@@ -79,6 +79,7 @@ static GC *small_alloc(size_t size) {
     if (next_ptr + allotment >= to_space.end) collect_garbage();
     GC *gc = (GC*)next_ptr;
     next_ptr += allotment;
+    assert(next_ptr <= to_space.end);
     return gc;
 }
 
@@ -196,11 +197,11 @@ static void sweep_weak_table(Table *table) {
 }
 
 static void collect_garbage() {
-#ifdef DEBUG_STRESS_GC
-    printf("Collecting! ");
+#ifdef DEBUG_ANNOUNCE_GC
+    printf("\nCollecting! ");
 #endif
     size_t old_capacity = to_space.end - to_space.begin;
-    size_t new_capacity = old_capacity + TOO_BIG;
+    size_t new_capacity = old_capacity * 2;
     from_space = to_space;
     newArena(new_capacity);
     grey_lobs = &sentinel;
@@ -219,10 +220,14 @@ static void collect_garbage() {
         }
     }
     size_t used = next_ptr - to_space.begin;
-#ifdef DEBUG_STRESS_GC
+#ifdef DEBUG_ANNOUNCE_GC
     printf("Scavenged %d of %d bytes.\n", (int)(old_capacity - used), (int)(old_capacity));
 #endif
+#ifdef DEBUG_STRESS_GC
+    size_t max_capacity = used + TOO_BIG;  // Trigger very frequent collections
+#else
     size_t max_capacity = max( GC_BALANCE * used, INITIAL_ARENA_SIZE );
+#endif // DEBUG_STRESS_GC
     if (new_capacity > max_capacity) {
         to_space.end = to_space.begin + max_capacity;
     }

@@ -33,10 +33,10 @@ static void resetStack() {
 	vm.trace = vm.traces-1;
 }
 
-void defineGlobal() {
+void defineGlobal() {  // ( value name -- )
 	String *name = AS_STRING(pop());
 	assert(is_string(name));
-	if (!tableSet(&vm.globals, name, TOP)) {
+	if (!tableSet(&vm.globals, name, pop())) {
 		crashAndBurn("Global name \"%s\" already exists", name->text);
 	}
 }

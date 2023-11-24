@@ -96,7 +96,7 @@ static void display_actor_dfn(ActorDef *dfn) {
 	printf("<ActDfn: %s>", dfn->name->text);
 }
 
-static void blacken_actor_dfn(ActorDef *dfn) { 
+static void blacken_actor_dfn(ActorDef *dfn) {
 	darken_in_place(&dfn->name);
 	darkenTable(&dfn->msg_handler);
 }
