@@ -45,16 +45,19 @@ Here are some open problems, in no particular order:
 
 * [DONE] Pre-link global functions at load-time rather than hash look-ups during execution.
 * [DONE] Message-passing -- starting with a console-actor.
-* Modules. Right now there is but one global namespace. A simple name-mangling scheme would work.
+* [DONE] Modules. The one global namespace is carved up with a simple name-mangling scheme.
+* SDL bindings, at least for some simple graphics and the mouse.
 * User-Defined Actors.
-* Source line numbers. On the off chance something goes wrong, a cross-reference is most helpful.
+* FFI improvements.
+* Turtle Graphics, perhaps in terms of SDL.
+* Source line numbers. In case of a run-time panic, a cross-reference is most helpful.
 * Numeric field offsets. This could save cycles where a record-type is statically known.
 * Tuning the dial on eager evaluation. This may help with performance.
 * NaN-boxing.
 * Thread-Safe Generational GC with Actors in mind.
 * Actual threads.
 * Arrays. (The semantics would be tied into the actor-oriented side.)
-* Useful libraries of bindings, data types, and subroutines.
+* (More) Useful libraries of bindings, data types, and subroutines.
 * Affordances such as keyword highlighting in a few common editors.
 * A more direct connection between the VM and the compiler. (Perhaps the one invokes the other?)
 * Self-hosting some or all of the compiler.
@@ -1042,3 +1045,27 @@ Next step will probably be name-mangling for module distinctions at the VM globa
 After that, I'd want to get user-defined actors working, but at the moment I only have one.
 That's the mouse chaser demo, which also relies on SDL. But there's an SDL demo without
 user-defined actors, so I guess that's the move.
+
+23 November 2023 - Modules and a Speed Boost
+---------------------------------------------
+
+Happy Thanksgiving!
+
+Name mangling now works well enough.
+Some cheats are still in place for the FFI,
+but the effort at least caused me to think about this.
+
+Current FFI syntax gives a way for Python to find a module and a function therein.
+That "find a module" part probably becomes "find a plug-in" and short term all the
+plug-ins stay built-in. At some point DLLs may become interesting.
+
+By the way, I ran across a VM bug which I accidentally introduced late last night.
+In the process of chasing it, I was surprised by how often the GC ran in non-stress mode.
+So I added a few more ``#define`` flags to control its verbosity and soon realized the problem:
+It was growing the heap far too slowly. So I twiddled a few more things,
+and now release-mode is (slightly) faster than Python for the Fibonacci benchmark *even with* pervasive thunks,
+coming in around 12 seconds and change for ``fib(39)``.
+To achieve that speed-up, I arranged to let the heap grow much larger than previously.
+The process now sits around 70k of heap and traces 9.5k for each collection.
+Of that, 8.5k is immortal data. So generational GC might speed this up even more.
+
