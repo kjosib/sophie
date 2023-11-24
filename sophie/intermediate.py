@@ -60,11 +60,17 @@ def quote(x):
 LABEL_QUEUE = list(reversed(range(4096)))
 LABEL_MAP = {}
 
+MANGLED = {}
 
 class VMScope:
 	""" Corresponds roughly to the Scope and/or Function structures in the VM. """
 	
 	indent = ""
+	_prefix:str
+	
+	def __init__(self, prefix:str):
+		self._prefix = prefix
+	
 	def nl(self):
 		print()
 		print("", end=self.indent)
@@ -76,7 +82,7 @@ class VMScope:
 		raise NotImplementedError(type(self))
 
 	def declare(self, symbol: ontology.Symbol):
-		raise NotImplementedError(type(self))
+		MANGLED[symbol] = self._prefix + symbol.nom.text
 
 class VMGlobalScope(VMScope):
 	""" Mainly a null-object that encloses a nest of scopes without itself being enclosed. """
@@ -89,17 +95,16 @@ class VMGlobalScope(VMScope):
 			assert sym is None
 			emit("*")
 
-	def declare(self, symbol: ontology.Symbol):
-		return
-
 class VMFunctionScope(VMScope):
 	""" Encapsulates VM mechanics around the stack, parameters, closure capture, jumps, etc. """
 	
 	_captives : dict[Optional[ontology.Symbol], int]
 	
-	def __init__(self, outer:VMScope, is_thunk:bool):
+	def __init__(self, outer:VMScope, infix:str, is_thunk:bool):
+		super().__init__(outer._prefix + infix + ":")
 		self._outer = outer
 		self.indent = outer.indent+"  "
+		self._thunk_count = 0
 		self._local = {}
 		self._children = []
 		self._captives = {}
@@ -115,6 +120,7 @@ class VMFunctionScope(VMScope):
 		self._depth += 1
 
 	def declare(self, symbol: ontology.Symbol):
+		super().declare(symbol)
 		self.alias(symbol)
 		self._push()
 	
@@ -137,7 +143,7 @@ class VMFunctionScope(VMScope):
 		elif self.capture(symbol):
 			emit("CAPTIVE", self._captives[symbol])
 		else:
-			emit("GLOBAL", quote(symbol.nom.text))
+			emit("GLOBAL", quote(MANGLED[symbol]))
 		self._push()
 
 	def constant(self, value):
@@ -194,10 +200,8 @@ class VMFunctionScope(VMScope):
 		LABEL_QUEUE.append(label)
 
 	def emit_preamble(self, fn:syntax.UserFunction):
-		# Emit number of parameters
 		emit(len(fn.params))
-		# Emit fully-qualified name
-		emit(quote(fn.nom.text))
+		emit(quote(MANGLED[fn]))
 		for param in fn.params:
 			self.declare(param)
 
@@ -278,30 +282,31 @@ class VMFunctionScope(VMScope):
 		self._depth += stack_effect
 	
 	def make_thunk(self, xlat, expr):
-		# Implicitly becomes a THUNK instruction:
+		# Implicitly makes a THUNK instruction in the containing function.
+		self._thunk_count += 1
 		emit("[")
-		inner = VMFunctionScope(self, is_thunk=True)
+		inner = VMFunctionScope(self, str(self._thunk_count) + "_", is_thunk=True)
 		xlat.tail_call(expr, inner)
 		inner.emit_epilogue()
 		emit("]")
 		self._push()
 
-def write_record(names:Iterable[str], nom:ontology.Nom, tag:int):
+def write_record(names:Iterable[str], symbol:ontology.Symbol, tag:int):
 	emit("(")
 	for name in names:
 		emit(name)
-	close_structure(nom, tag)
+	close_structure(symbol, tag)
 
-def write_enum(nom:ontology.Nom, tag:int):
-	write_record((), nom, tag)
+def write_enum(symbol:ontology.Symbol, tag:int):
+	write_record((), symbol, tag)
 
-def write_tagged_value(nom:ontology.Nom, tag:int):
+def write_tagged_value(symbol:ontology.Symbol, tag:int):
 	emit("(", "*")
-	close_structure(nom, tag)
+	close_structure(symbol, tag)
 
-def close_structure(nom:ontology.Nom, tag:int):
+def close_structure(symbol:ontology.Symbol, tag:int):
 	emit(tag)
-	emit(quote(nom.text))
+	emit(quote(MANGLED[symbol]))
 	emit(")")
 	print()
 
@@ -317,52 +322,65 @@ def is_eager(expr: syntax.Expr):
 	if isinstance(expr, syntax.Lookup):
 		return not symbol_harbors_thunks(expr.ref.dfn)
 
+def each_piece(roadmap:RoadMap):
+	yield VMGlobalScope(""), roadmap.preamble
+	for index, module in enumerate(roadmap.each_module):
+		yield VMGlobalScope(str(index+1) + ":"), module
+
 class Translation(Visitor):
 	def __init__(self):
 		self._tag_map = {}  # For compiling type-cases.  
 	
 	def visit_RoadMap(self, roadmap:RoadMap):
 		# Write all types:
-		self.write_records(roadmap.preamble.types)
-		for module in roadmap.each_module:
-			self.write_records(module.types)
+		for scope, module in each_piece(roadmap):
+			self.write_records(module.types, scope)
 		
-		# Write all functions:
-		root = VMGlobalScope()
-		self.write_functions(roadmap.preamble.outer_functions, root)
-		for module in roadmap.each_module:
-			self.write_functions(module.outer_functions, root)
+		# Write all functions (including FFI):
+		for scope, module in each_piece(roadmap):
+			self.write_ffi_declarations(module.foreign)
+			self.write_functions(module.outer_functions, scope)
 		
 		# Write all begin-expressions:
-		scope = VMFunctionScope(root, is_thunk=True)
-		self.visit_Module(roadmap.preamble, scope)
-		for module in roadmap.each_module:
-			self.visit_Module(module, scope)
+		for scope, module in each_piece(roadmap):
+			inner = VMFunctionScope(scope, "[BEGIN]", is_thunk=True)
+			self.visit_Module(module, inner)
 	
 	def visit_Module(self, module:syntax.Module, scope:VMFunctionScope):
-		for expr in module.main:
+		for index, expr in enumerate(module.main):
 			self.write_begin_expression(expr, scope)
 
-	def write_records(self, types):
+	def write_records(self, types, scope:VMGlobalScope):
 		for t in types:
-			self.visit(t)
+			self.visit(t, scope)
 
-	def visit_TypeAlias(self, t): pass
-	def visit_Interface(self, t): pass
+	def visit_TypeAlias(self, t, scope:VMGlobalScope): pass
+	def visit_Interface(self, t, scope:VMGlobalScope): pass
 	
 	@staticmethod
-	def visit_Record(r:syntax.Record):
-		write_record(r.spec.field_names(), r.nom, 0)
+	def visit_Record(r:syntax.Record, scope:VMGlobalScope):
+		scope.declare(r)
+		write_record(r.spec.field_names(), r, 0)
 		
-	def visit_Variant(self, variant:syntax.Variant):
+	def visit_Variant(self, variant:syntax.Variant, scope:VMGlobalScope):
 		for tag, st in enumerate(variant.subtypes):
+			scope.declare(st)
 			self._tag_map[variant, st.nom.key()] = tag
 			if isinstance(st.body, syntax.RecordSpec):
-				write_record(st.body.field_names(), st.nom, tag)
+				write_record(st.body.field_names(), st, tag)
 			elif st.body is None:
-				write_enum(st.nom, tag)
+				write_enum(st, tag)
 			else:
-				write_tagged_value(st.nom, tag)
+				write_tagged_value(st, tag)
+
+	def write_ffi_declarations(self, foreign:list[syntax.ImportForeign]):
+		# Somewhat incomplete at the moment, but necessary to make
+		# foreign declarations play along with name-mangling game.
+		for fi in foreign:
+			for group in fi.groups:
+				for symbol in group.symbols:
+					MANGLED[symbol] = symbol.nom.text
+		pass
 
 	def write_functions(self, fns, outer:VMScope):
 		if not fns: return
@@ -376,7 +394,7 @@ class Translation(Visitor):
 		outer.nl()
 
 	def write_one_function(self, fn:syntax.UserFunction, outer:VMScope):
-		inner = VMFunctionScope(outer, is_thunk=not fn.params)
+		inner = VMFunctionScope(outer, fn.nom.text, is_thunk=not fn.params)
 		inner.nl()
 		inner.emit_preamble(fn)
 		self.write_functions(fn.where, inner)
@@ -532,7 +550,7 @@ class Translation(Visitor):
 		emit("BIND", quote(expr.method_name.key()))
 
 	def visit_DoBlock(self, do:syntax.DoBlock, outer:VMFunctionScope):
-		inner = VMFunctionScope(outer, is_thunk=False)
+		inner = VMFunctionScope(outer, "do", is_thunk=False)
 		inner.nl()
 		emit('{ 0 "do"')
 		depth = inner.depth()
