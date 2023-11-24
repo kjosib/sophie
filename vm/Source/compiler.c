@@ -209,7 +209,6 @@ static void parse_global_functions() {
 		close_function(&TOP);
 		push(GC_VAL(name_of_function(AS_CLOSURE(TOP)->function)));
 		defineGlobal();
-		pop();
 	} while (predictToken(TOKEN_SEMICOLON));
 	consume(TOKEN_RIGHT_BRACE, "expected semicolon or right-brace.");
 }
@@ -248,7 +247,6 @@ static void parse_record() {
 		push(GC_VAL(parseString()));
 	}
 	defineGlobal();
-	pop();
 	consume(TOKEN_RIGHT_PAREN, "expected ')'");
 }
 

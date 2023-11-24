@@ -34,6 +34,7 @@ typedef enum { // written to match the standard preamble's order type
 //#define DEBUG_TRACE_EXECUTION
 //#define DEBUG_TRACE_QUEUE
 //#define DEBUG_STRESS_GC
+//#define DEBUG_ANNOUNCE_GC
 #endif // _DEBUG
 
 #define byte uint8_t
@@ -417,7 +418,7 @@ static inline void swap() { Value v = TOP; TOP = SND; SND = v; }  // ( a b -- b 
 static inline void dup() { push(TOP); }  // ( a -- a a )
 static inline void over() { push(SND); }  // ( a b -- a b a )
 
-void defineGlobal();  // ( value name -- value )
+void defineGlobal();  // ( value name -- )
 
 void vm_capture_preamble_specials();
 
