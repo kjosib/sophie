@@ -1,21 +1,13 @@
-Sophie's Future Virtual Machine
+Sophie's Virtual Machine
 #################################
 
-I've started implementing a virtual machine for Sophie in C,
-borrowing liberally from the code and ideas
+Sophie now has a virtual machine written in C.
+It got started with liberal borrowing from the code and ideas
 in `Crafting Interpreters <https://craftinginterpreters.com/>`_
 
-I am not planning to translate the whole of Sophie into C.
-Rather, the plan is for Sophie to be able to emit an intermediate
-representation which a separate VM can interpret at a respectable speed.
-
-The intermediate representation is made of plain (UTF-8) text.
-I originally thought to make it look like classical assembler input,
-but then realized a structure reminiscent of FORTH would be preferable:
-
-* FORTH-like languages are really easy to parse and compile.
-* The (first) VM will be a stack machine, which maps perfectly to FORTH's agglutinative nature.
-
+I do not plan to translate the whole of Sophie into C.
+Rather, Sophie's front-end can emit a text-based intermediate representation
+which the VM translates to byte-code and runs at a respectable speed.
 
 .. contents::
     :local:
@@ -46,6 +38,7 @@ Here are some open problems, in no particular order:
 * [DONE] Pre-link global functions at load-time rather than hash look-ups during execution.
 * [DONE] Message-passing -- starting with a console-actor.
 * [DONE] Modules. The one global namespace is carved up with a simple name-mangling scheme.
+* Dismiss the bytecode-translator's data (including the global symbol table) before starting the user program.
 * SDL bindings, at least for some simple graphics and the mouse.
 * User-Defined Actors.
 * FFI improvements.
