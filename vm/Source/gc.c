@@ -221,7 +221,7 @@ static void collect_garbage() {
     }
     size_t used = next_ptr - to_space.begin;
 #ifdef DEBUG_ANNOUNCE_GC
-    printf("Scavenged %d of %d bytes.\n", (int)(old_capacity - used), (int)(old_capacity));
+    printf("Scavenged %d of %d bytes; %d used.\n", (int)(old_capacity - used), (int)(old_capacity), (int)used);
 #endif
 #ifdef DEBUG_STRESS_GC
     size_t max_capacity = used + TOO_BIG;  // Trigger very frequent collections
