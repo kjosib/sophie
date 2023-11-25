@@ -20,7 +20,7 @@ These sections are still on the drawing board...
 * Starmap-like functors
 * Input from files
 * Other event-driven things, such as SDL bindings.
-* Ad-hoc polymorphic multimethods (sort of; I have some notions.)
+* Ad-hoc polymorphic multimethods (sort of; I have some "notions".)
 
 Package System
 ~~~~~~~~~~~~~~~~~~
@@ -222,25 +222,6 @@ comfortably with ``result`` types.
 
 Stronger Guarantees
 ~~~~~~~~~~~~~~~~~~~~~~
-
-Right now, Sophie has a traditional H-M generic type inference engine with let-polymorphism.
-I'm in the middle of adding row-polymorphism so that you can write functions that access fields generically.
-
-Partial Evaluation
----------------------
-
-Initially I thought to use true partial-evaluation:
-Run the code on the types instead of the data.
-It's quick, precise, and feasible for some scenarios, but it's a strange work-flow:
-Partial evaluation works top-down rather than bottom-up (same as a normal evaluator),
-so you often can't tell if a function is well-typed in the abstract.
-You can only tell if the *application* of a function is well-typed in context.
-So if something doesn't type out, the whole call stack is potentially to blame.
-
-Anyway, I got stuck part-way through designing the partial-evaluator and shifted tactics.
-In retrospect, that may have been a mistake.
-To bound the scope of blame, use the type annotations on functions.
-A call that is consistent with its annotations cannot be blamed.
 
 Type-Like Traits and Gradual Formality
 ---------------------------------------
