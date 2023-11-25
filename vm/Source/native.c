@@ -29,26 +29,6 @@ static double fib(double n) {
 	return n < 2 ? n : fib(n - 1) + fib(n - 2);
 }
 
-static Value fib_native(Value *args) {
-	return NUMBER_VAL(fib(AS_NUMBER(force(args[0]))));
-}
-
-static Value abs_native(Value *args) {
-	return NUMBER_VAL(fabs(AS_NUMBER(force(args[0]))));
-}
-
-static Value sqrt_native(Value *args) {
-	return NUMBER_VAL(sqrt(AS_NUMBER(force(args[0]))));
-}
-
-static Value int_native(Value *args) {
-	return NUMBER_VAL(trunc(AS_NUMBER(force(args[0]))));
-}
-
-static Value floor_native(Value *args) {
-	return NUMBER_VAL(floor(AS_NUMBER(force(args[0]))));
-}
-
 static Value val_native(Value *args) {
 	const char *text = AS_STRING(force(args[0]))->text;
 	// This is hinkey, but it will have to do for now.
@@ -205,26 +185,107 @@ static void math_constant(const char *name, double value) {  // ( -- )
 	defineGlobal();
 }
 
-void install_native_functions() {
-	defineNative("clock", 0, clock_native);
-	defineNative("abs", 1, abs_native);
-	defineNative("sqrt", 1, sqrt_native);
-	defineNative("int", 1, int_native);
+static double factorial(double d) { return tgamma(d + 1); }
+
+#define NUMERIC_1(fn) static Value fn ## _native(Value *args) {\
+	return NUMBER_VAL(fn(AS_NUMBER(force(args[0])))); \
+}
+
+#define NUMERIC_2(fn) static Value fn ## _native(Value *args) {\
+	return NUMBER_VAL(fn(AS_NUMBER(force(args[0])), AS_NUMBER(force(args[1])))); \
+}
+
+NUMERIC_1(acos)
+NUMERIC_1(acosh)
+NUMERIC_1(asin)
+NUMERIC_1(asinh)
+NUMERIC_1(atan)
+NUMERIC_1(atanh)
+NUMERIC_1(ceil)
+NUMERIC_1(cos)
+NUMERIC_1(cosh)
+NUMERIC_1(erf)
+NUMERIC_1(erfc)
+NUMERIC_1(exp)
+NUMERIC_1(expm1)
+NUMERIC_1(fib)
+NUMERIC_1(factorial)
+NUMERIC_1(fabs)
+NUMERIC_1(floor)
+NUMERIC_1(lgamma)
+NUMERIC_1(log)
+NUMERIC_1(log10)
+NUMERIC_1(log1p)
+NUMERIC_1(log2)
+NUMERIC_1(sin)
+NUMERIC_1(sinh)
+NUMERIC_1(sqrt)
+NUMERIC_1(tan)
+NUMERIC_1(tanh)
+NUMERIC_1(tgamma)
+NUMERIC_1(trunc)
+
+NUMERIC_2(atan2)
+NUMERIC_2(copysign)
+NUMERIC_2(fmod)
+NUMERIC_2(ldexp)
+NUMERIC_2(pow)
+
+static void install_numerics() {
+	defineNative("acos", 1, acos_native);
+	defineNative("acosh", 1, acosh_native);
+	defineNative("asin", 1, asin_native);
+	defineNative("asinh", 1, asinh_native);
+	defineNative("atan", 1, atan_native);
+	defineNative("atanh", 1, atanh_native);
+	defineNative("ceil", 1, ceil_native);
+	defineNative("cos", 1, cos_native);
+	defineNative("cosh", 1, cosh_native);
+	defineNative("erf", 1, erf_native);
+	defineNative("erfc", 1, erfc_native);
+	defineNative("exp", 1, exp_native);
+	defineNative("expm1", 1, expm1_native);
+	defineNative("factorial", 1, factorial_native);
+	defineNative("abs", 1, fabs_native);
 	defineNative("floor", 1, floor_native);
-	defineNative("fib_native", 1, fib_native);
-	defineNative("strcat", 2, concatenate);
-	defineNative("val", 1, val_native);
-	defineNative("chr", 1, chr_native);
-	defineNative("str", 1, str_native);
-	defineNative("len", 1, len_native);
-	defineNative("mid", 3, mid_native);
+	defineNative("lgamma", 1, lgamma_native);
+	defineNative("log", 1, log_native);
+	defineNative("log10", 1, log10_native);
+	defineNative("log1p", 1, log1p_native);
+	defineNative("log2", 1, log2_native);
+	defineNative("sin", 1, sin_native);
+	defineNative("sinh", 1, sinh_native);
+	defineNative("sqrt", 1, sqrt_native);
+	defineNative("tan", 1, tan_native);
+	defineNative("tanh", 1, tanh_native);
+	defineNative("gamma", 1, tgamma_native);
+	defineNative("trunc", 1, trunc_native);
+	defineNative("int", 1, trunc_native);
+	defineNative("fib_native", 1, fib_native); // Just for access to that baseline microbenchmark
+
+	defineNative("atan2", 2, atan2_native);
+	defineNative("copysign", 2, copysign_native);
+	defineNative("fmod", 2, fmod_native);
+	defineNative("ldexp", 2, ldexp_native);
+	defineNative("pow", 2, pow_native);
 
 	math_constant("e", M_E);
 	math_constant("inf", HUGE_VAL);
 	math_constant("nan", NAN);
 	math_constant("pi", M_PI);
 	math_constant("tau", 2.0 * M_PI);
+}
 
+static void install_strings() {
+	defineNative("strcat", 2, concatenate);
+	defineNative("val", 1, val_native);
+	defineNative("chr", 1, chr_native);
+	defineNative("str", 1, str_native);
+	defineNative("len", 1, len_native);
+	defineNative("mid", 3, mid_native);
+}
+
+static void install_the_console() {
 	// Now let me try to create the console.
 	// It starts with the class definition:
 
@@ -237,7 +298,7 @@ void install_native_functions() {
 	create_native_method("random", 1, console_random);
 
 	// Oh yeah about that...
-	srand(time(NULL));
+	srand((unsigned int)time(NULL));
 
 	// Finally, create the actor itself.
 	make_template_from_dfn();
@@ -245,6 +306,14 @@ void install_native_functions() {
 
 	push_C_string("console");
 	defineGlobal();
+}
+
+void install_native_functions() {
+	defineNative("clock", 0, clock_native);
+	install_numerics();
+	install_strings();
+	install_the_console();
+	// install_the_sdl();
 
 
 #ifdef DEBUG_PRINT_GLOBALS

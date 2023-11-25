@@ -13,13 +13,13 @@ foreign "math" where
 	acos, acosh, asin, asinh, atan, atanh,
 	ceil, cos, cosh, degrees, erf, erfc, exp, expm1,
 	abs@"fabs", factorial, floor, gamma,
-	isqrt, lcm, lgamma, log, log10, log1p, log2,
-	modf, radians, sin, sinh, sqrt,
+	lgamma, log, log10, log1p, log2,
+	radians, sin, sinh, sqrt,
 	tan, tanh, trunc, ulp : (number) -> number;
 
 	isfinite, isinf, isnan : (number) -> flag;
 
-	atan2, comb, copysign, dist, fmod, gcd, ldexp, log_base@"log",
+	atan2, comb, copysign, dist, fmod, gcd, lcm, ldexp,
 	nextafter, perm, pow, remainder : (number, number) -> number;
 
 end;
@@ -41,10 +41,18 @@ foreign "operator" where
 end;
 
 # A few of Python's standard math functions are trouble (currently).
-	# ``log`` is bivalent: You can pass it one or two parameters. Sophie gets around this by aliasing ``log_base``.
 	# ``dist`` computes Euclidean distance between two points specified as vectors, but Sophie still lacks these.
 	# ``fsum``, ``prod``, and ``hypot`` also work on vectors; same problem. (Pure-Sophie versions are provided.)
 	# ``frexp`` returns a tuple, which would confuse the evaluator. It needs an adapter to a known record type.
+	# Same goes for ``modf``, except it would be trivial in pure Sophie: ``pair(x-trunc(x), trunc(x))`` or similar.
+	# The combinatorics ``comb``, ``perm``, ``gcd``, and ``lcm`` have no analogue in the C library,
+	# so the VM does not (yet) support them. Numerical stability is a concern with these.
+	# ``factorial(x)`` is equivalent to ``gamma(x+1)`` except that Python uses arbitrary-precision integer math
+	# for the factorial. The VM may eventually bother with that, but not today.
+	# ``log`` in Python takes an optional base. Sophie does not do optional parameters.
+	# Therefore, Sophie's preamble provides ``log_base`` directly as the quotient of logs.
+	# At one time it was an alias to Python's ``log``, but C's math library has nothing comparable.
+	# ``isqrt`` demands an integer argument, which clashes with the intended semantics of "numbers are numbers".
 
 foreign "sophie.adapters.teletype_adapter"
     where console : Console;
@@ -137,5 +145,7 @@ define:
 	end each_chr;
 
     EOL = chr(10);
+    
+    log_base(x, base) = log(x) / log(base);
 
 end.
