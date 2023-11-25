@@ -47,8 +47,12 @@ int main(int argc, const char *argv[]) {
 		exit(0);
 	}
 	else {
-		printf("%.17g\n", 1e23);
 		fprintf(stderr, "Usage: %s /path/to/intermediate/code\n", argv[0]);
+		fprintf(stderr, "Sizes of things (not counting payload):\n");
+		fprintf(stderr, "Value: %d\n", (int)sizeof(Value));
+		fprintf(stderr, "String: %d\n", (int)sizeof(String));
+		fprintf(stderr, "Record: %d\n", (int)sizeof(Closure));
+		fprintf(stderr, "Closure: %d\n", (int)sizeof(Closure));
 		exit(64);
 	}
 }
