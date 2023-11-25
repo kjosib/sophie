@@ -39,6 +39,7 @@ Here are some open problems, in no particular order:
 * [DONE] Message-passing -- starting with a console-actor.
 * [DONE] Modules. The one global namespace is carved up with a simple name-mangling scheme.
 * Dismiss the bytecode-translator's data (including the global symbol table) before starting the user program.
+  (After picking up the special-cased constants, though...)
 * SDL bindings, at least for some simple graphics and the mouse.
 * User-Defined Actors.
 * FFI improvements.
@@ -47,6 +48,9 @@ Here are some open problems, in no particular order:
 * Numeric field offsets. This could save cycles where a record-type is statically known.
 * Tuning the dial on eager evaluation. This may help with performance.
 * NaN-boxing.
+* Short-string representation: Very short strings fit in a value (and don't benefit from interning).
+  Shorter than 4gb may benefit from a smaller header. It would make the string module a bit trickier,
+  but save a metric boat-load of allocations in string-heavy code.
 * Thread-Safe Generational GC with Actors in mind.
 * Actual threads.
 * Arrays. (The semantics would be tied into the actor-oriented side.)
