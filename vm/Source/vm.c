@@ -447,7 +447,9 @@ Value force(Value value) {
 			// Thunk has yet to be snapped.
 			push(value);
 			Value snapped = run(AS_CLOSURE(value));
-			AS_CLOSURE(pop())->captives[0] = snapped;
+			Closure *closure = AS_CLOSURE(pop());
+			closure->captives[0] = snapped;
+			for (int i = 1; i < closure->function->nr_captures; i++) closure->captives[i] = NIL_VAL;
 			return snapped;
 		}
 		else return AS_CLOSURE(value)->captives[0];
