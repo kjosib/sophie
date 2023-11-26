@@ -34,7 +34,7 @@ typedef enum { // written to match the standard preamble's order type
 //#define DEBUG_TRACE_EXECUTION
 //#define DEBUG_TRACE_QUEUE
 //#define DEBUG_STRESS_GC
-//#define DEBUG_ANNOUNCE_GC
+#define DEBUG_ANNOUNCE_GC
 #endif // _DEBUG
 
 #define byte uint8_t

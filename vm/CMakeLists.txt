@@ -16,13 +16,20 @@ add_executable (svm
 	"Source/chunk.c"  "Source/debug.c"  "Source/main.c" "Source/memory.c" "Source/value.c" 
 	"Source/vm.c" "Source/compiler.c" "Source/scanner.c" "Source/isa.c" "Source/parser.c"
 	"Source/object.c" "Source/table.c" "Source/gc.c" "Source/function.c" "Source/record.c"
-	"Source/native.c" "Source/actor.c"
+	"Source/native.c" "Source/actor.c" "Source/chacha.c" "Source/platform_specific.c"
 
 	"Source/common.h" "Source/opcodes.h" "Source/prep.h"
+	"Source/chacha.h" "Source/platform_specific.h"
 )
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
   set_property(TARGET svm PROPERTY CXX_STANDARD 20)
 endif()
+
+# Platform specific
+if(WIN32)
+	target_link_libraries(svm bcrypt)
+endif()
+
 
 # TODO: Add tests and install targets if needed.
