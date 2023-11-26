@@ -4,6 +4,8 @@
 #include <math.h>
 #include <time.h>
 #include "common.h"
+#include "chacha.h"
+#include "platform_specific.h"
 
 /***********************************************************************************/
 
@@ -120,14 +122,25 @@ static Value console_read(Value *args) {
 	return NIL_VAL;
 }
 
+static ChaCha_Seed seed;
+static ChaCha_Block randomness;
+static int noise_index;
+
+static void seed_random_number_generator() {
+	platform_entropy(&seed, sizeof(seed));
+	noise_index = 8;
+}
+
 static Value console_random(Value *args) {
 	/*
 	Similar to console_read, but less stringy.
-	Standard randomness in C is also problematic.
-	It will do for the moment,
-	but some day a better default random number generator would be nice.
 	*/
-	args[0] = NUMBER_VAL((double)rand() / RAND_MAX);
+	if (noise_index >= 8) {
+		noise_index = 0;
+		seed.count++;
+		chacha_make_noise(&randomness, &seed);
+	}
+	args[0] = NUMBER_VAL((double)randomness.noise_64[noise_index++] / UINT64_MAX);
 	apply_bound_method();
 	enqueue_message(pop());
 	return NIL_VAL;
@@ -228,7 +241,10 @@ NUMERIC_1(trunc)
 NUMERIC_2(atan2)
 NUMERIC_2(copysign)
 NUMERIC_2(fmod)
-NUMERIC_2(ldexp)
+static Value ldexp_native(Value *args) {
+	// Cast avoids a warning due to the type of the second argument.
+	return NUMBER_VAL(ldexp(AS_NUMBER(force(args[0])), (int)AS_NUMBER(force(args[1]))));
+}
 NUMERIC_2(pow)
 
 static void install_numerics() {
@@ -298,7 +314,7 @@ static void install_the_console() {
 	create_native_method("random", 1, console_random);
 
 	// Oh yeah about that...
-	srand((unsigned int)time(NULL));
+	seed_random_number_generator();
 
 	// Finally, create the actor itself.
 	make_template_from_dfn();

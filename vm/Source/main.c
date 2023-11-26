@@ -1,6 +1,7 @@
 ﻿#include <stdarg.h>
 #include "common.h"
 #include "prep.h"
+#include "chacha.h"
 
 #ifdef _WIN32
 #pragma warning(disable : 4996)  /* Stop irrelevant warning about fopen on MS compilers */
@@ -27,18 +28,18 @@ static char *readFile(const char *path) {
 }
 
 static void run_program(const char *path) {
-		init_gc();
-		initVM(); // This first so that the string table is initialized first, before its first sweep.
-		init_actor_model();
-		install_native_functions();
-		initLexicon();
-		char *source = readFile(path);
-		compile(source);
-		free(source);
-		// Maybe unload the compiler here and save a few bytes?
-		vm_capture_preamble_specials();
-		run(AS_CLOSURE(pop()));
-		freeVM();
+	init_gc();
+	initVM(); // This first so that the string table is initialized first, before its first sweep.
+	init_actor_model();
+	install_native_functions();
+	initLexicon();
+	char *source = readFile(path);
+	compile(source);
+	free(source);
+	// Maybe unload the compiler here and save a few bytes?
+	vm_capture_preamble_specials();
+	run(AS_CLOSURE(pop()));
+	freeVM();
 }
 
 int main(int argc, const char *argv[]) {
@@ -48,11 +49,17 @@ int main(int argc, const char *argv[]) {
 	}
 	else {
 		fprintf(stderr, "Usage: %s /path/to/intermediate/code\n", argv[0]);
-		fprintf(stderr, "Sizes of things (not counting payload):\n");
+		fprintf(stderr, "Sizes of some things in bytes, not counting payload:\n");
 		fprintf(stderr, "Value: %d\n", (int)sizeof(Value));
 		fprintf(stderr, "String: %d\n", (int)sizeof(String));
 		fprintf(stderr, "Record: %d\n", (int)sizeof(Closure));
 		fprintf(stderr, "Closure: %d\n", (int)sizeof(Closure));
+
+		fprintf(stderr, "ChaCha20 Seed: %d\n", (int)sizeof(ChaCha_Seed));
+		fprintf(stderr, "ChaCha20 Block: %d\n", (int)sizeof(ChaCha_Block));
+		chacha_test_quarter_round();
+		chacha_test_make_noise();
+
 		exit(64);
 	}
 }

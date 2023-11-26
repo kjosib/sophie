@@ -38,6 +38,8 @@ Here are some open problems, in no particular order:
 * [DONE] Pre-link global functions at load-time rather than hash look-ups during execution.
 * [DONE] Message-passing -- starting with a console-actor.
 * [DONE] Modules. The one global namespace is carved up with a simple name-mangling scheme.
+* [DONE] Cryptographically secure random number generator. (It's based on ChaCha20.)
+* [PARTIAL] Improve how the GC treats snapped thunks.
 * Dismiss the bytecode-translator's data (including the global symbol table) before starting the user program.
   (After picking up the special-cased constants, though...)
 * SDL bindings, at least for some simple graphics and the mouse.
@@ -1066,3 +1068,29 @@ To achieve that speed-up, I arranged to let the heap grow much larger than previ
 The process now sits around 70k of heap and traces 9.5k for each collection.
 Of that, 8.5k is immortal data. So generational GC might speed this up even more.
 
+25 November 2023
+----------------
+
+I've added a cryptographically-secure pseudo-random number generator.
+I'd been befuddled by the wide variety of ostensibly "fast" PRNGs,
+but then I ran across this nice article wherein the author argues
+we should just use a cryptographically-secure generator for everything.
+There is no *significant* performance advantage to the unsecure generators,
+and there *are* significant problems. So I checked out a few options and
+settled on implementing ChaCha20 as a random bit generator.
+I followed `RFC 7593<https://datatracker.ietf.org/doc/rfc7539/>`_.
+The standard test vectors now run when you start the VM without any arguments.
+
+Incidentally, this means Sophie's VM now has a platform dependency and an
+external linked library on Windows for the entropy API. I'm pleased to say
+I've worked out how to get ``cmake`` to cooperate with this. (On Linux/Mac,
+it reads from ``/dev/urandom``.)
+
+Also, I realized a reason for the surprisingly-large heap in the 2-3 tree test:
+Snapped thunks still darken their captures during collection!
+A quick & dirty patch to blank the extra captures cut the memory usage
+by a factor ranging from three to six in different phases of the program.
+(It announces many collections because I gave it a much longer text to work with.)
+Problem is the Q&D solution also slows things down again:
+Thunk-ridden ``fib(39)`` is up to 14 seconds.
+I'll replace it with something nicer soon.
