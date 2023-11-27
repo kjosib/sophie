@@ -321,20 +321,16 @@ dispatch:
 		{
 			if (IS_THUNK(TOP)) {
 				Closure *subsequent = vm.trace->closure = AS_CLOSURE(pop());
-				// Has it been snapped?
-				if (IS_NIL(subsequent->captives[0])) {
-					// No...
+				if (DID_SNAP(subsequent)) {
+					YIELD(SNAP_RESULT(subsequent));
+				}
+				else {
 					// Treat this like an exec / tail-call, but easier since arity is zero by definition.
 					constants = subsequent->function->chunk.constants.at;
 					vpc = subsequent->function->chunk.code.at;
 					vm.stackTop = base;
-					NEXT;
 				}
-				else {
-					// Yes...
-					YIELD(subsequent->captives[0]);
-					NEXT;
-				}
+				NEXT;
 			}
 			// else fall-through to OP_RETURN;
 		}
@@ -432,27 +428,27 @@ dispatch:
 	}
 }
 
-#undef CHECK_UNDERFLOW
-#undef BINARY_OP
-#undef CONSTANT
 #undef LEAP
-#undef SKIP
-#undef READ_CONSTANT
+#undef SKIP_AND_POP
 #undef READ_BYTE
 #undef NEXT
 
 Value force(Value value) {
 	if (IS_THUNK(value)) {
-		if (IS_NIL(AS_CLOSURE(value)->captives[0])) {
+		Closure *thunk_ptr = AS_CLOSURE(value);
+		if DID_SNAP(thunk_ptr) {
+			return SNAP_RESULT(thunk_ptr);
+		}
+		else {
 			// Thunk has yet to be snapped.
 			push(value);
-			Value snapped = run(AS_CLOSURE(value));
-			Closure *closure = AS_CLOSURE(pop());
-			closure->captives[0] = snapped;
-			for (int i = 1; i < closure->function->nr_captures; i++) closure->captives[i] = NIL_VAL;
-			return snapped;
+			Value result = run(thunk_ptr);
+			thunk_ptr = AS_CLOSURE(pop());
+			SNAP_RESULT(thunk_ptr) = result;
+			thunk_ptr->header.kind = &KIND_snapped;  // Lest a snapped thunk somehow survives GC?
+			// That last assignment probably serves more to align code with cache lines.
+			return result;
 		}
-		else return AS_CLOSURE(value)->captives[0];
 	}
 	else return value;
 }

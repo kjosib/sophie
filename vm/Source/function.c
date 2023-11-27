@@ -26,6 +26,18 @@ static void blacken_closure(Closure *closure) {
 
 static size_t size_closure(Closure *closure) { return sizeof(Closure) + (sizeof(Value) * closure->function->nr_captures); }
 
+static void display_snapped(Closure *snap) {
+	printf(":");
+	printValue(SNAP_RESULT(snap));
+}
+
+static void blacken_snapped(Closure *snap) {
+	darkenValue(&SNAP_RESULT(snap));
+}
+
+static size_t size_snapped(Closure *snapped) { return sizeof(Closure) + sizeof(Value); }
+
+
 GC_Kind KIND_Function = {
 	.display = display_function,
 	.deeply = display_function,
@@ -38,6 +50,13 @@ GC_Kind KIND_Closure = {
 	.deeply = display_closure,
 	.blacken = blacken_closure,
 	.size = size_closure,
+};
+
+GC_Kind KIND_snapped = {
+	.display = display_snapped,
+	.deeply = display_snapped,
+	.blacken = blacken_snapped,
+	.size = size_snapped,
 };
 
 
