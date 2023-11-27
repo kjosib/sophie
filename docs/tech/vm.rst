@@ -39,7 +39,7 @@ Here are some open problems, in no particular order:
 * [DONE] Message-passing -- starting with a console-actor.
 * [DONE] Modules. The one global namespace is carved up with a simple name-mangling scheme.
 * [DONE] Cryptographically secure random number generator. (It's based on ChaCha20.)
-* [PARTIAL] Improve how the GC treats snapped thunks.
+* [DONE] Improve how the GC treats snapped thunks.
 * Dismiss the bytecode-translator's data (including the global symbol table) before starting the user program.
   (After picking up the special-cased constants, though...)
 * SDL bindings, at least for some simple graphics and the mouse.
@@ -1094,3 +1094,20 @@ by a factor ranging from three to six in different phases of the program.
 Problem is the Q&D solution also slows things down again:
 Thunk-ridden ``fib(39)`` is up to 14 seconds.
 I'll replace it with something nicer soon.
+
+26 November 2023
+----------------
+
+I implemented a much nicer alternative to yesterday's Q&D hack.
+The garbage collector now aggressively prunes snapped thunks out of existence:
+Any ``Value`` that points to one gets the computed result in its place.
+And just in case, forcing a thunk now changes the object header to one
+which only darkens the result slot. (The rest of the closure is unreachable anyway.)
+Heaps remain small and net performance is quite respectable:
+The 2-3 tree demo maxes out well below 50k and the thunk-ful Fibonacci takes
+about 12.8 seconds on a good run.
+
+It surprised me, but the object-header tweak yields a (small, but consistent) improvement.
+I've convinced myself that *every* snapped thunk gets pruned, so the only explanation
+that makes a great deal of sense is the vagaries of code layout among cache lines.
+

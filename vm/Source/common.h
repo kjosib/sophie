@@ -169,7 +169,6 @@ DEFINE_VECTOR_TYPE(ValueArray, Value)
 void printValue(Value value);
 void printValueDeeply(Value value);
 
-static inline void darkenValue(Value *value) { if (IS_GC_ABLE(*value)) darken_in_place(&value->as.ptr); }
 void darkenValues(Value *at, size_t count);
 void darkenValueArray(ValueArray *vec);
 
@@ -281,6 +280,21 @@ String *name_of_function(Function *function);
 
 #define AS_CLOSURE(value) ((Closure *)AS_PTR(value))
 #define AS_FN(value) ((Function *)AS_PTR(value))
+
+
+extern GC_Kind KIND_snapped;
+
+#define SNAP_RESULT(thunk_ptr) (thunk_ptr->captives[0])
+#define DID_SNAP(thunk_ptr) (SNAP_RESULT(thunk_ptr).type != VAL_NIL)
+
+static inline void darkenValue(Value *value) {
+	if (IS_THUNK(*value) && DID_SNAP(AS_CLOSURE(*value))) {
+		*value = SNAP_RESULT(AS_CLOSURE(*value));
+	}
+	if (IS_GC_ABLE(*value)) {
+		darken_in_place(&value->as.ptr);
+	}
+}
 
 /* record.h */
 
