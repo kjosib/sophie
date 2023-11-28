@@ -1111,3 +1111,26 @@ It surprised me, but the object-header tweak yields a (small, but consistent) im
 I've convinced myself that *every* snapped thunk gets pruned, so the only explanation
 that makes a great deal of sense is the vagaries of code layout among cache lines.
 
+27 November 2023
+----------------
+
+I have begun the ground-work for getting SDL bindings into the Sophie VM.
+The first step was I've added a finalization queue. At least in theory,
+Sophie's GC can now make sure resources get released before they leak.
+I realized while making it that it's also perfect for file handles and the like.
+Of course the proper thing is still to release resources overtly when they're
+no longer relevant to the program's future, but the GC can act as a stopgap.
+
+    SDL does a lot of its own allocation (presumably on the ``malloc`` heap) and
+    expects to be told when to destroy/free those resources with calls to functions
+    like ``SDL_FreeSurface`` and ``SDL_DestroyWindow``.
+ 
+The basic concept is quite simple: The ``GC_Kind`` structure now has a field
+for how to finalize an object. Just before the end of a collection, the GC
+now scans the finalization queue: White objects on that list get finalized.
+(Broken hearts get healed.) The finalizer is not allowed to allocate on the
+GC heap (because a collection is still in progress) but that should be fine.
+
+I have also started on adding the SDL-related system-actors into ``native.c``.
+Ideally this would load the SDL library on demand, but that's not today's quest.
+
