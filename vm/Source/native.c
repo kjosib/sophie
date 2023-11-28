@@ -192,6 +192,8 @@ static void create_native_method(const char *name, byte arity, NativeFn function
 	install_method();
 }
 
+/***********************************************************************************/
+
 static void math_constant(const char *name, double value) {  // ( -- )
 	push(NUMBER_VAL(value));
 	push_C_string(name);
@@ -292,6 +294,8 @@ static void install_numerics() {
 	math_constant("tau", 2.0 * M_PI);
 }
 
+/***********************************************************************************/
+
 static void install_strings() {
 	defineNative("strcat", 2, concatenate);
 	defineNative("val", 1, val_native);
@@ -305,7 +309,7 @@ static void install_the_console() {
 	// Now let me try to create the console.
 	// It starts with the class definition:
 
-	push_C_string("Console");
+	push_C_string("Console");  // Implements the Console interface; just happens to share the name.
 	define_actor(0);
 
 	// Next up, define some methods:
@@ -324,12 +328,31 @@ static void install_the_console() {
 	defineGlobal();
 }
 
+static void install_sdl_bindings() {
+	// Eventually this should fall under control of the user-program opting into this.
+	// That extends to loading SDL on-demand via platform DLL facilities.
+	// For now I'll live with implicit linking.
+
+	// Push additional field names here...
+	// Works much like defining a constructor.
+	push_C_string("SDL_GameLoop"); // Implements the GameLoop interface.
+	define_actor(0);  // Will need fields soon enough at least for main display.
+
+	// Continue to follow the trail forged by the console-actor:
+
+	make_template_from_dfn();
+	make_actor_from_template();
+
+	push_C_string("events");
+	defineGlobal();
+}
+
 void install_native_functions() {
 	defineNative("clock", 0, clock_native);
 	install_numerics();
 	install_strings();
 	install_the_console();
-	// install_the_sdl();
+	install_sdl_bindings();
 
 
 #ifdef DEBUG_PRINT_GLOBALS
