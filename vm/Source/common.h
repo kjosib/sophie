@@ -31,8 +31,8 @@ typedef enum { // written to match the standard preamble's order type
 #ifdef _DEBUG
 //#define DEBUG_PRINT_GLOBALS
 //#define DEBUG_PRINT_CODE
-//#define DEBUG_TRACE_EXECUTION
-//#define DEBUG_TRACE_QUEUE
+#define DEBUG_TRACE_EXECUTION
+#define DEBUG_TRACE_QUEUE
 //#define DEBUG_STRESS_GC
 #define DEBUG_ANNOUNCE_GC
 #endif // _DEBUG
@@ -62,6 +62,7 @@ typedef struct {
 	Method blacken;
 	SizeMethod size;
 	Verb compare;  // ( a b -- TotalOrder )
+	Method finalize; // Must not gc_allocate; gets called mid-collection.
 } GC_Kind;
 
 typedef union {
@@ -74,8 +75,8 @@ void gc_install_roots(Verb verb);
 
 void *gc_allocate(GC_Kind *kind, size_t size);
 void *darken(void *gc);
-
 static inline void darken_in_place(void **gc) { *gc = darken(*gc); }
+void must_finalize(GC *item);
 
 /* memory.h */
 

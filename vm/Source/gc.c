@@ -54,10 +54,20 @@ static LOB sentinel = { NULL, NULL };
 
 static Tour *root_sets = NULL;
 
+
 static void collect_garbage();
 static void free_white_lobs();
 
+DEFINE_VECTOR_TYPE(PointerArray, GC*)
+DEFINE_VECTOR_CODE(PointerArray, GC*)
+DEFINE_VECTOR_APPEND(PointerArray, GC*)
 
+static PointerArray resources;
+
+void must_finalize(GC *item) {
+    assert(item->kind->finalize != NULL);
+    appendPointerArray(&resources, item);
+}
 
 static LOB *lob_from_gc(GC *gc) { return ((LOB*)(gc)) - 1; }
 
@@ -110,8 +120,11 @@ static void newArena(size_t size) {
 }
 
 void init_gc() {
+    initPointerArray(&resources);
     newArena(INITIAL_ARENA_SIZE);
 }
+
+void must_finalize(GC *gc);
 
 static size_t gc_size(GC *gc) { return allotment_for(gc->kind->size(gc)); }
 static void break_heart(GC *gc) { gc->ptr = next_ptr; }
@@ -167,18 +180,19 @@ void gc_install_roots(Verb verb) {
 
 static void blacken(GC *gc) { gc->kind->blacken(gc); }
 
-static bool is_white(GC *gc) {
-    // NB: For the sake of simplicity, null pointers are off limits here.
-    // Also for simplicity, this considers broken-hearts as not reached.
-    // (They're handled in a separate part anyway.)
-    if (ptr_in_arena(gc, to_space)) return false;
-    if (ptr_in_arena(gc, from_space)) return true;
-    // Otherwise it must be a LOB:
-    return !(lob_from_gc(gc)->mark);
-}
+static inline bool is_lob_white(GC *gc) { return !(lob_from_gc(gc)->mark); }
 
 static void sweep_weak_table(Table *table) {
     // Right now this means clean out unmarked strings from the string pool.
+    // Incidentally, a weakness in the current design is that the string table never shrinks.
+    // A program could have a phase that generates a lot of temporary strings,
+    // and then another phase that doesn't need them anymore. It must still scan the whole array.
+    // It might be nice to have a separate string table for each generation.
+    // This might slow down interning strings. Another option is to card-mark the table.
+    // This would mean not scanning so hard when there's relatively little string activity.
+    // These cards would indicate the youngest generation of any string in a segment.
+    // That only makes sense once generations happen, though.
+    // At present, every generation is the youngest.
     for (size_t index = 0; index < table->cap; index++) {
         String *key = table->at[index].key;
         if (key == NULL) continue;
@@ -190,10 +204,26 @@ static void sweep_weak_table(Table *table) {
                 tableDelete(table, key);
             }
         }
-        else if (!lob_from_gc(&key->header)->mark) {
+        else if (is_lob_white(&key->header)) {
             tableDelete(table, key);
         }
     }
+}
+
+static void sweep_finalizers() {
+    size_t keep = 0;
+    for (size_t index = 0; index < resources.cnt; index++) {
+        GC *item = resources.at[index];
+        if (ptr_in_arena(item, from_space)) {
+            if (is_broken_heart(item)) resources.at[keep++] = follow_heart(item);
+            else item->kind->finalize(item);
+        }
+        else {
+            if (is_lob_white(item)) item->kind->finalize(item);
+            else resources.at[keep++] = item;
+        }
+    }
+    resources.cnt = keep;
 }
 
 static void collect_garbage() {
@@ -219,6 +249,14 @@ static void collect_garbage() {
             blacken((GC*)(lob + 1));
         }
     }
+    sweep_finalizers();
+    // Finalizers written in Sophie would presumably be like last-messages-to-actors.
+    // The GC finalizer for an actor would thus darken said actor and add it to some queue.
+    // Then another round of blackening takes place.
+    // Actors that finish their "finalize" message then presumably go into a dead state,
+    // no longer able to receive messages. And as such, the GC can re-route zombie references
+    // to a special system-actor designed to ignore dead letters -- or to log them, in debug mode.
+    sweep_weak_table(&vm.strings);
     size_t used = next_ptr - to_space.begin;
 #ifdef DEBUG_ANNOUNCE_GC
     printf("Scavenged %d of %d bytes; %d used.\n", (int)(old_capacity - used), (int)(old_capacity), (int)used);
@@ -231,7 +269,6 @@ static void collect_garbage() {
     if (new_capacity > max_capacity) {
         to_space.end = to_space.begin + max_capacity;
     }
-    sweep_weak_table(&vm.strings);
     free(from_space.begin);
     free_white_lobs();
 }

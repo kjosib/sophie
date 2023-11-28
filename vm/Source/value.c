@@ -35,7 +35,7 @@ void darkenValueArray(ValueArray *vec) {
 }
 
 char *valKind[] = {
-	[VAL_NIL] = "nil",
+	[VAL_NIL] = "the formless void",
 	[VAL_BOOL] = "bool",
 	[VAL_NUMBER] = "number",
 	[VAL_ENUM] = "enum",

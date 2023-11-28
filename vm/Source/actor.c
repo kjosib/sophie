@@ -69,6 +69,19 @@ static size_t ahead(size_t index) {
 	return (index + 1) & (mq.capacity - 1);
 }
 
+static int arity_of_message(Message *msg) {
+	// Accepts a GC-able parameter but doesn't call anything and therefore can't allocate.
+	Value callable = msg->callable;
+	switch (callable.type) {
+	case VAL_CLOSURE:
+		return AS_CLOSURE(callable)->function->arity;
+	case VAL_NATIVE:
+		return AS_NATIVE(callable)->arity;
+	default:
+		crashAndBurn("bogus callable (%s) in bound method", valKind[callable.type]);
+	}
+}
+
 void enqueue_message(Value message) {
 	assert(IS_MESSAGE(message) || IS_BOUND(message));
 #ifdef DEBUG_TRACE_QUEUE
@@ -210,19 +223,6 @@ void bind_task_from_closure() {
 	bound->self = NULL;
 	bound->callable = TOP;
 	TOP = BOUND_VAL(bound);
-}
-
-static int arity_of_message(Message *msg) {
-	// Accepts a GC-able parameter but doesn't call anything and therefore can't allocate.
-	Value callable = msg->callable;
-	switch (callable.type) {
-	case VAL_CLOSURE:
-		return AS_CLOSURE(callable)->function->arity;
-	case VAL_NATIVE:
-		return AS_NATIVE(callable)->arity;
-	default:
-		crashAndBurn("bogus callable in bound method");
-	}
 }
 
 void display_message(Message *msg) { printf("<message>"); }
