@@ -353,9 +353,4 @@ void install_native_functions() {
 	install_strings();
 	install_the_console();
 	install_sdl_bindings();
-
-
-#ifdef DEBUG_PRINT_GLOBALS
-	tableDump(&vm.globals);
-#endif // DEBUG_PRINT_GLOBALS
 }

@@ -108,6 +108,11 @@ bool tableSet(Table *table, String *key, Value value) {
 	return isNewKey;
 }
 
+Value table_get_from_C(Table *table, const char *text) {
+	assert(text);
+	return tableGet(table, import_C_string(text, strlen(text)));
+}
+
 void table_set_from_C(Table *table, char *text, Value value) {
 	if (text) {
 		String *key = import_C_string(text, strlen(text));

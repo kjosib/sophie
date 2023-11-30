@@ -40,8 +40,8 @@ Here are some open problems, in no particular order:
 * [DONE] Modules. The one global namespace is carved up with a simple name-mangling scheme.
 * [DONE] Cryptographically secure random number generator. (It's based on ChaCha20.)
 * [DONE] Improve how the GC treats snapped thunks.
-* Dismiss the bytecode-translator's data (including the global symbol table) before starting the user program.
-  (After picking up the special-cased constants, though...)
+* [DONE] Dismiss the bytecode-translator's data (including the global symbol table) before
+  starting the user program. (After picking up the special-cased constants, though...)
 * SDL bindings, at least for some simple graphics and the mouse.
 * User-Defined Actors.
 * FFI improvements.
@@ -1134,3 +1134,22 @@ GC heap (because a collection is still in progress) but that should be fine.
 I have also started on adding the SDL-related system-actors into ``native.c``.
 Ideally this would load the SDL library on demand, but that's not today's quest.
 
+28 November 2023
+----------------
+
+Add https://dl.acm.org/doi/pdf/10.1145/191081.191117 to the bibliography.
+*Optimizing Multi-Method Dispatch Using Compressed Dispatch Tables.*
+It will be some time before this is top-of-mind, but there is is.
+
+29 November 2023
+----------------
+
+Easy project today. Henceforth the global table is property of the compiler,
+not the VM. And the compiler disposes of the global table when it's finished.
+Moreover, the compiler removes itself from the set of GC root-sources.
+This drops over 9k worth of useless data out of the heap after the first collection.
+Interesting side effect: The Fibonacci benchmark now has a working set of 824 bytes only,
+so the adaptive heap scaling gives it a much smaller heap. With that, it still ran
+just a hair faster than before. Then I doubled the minimum-heap size to 32k.
+Now it's consistently under 12.5 seconds. With a gigantic heap it still stays above 12 seconds,
+which puts a bound on how much faster the GC can go.

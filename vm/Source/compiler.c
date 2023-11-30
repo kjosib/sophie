@@ -15,6 +15,7 @@ static Scope *current = NULL;
 static uint16_t holes[NR_HOLES];
 static Table lexicon;
 
+static Table globals;
 
 
 static void parse_function_block();
@@ -22,13 +23,21 @@ static void parse_thunk();
 
 
 
-
 static void grey_the_compiling_roots() {
+	darkenTable(&globals);
 	darkenTable(&lexicon);
 	Scope *scope = current;
 	while (scope) {
 		darkenChunk(&scope->chunk);
 		scope = scope->outer;
+	}
+}
+
+void defineGlobal() {  // ( value name -- )
+	String *name = AS_STRING(pop());
+	assert(is_string(name));
+	if (!tableSet(&globals, name, pop())) {
+		crashAndBurn("Global name \"%s\" already exists", name->text);
 	}
 }
 
@@ -72,14 +81,23 @@ static void come_from() {
 	*hole_ptr = 0;
 }
 
-void initLexicon() {
+static void init_compiler() {
+	memset(holes, 0, sizeof(holes));
+	current = NULL;
 	initTable(&lexicon);
+	initTable(&globals);
 	gc_install_roots(grey_the_compiling_roots);
 	for (int index = 0; index < NR_OPCODES; index++) {
 		table_set_from_C(&lexicon, instruction[index].name, ENUM_VAL(index));
 	}
 	table_set_from_C(&lexicon, "hole", PTR_VAL(hole));
 	table_set_from_C(&lexicon, "come_from", PTR_VAL(come_from));
+}
+
+static void dispose_compiler() {
+	gc_forget_roots(grey_the_compiling_roots);
+	freeTable(&globals);
+	freeTable(&lexicon);
 }
 
 static void push_new_scope() {
@@ -95,11 +113,6 @@ static void pop_scope() {
 	Scope *old = current;
 	current = old->outer;
 	free(old);
-}
-
-static void initCompiler() {
-	memset(holes, 0, sizeof(holes));
-	current = NULL;
 }
 
 
@@ -272,7 +285,7 @@ static void snap_global_pointers(Function *fn) {
 		Value *item = &fn->chunk.constants.at[index];
 		if (IS_GLOBAL(*item)) {
 			String *key = AS_STRING(*item);
-			Value found = tableGet(&vm.globals, key);
+			Value found = tableGet(&globals, key);
 			if (IS_NIL(found)) crashAndBurn("global not found: %s", AS_STRING(*item)->text);
 			else *item = found;
 		}
@@ -283,7 +296,11 @@ static void snap_global_pointers(Function *fn) {
 
 void compile(const char *source) {
 	initScanner(source);
-	initCompiler();
+	init_compiler();
+	install_native_functions();
+#ifdef DEBUG_PRINT_GLOBALS
+	tableDump(&globals);
+#endif // DEBUG_PRINT_GLOBALS
 	advance();
 	push_new_scope();
 	parseScript();
@@ -292,5 +309,7 @@ void compile(const char *source) {
 	pop_scope();
 	close_function(&TOP);
 	snap_global_pointers(AS_CLOSURE(TOP)->function);
+	vm_capture_preamble_specials(&globals);
+	dispose_compiler();
 }
 

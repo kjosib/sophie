@@ -31,7 +31,7 @@ typedef enum { // written to match the standard preamble's order type
 #ifdef _DEBUG
 //#define DEBUG_PRINT_GLOBALS
 //#define DEBUG_PRINT_CODE
-#define DEBUG_TRACE_EXECUTION
+//#define DEBUG_TRACE_EXECUTION
 #define DEBUG_TRACE_QUEUE
 //#define DEBUG_STRESS_GC
 #define DEBUG_ANNOUNCE_GC
@@ -72,6 +72,7 @@ typedef union {
 
 void init_gc();
 void gc_install_roots(Verb verb);
+void gc_forget_roots(Verb verb);
 
 void *gc_allocate(GC_Kind *kind, size_t size);
 void *darken(void *gc);
@@ -234,6 +235,7 @@ DEFINE_VECTOR_TYPE(Table, Entry)
 
 Value tableGet(Table *table, String *key);
 bool tableSet(Table *table, String *key, Value value);
+Value table_get_from_C(Table *table, const char *text);
 void table_set_from_C(Table *table, char *text, Value value);
 void tableAddAll(Table *from, Table *to);
 Entry *tableFindString(Table *table, const char *chars, size_t length, uint32_t hash);
@@ -392,7 +394,6 @@ typedef struct {
 	Trace *trace;
 	Value stack[STACK_MAX];
 	Value *stackTop;
-	Table globals;
 	Table strings;
 	Value cons;
 	Value nil;
@@ -435,7 +436,7 @@ static inline void over() { push(SND); }  // ( a b -- a b a )
 
 void defineGlobal();  // ( value name -- )
 
-void vm_capture_preamble_specials();
+void vm_capture_preamble_specials(Table *globals);
 
 /* native.h */
 
