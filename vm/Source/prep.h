@@ -63,7 +63,6 @@ bool maybe_token(TokenType type);
 
 /* compiler.h */
 
-void initLexicon();
 void compile(const char *source);  // ( -- closure )
 
 

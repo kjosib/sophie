@@ -13,7 +13,6 @@ static void grey_the_vm_roots() {
 	// Grey the value stack
 	darkenValues(vm.stack, vm.stackTop - vm.stack);
 	// Grey the globals
-	darkenTable(&vm.globals);
 	// Grey the call frame stack
 	if (vm.trace) {
 		for (Trace *trace = vm.traces; trace <= vm.trace; trace++) {
@@ -33,35 +32,21 @@ static void resetStack() {
 	vm.trace = vm.traces-1;
 }
 
-void defineGlobal() {  // ( value name -- )
-	String *name = AS_STRING(pop());
-	assert(is_string(name));
-	if (!tableSet(&vm.globals, name, pop())) {
-		crashAndBurn("Global name \"%s\" already exists", name->text);
-	}
-}
-
 void initVM() {
 	resetStack();
-	initTable(&vm.globals);
 	initTable(&vm.strings);
 	vm.cons = vm.nil = vm.maybe_this = vm.maybe_nope = NIL_VAL;
 	gc_install_roots(grey_the_vm_roots);
 }
 
-static Value global_from_C(const char *text) {
-	return tableGet(&vm.globals, import_C_string(text, strlen(text)));
-}
-
-void vm_capture_preamble_specials() {
-	vm.cons = global_from_C("cons");
-	vm.nil = global_from_C("nil");
-	vm.maybe_this = global_from_C("this");
-	vm.maybe_nope = global_from_C("nope");
+void vm_capture_preamble_specials(Table *globals) {
+	vm.cons = table_get_from_C(globals, "cons");
+	vm.nil = table_get_from_C(globals, "nil");
+	vm.maybe_this = table_get_from_C(globals, "this");
+	vm.maybe_nope = table_get_from_C(globals, "nope");
 }
 
 void freeVM() {
-	freeTable(&vm.globals);
 	freeTable(&vm.strings);
 }
 

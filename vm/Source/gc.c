@@ -16,7 +16,7 @@ see https://sophie.readthedocs.io/en/latest/tech/gc.html
 
 #else
 #define TOO_BIG 512
-#define INITIAL_ARENA_SIZE (32*TOO_BIG)
+#define INITIAL_ARENA_SIZE (64*TOO_BIG)
 #define GC_BALANCE 7
 #endif // DEBUG_STRESS_GC
 
@@ -34,9 +34,9 @@ struct LOB {
     LOB *mark;  // Linked list of marked objects.
 };
 
-typedef struct Tour Tour;
-struct Tour {
-    Tour *next;
+typedef struct RootsNode RootsNode;
+struct RootsNode {
+    RootsNode *next;
     Verb verb;
 };
 
@@ -52,7 +52,7 @@ static LOB *all_lobs = NULL;
 static LOB *grey_lobs = NULL;
 static LOB sentinel = { NULL, NULL };
 
-static Tour *root_sets = NULL;
+static RootsNode *root_sets = NULL;
 
 
 static void collect_garbage();
@@ -162,7 +162,7 @@ void *darken(void *gc) {
 }
 
 static void grey_the_roots() {
-    Tour *tour = root_sets;
+    RootsNode *tour = root_sets;
     while (tour) {
         tour->verb();
         tour = tour->next;
@@ -170,11 +170,24 @@ static void grey_the_roots() {
 }
 
 void gc_install_roots(Verb verb) {
-    Tour *tour = malloc(sizeof(Tour));
+    RootsNode *tour = malloc(sizeof(RootsNode));
     if (tour == NULL) crashAndBurn("null tour");
     else {
-        *tour = (Tour){ .next = root_sets, .verb = verb };
+        *tour = (RootsNode){ .next = root_sets, .verb = verb };
         root_sets = tour;
+    }
+}
+
+void gc_forget_roots(Verb verb) {
+    // Deletion in-place from a linked list.
+    RootsNode **cursor = &root_sets;
+    while (*cursor) {
+        if ((*cursor)->verb == verb) {
+            RootsNode *victim = *cursor;
+            *cursor = (*cursor)->next;
+            free(victim);
+        }
+        else cursor = &((*cursor)->next);
     }
 }
 
