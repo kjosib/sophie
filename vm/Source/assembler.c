@@ -23,7 +23,7 @@ static void parse_thunk();
 
 
 
-static void grey_the_compiling_roots() {
+static void grey_the_assembling_roots() {
 	darkenTable(&globals);
 	darkenTable(&lexicon);
 	Scope *scope = current;
@@ -81,12 +81,12 @@ static void come_from() {
 	*hole_ptr = 0;
 }
 
-static void init_compiler() {
+static void init_assembler() {
 	memset(holes, 0, sizeof(holes));
 	current = NULL;
 	initTable(&lexicon);
 	initTable(&globals);
-	gc_install_roots(grey_the_compiling_roots);
+	gc_install_roots(grey_the_assembling_roots);
 	for (int index = 0; index < NR_OPCODES; index++) {
 		table_set_from_C(&lexicon, instruction[index].name, ENUM_VAL(index));
 	}
@@ -94,8 +94,8 @@ static void init_compiler() {
 	table_set_from_C(&lexicon, "come_from", PTR_VAL(come_from));
 }
 
-static void dispose_compiler() {
-	gc_forget_roots(grey_the_compiling_roots);
+static void dispose_assembler() {
+	gc_forget_roots(grey_the_assembling_roots);
 	freeTable(&globals);
 	freeTable(&lexicon);
 }
@@ -294,9 +294,9 @@ static void snap_global_pointers(Function *fn) {
 	}
 }
 
-void compile(const char *source) {
+void assemble(const char *source) {
 	initScanner(source);
-	init_compiler();
+	init_assembler();
 	install_native_functions();
 #ifdef DEBUG_PRINT_GLOBALS
 	tableDump(&globals);
@@ -310,6 +310,6 @@ void compile(const char *source) {
 	close_function(&TOP);
 	snap_global_pointers(AS_CLOSURE(TOP)->function);
 	vm_capture_preamble_specials(&globals);
-	dispose_compiler();
+	dispose_assembler();
 }
 

@@ -177,7 +177,7 @@ dispatch:
 		case OP_POP: pop(); NEXT;
 		case OP_LOCAL: {
 			int index = READ_BYTE();
-			assert(base + index < vm.stackTop);  // Some day, let compiler.c discern max stack usage per function, and check only once.
+			assert(base + index < vm.stackTop);  // Some day, let assembler.c discern max stack usage per function, and check only once.
 			push(base[index]);
 			NEXT;
 		}

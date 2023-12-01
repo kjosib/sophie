@@ -61,8 +61,8 @@ bool maybe_token(TokenType type);
 /* isa.h */
 
 
-/* compiler.h */
+/* assembler.h */
 
-void compile(const char *source);  // ( -- closure )
+void assemble(const char *source);  // ( -- closure )
 
 

@@ -2,7 +2,7 @@
 
 /*
 This module is specifically concerned with non-collectable immovable memory.
-This includes the hash tables and most ancillary objects the compiler produces.
+This includes the hash tables and most ancillary objects the assembler produces.
 */
 
 void *reallocate(void *pointer, size_t newSize) {
