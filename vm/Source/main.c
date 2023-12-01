@@ -29,13 +29,13 @@ static char *readFile(const char *path) {
 
 static void run_program(const char *path) {
 	init_gc();
-	initVM(); // This first so that the string table is initialized first, before its first sweep.
+	vm_init(); // This first so that the string table is initialized first, before its first sweep.
 	init_actor_model();
 	char *source = readFile(path);
 	assemble(source);
 	free(source);
 	run(AS_CLOSURE(pop()));
-	freeVM();
+	vm_dispose();
 }
 
 int main(int argc, const char *argv[]) {
