@@ -404,8 +404,8 @@ typedef struct {
 
 extern VM vm;
 
-void initVM();
-void freeVM();
+void vm_init();
+void vm_dispose();
 
 Value force(Value value);
 Value run(Closure *closure);
@@ -437,6 +437,7 @@ static inline void over() { push(SND); }  // ( a b -- a b a )
 void defineGlobal();  // ( value name -- )
 
 void vm_capture_preamble_specials(Table *globals);
+__declspec(noreturn) void vm_panic(const char *format, ...);
 
 /* native.h */
 
@@ -450,9 +451,5 @@ typedef struct {
 } Native;
 
 #define AS_NATIVE(value) ((Native *)AS_PTR(value))
-
-Native *newNative(byte arity, NativeFn function);
-
-Value concatenate(Value *args);
 
 void install_native_functions();

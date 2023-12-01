@@ -78,7 +78,7 @@ static int arity_of_message(Message *msg) {
 	case VAL_NATIVE:
 		return AS_NATIVE(callable)->arity;
 	default:
-		crashAndBurn("bogus callable (%s) in bound method", valKind[callable.type]);
+		vm_panic("a bogus callable (%s) in a bound method", valKind[callable.type]);
 	}
 }
 

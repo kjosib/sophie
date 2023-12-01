@@ -32,7 +32,7 @@ static void resetStack() {
 	vm.trace = vm.traces-1;
 }
 
-void initVM() {
+void vm_init() {
 	resetStack();
 	initTable(&vm.strings);
 	vm.cons = vm.nil = vm.maybe_this = vm.maybe_nope = NIL_VAL;
@@ -46,7 +46,7 @@ void vm_capture_preamble_specials(Table *globals) {
 	vm.maybe_nope = table_get_from_C(globals, "nope");
 }
 
-void freeVM() {
+void vm_dispose() {
 	freeTable(&vm.strings);
 }
 
@@ -58,7 +58,7 @@ static void displaySomeValues(Value *first, size_t count) {
 	}
 }
 
-void displayStack(Value *base) {
+static void displayStack(Value *base) {
 	printf(" %s         ", vm.trace->closure->function->name->text);
 	displaySomeValues(vm.stack, (base - vm.stack));
 	printf("------- ");
@@ -69,27 +69,31 @@ void displayStack(Value *base) {
 }
 
 
-__declspec(noreturn) void runtimeError(byte *vpc, Value *base, const char *format, ...) {
+__declspec(noreturn) static void runtimeError(byte *vpc, Value *base, const char *format, ...) {
 	va_list args;
 	va_start(args, format);
 	vfprintf(stderr, format, args);
 	va_end(args);
 	fputs("\n", stderr);
 	displayStack(base);
-	fputs("-----------\n", stderr);
 	Function *function = vm.trace->closure->function;
 	size_t offset = vpc - function->chunk.code.at - 1;
 	int line = findLine(&function->chunk, offset);
+	vm_panic("a runtime error in line %d", line);
+}
 
+__declspec(noreturn) void vm_panic(const char *format, ...) {
+	va_list args;
+	va_start(args, format);
+	fputs("\n\n\n-----------\n", stderr);
 	for (Trace *frame = vm.traces; frame <= vm.trace; frame++) {
 		fprintf(stderr, "in %s\n", frame->closure->function->name->text);
 	}
-	fprintf(stderr, "[Line %d]\n", line);
-	crashAndBurn("of a runtime error");
+	fputs("\n***\n ***\n  ***   ***   Died of ", stderr);
+	vfprintf(stderr, format, args);
+	fputs(".\n\n", stderr);
+	exit(99);
 }
-
-
-static inline bool isTwoNumbers() { return IS_NUMBER(TOP) && IS_NUMBER(SND); }
 
 static void capture_closure(Closure *closure, Value *base) {
 	// Precondition: *closure points to a fresh Closure object with no captures.
