@@ -1153,3 +1153,14 @@ so the adaptive heap scaling gives it a much smaller heap. With that, it still r
 just a hair faster than before. Then I doubled the minimum-heap size to 32k.
 Now it's consistently under 12.5 seconds. With a gigantic heap it still stays above 12 seconds,
 which puts a bound on how much faster the GC can go.
+
+30 November 2023
+----------------
+
+Tired of "compiler" meaning two things.
+You know that thing in the VM which reads almost-bytecode and translates it into actually-bytecode?
+"Assemble" is a better description of that than "compile".
+From now on it's called "assembler" instead of "compiler".
+All relevant C source code is changed to match.
+
+
