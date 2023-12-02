@@ -3,6 +3,10 @@
 #include <ctype.h>
 #include <math.h>
 #include <time.h>
+
+#define SDL_MAIN_HANDLED
+#include <SDL.h>
+
 #include "common.h"
 #include "chacha.h"
 #include "platform_specific.h"
@@ -143,6 +147,56 @@ static Value console_random(Value *args) {
 	args[0] = NUMBER_VAL((double)randomness.noise_64[noise_index++] / UINT64_MAX);
 	apply_bound_method();
 	enqueue_message(pop());
+	return NIL_VAL;
+}
+
+/***********************************************************************************/
+
+typedef enum {
+	ON_QUIT,
+
+} EVENT_FIELD;
+
+static Value game_on_mouse(Value *args) {
+	return NIL_VAL;
+}
+
+static Value game_on_tick(Value *args) {
+	return NIL_VAL;
+}
+
+static Value game_play(Value *args) {
+	SDL_SetMainReady();
+	if (SDL_Init(SDL_INIT_EVERYTHING) < 0) {
+		fprintf(stderr, "Failed to init SDL: %s\n", SDL_GetError());
+	}
+	else {
+		puts("Hello, World!\n");
+		SDL_Window *window = SDL_CreateWindow("Yay this works!", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 800, 600, SDL_WINDOW_SHOWN);
+		if (window == NULL) {
+			fprintf(stderr, "Failed to create window: %s\n", SDL_GetError());
+		}
+		else {
+			SDL_Event ev;
+
+			for (bool is_running = true; is_running;) {
+				while (SDL_PollEvent(&ev)) {
+					switch (ev.type) {
+					case SDL_QUIT: is_running = false; break;
+					case SDL_KEYDOWN: printf("Key Symbol: %d\n", ev.key.keysym.sym); break;
+					case SDL_MOUSEMOTION: printf("Mouse Moved: %d, %d\n", ev.motion.x, ev.motion.y); break;
+					case SDL_MOUSEBUTTONDOWN: printf("Click %d: %d, %d\n", ev.button.button, ev.button.x, ev.button.y); break;
+					default: printf("Event %d\n", ev.type); break;
+					}
+					SDL_UpdateWindowSurface(window);
+				}
+			}
+			SDL_DestroyWindow(window);
+		}
+	}
+
+	SDL_Quit();
+
 	return NIL_VAL;
 }
 
@@ -339,6 +393,10 @@ static void install_sdl_bindings() {
 	define_actor(0);  // Will need fields soon enough at least for main display.
 
 	// Continue to follow the trail forged by the console-actor:
+
+	create_native_method("on_mouse", 1, game_on_mouse);
+	create_native_method("on_tick", 1, game_on_tick);
+	create_native_method("play", 2, game_play);
 
 	make_template_from_dfn();
 	make_actor_from_template();

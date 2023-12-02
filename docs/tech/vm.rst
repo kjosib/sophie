@@ -46,6 +46,7 @@ Here are some open problems, in no particular order:
 * User-Defined Actors.
 * FFI improvements.
 * Turtle Graphics, perhaps in terms of SDL.
+* Make SDL optional and load on demand.
 * Source line numbers. In case of a run-time panic, a cross-reference is most helpful.
 * Numeric field offsets. This could save cycles where a record-type is statically known.
 * Tuning the dial on eager evaluation. This may help with performance.
@@ -78,8 +79,10 @@ Source Code
 The VM source code is in the same GitHub repository as the rest of Sophie.
 Look under the ``/vm`` folder.
 There, you will find a build set-up that works for me on Windows and MSVC '22.
+The VM now requires SDL2, both to build and to run. If you're on Windows,
+you will probably need to edit ``CMakeLists.txt`` accordingly and then
+drop a copy of ``SDL2.dll`` wherever Sophie's ``svm.exe`` binary ends up. 
 If you're running on Linux or a Mac, then ... well ... it's a C program.
-
 
 Why Not JVM or CLR?
 ====================
@@ -1163,4 +1166,35 @@ You know that thing in the VM which reads almost-bytecode and translates it into
 From now on it's called "assembler" instead of "compiler".
 All relevant C source code is changed to match.
 
+1 December 2023
+---------------
 
+Today I experimented a bit with bringing some SDL stuff to life inside the VM.
+I've realized I will have to address some FFI design questions.
+Native code needs a way to construct Sophie data and/or invoke Sophie code directly.
+In particular the SDL layer will need a fairly rich vocabulary of bits and bobs.
+
+My current plan is to exploit FFI linkage directives.
+Perhaps I add an assembler directive to attempt an FFI linkage.
+This could appear as a step after all the global functions are defined,
+but before the ``begin:`` block's code.
+In principle, it just needs to push the linkage symbols on the stack,
+then the string representing the foreign-import,
+and then call some special magic function responsible for building linkages.
+
+It probably makes sense to do this before the VM proper starts up, just to eliminate confusion.
+Maybe a special assembling-word like "FFI" introduces such a thing.
+
+For now, presumably there would be a table of ``init_FOO`` functions responsible for
+activating specific feature sets. That will most likely mean:
+
+* Copying values from the stack into a private stash.
+* Calling ``gc_install_roots`` with something to darken said stash.
+
+There's one more aspect to the FFI which is yet to be resolved,
+which is the matter of putting foreign symbols into a proper namespace.
+Right now I'm sort of cheating by not mangling foreign names.
+That can wait, but eventually the namespace information ought to fall
+under control of the assembler module.
+
+Anyway, that's enough rambling for one night. 
