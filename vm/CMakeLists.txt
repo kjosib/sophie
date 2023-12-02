@@ -10,6 +10,8 @@ if (POLICY CMP0141)
 endif()
 
 project ("svm")
+include_directories(SYSTEM "/SDL2-2.28.5/include")
+link_directories("/SDL2-2.28.5/lib/x64")
 
 # Add source to this project's executable.
 add_executable (svm
@@ -21,6 +23,8 @@ add_executable (svm
 	"Source/common.h" "Source/opcodes.h" "Source/prep.h"
 	"Source/chacha.h" "Source/platform_specific.h"
 )
+
+target_link_libraries(svm SDL2)
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
   set_property(TARGET svm PROPERTY CXX_STANDARD 20)
