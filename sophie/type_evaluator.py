@@ -191,7 +191,52 @@ _literal_type_map : dict[type, OpaqueType] = {
 	float: primitive.literal_number,
 }
 
-OPS = primitive.OP_TYPE
+BINARY_TYPES = {}
+UNARY_TYPES = {}
+
+def _arrow_of(typ: SophieType, arity: int) -> ArrowType:
+	assert arity > 0
+	product = ProductType((typ,) * arity).exemplar()
+	return ArrowType(product, typ).exemplar()
+
+logical_shortcut = _arrow_of(primitive.literal_flag, 2)
+
+def _init():
+	def relop_type(case):
+		pair = ProductType((case, case)).exemplar()
+		return ArrowType(pair, primitive.literal_flag).exemplar()
+	
+	math_op = _arrow_of(primitive.literal_number, 2)
+	
+	for op in '^ * / DIV MOD + -'.split():
+		BINARY_TYPES[op] = AdHocType(op, 2)
+		BINARY_TYPES[op].cases.append(math_op)
+	
+	numeric = relop_type(primitive.literal_number)
+	stringy = relop_type(primitive.literal_string)
+	flagged = relop_type(primitive.literal_flag)
+	
+	def eq(op):
+		rel(op)
+		BINARY_TYPES[op].cases.append(flagged)
+	
+	def rel(op):
+		BINARY_TYPES[op] = AdHocType(op, 2)
+		BINARY_TYPES[op].cases.append(numeric)
+		BINARY_TYPES[op].cases.append(stringy)
+	
+	eq("==")
+	eq("!=")
+	rel("<=")
+	rel("<")
+	rel(">=")
+	rel(">")
+	
+	UNARY_TYPES['-'] = AdHocType("-", 1)
+	UNARY_TYPES["-"].cases.append(_arrow_of(primitive.literal_number, 1))
+	UNARY_TYPES["NOT"] = _arrow_of(primitive.literal_flag, 1)
+
+_init()
 
 class ManifestBuilder(Visitor):
 	"""Converts the syntax of manifest types into corresponding type-calculus objects."""
@@ -762,13 +807,13 @@ class DeductionEngine(Visitor):
 		return self._call_site(site, fn_type, site.args, env)
 	
 	def visit_BinExp(self, expr:syntax.BinExp, env:TYPE_ENV) -> SophieType:
-		return self._call_site(expr, OPS[expr.glyph], (expr.lhs, expr.rhs), env)
+		return self._call_site(expr, BINARY_TYPES[expr.op.text], (expr.lhs, expr.rhs), env)
 	
 	def visit_ShortCutExp(self, expr:syntax.ShortCutExp, env:TYPE_ENV) -> SophieType:
-		return self._call_site(expr, primitive.logical_shortcut, (expr.lhs, expr.rhs), env)
+		return self._call_site(expr, logical_shortcut, (expr.lhs, expr.rhs), env)
 	
 	def visit_UnaryExp(self, expr: syntax.UnaryExp, env:TYPE_ENV) -> SophieType:
-		return self._call_site(expr, OPS[expr.glyph], (expr.arg,), env)
+		return self._call_site(expr, UNARY_TYPES[expr.op.text], (expr.arg,), env)
 		
 	def visit_Lookup(self, lu:syntax.Lookup, env:TYPE_ENV) -> SophieType:
 		target = lu.ref.dfn

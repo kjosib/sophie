@@ -32,7 +32,7 @@ assume_section  -> ASSUME ':' semicolon_list(assumption)       | :empty
 define_section  -> DEFINE ':' semicolon_list(top_level)        | :empty
 main_section    -> BEGIN ':' semicolon_list(expr)              | :empty
 
-top_level -> function | agent_definition
+top_level -> function | agent_definition | operator_overload
 ```
 
 Since I'd like Sophie to support a unit/module system,
@@ -124,6 +124,26 @@ arg_type -> generic(arg_type) | arrow_of(arg_type)
 ```
 I suppose it bears mention that all Sophie functions are implicitly generic
 to whatever extent the body-expression can support.
+However, if you specify parameter types, then the type-checker will check them and blame the caller for a mismatch.
+
+-----
+
+You can define the meanings of (a small selection of) mathematical operators in conjunction with your data types:
+
+```
+operator_overload -> OPERATOR operator formals annotation '=' expr where_clause     :OperatorOverload
+operator -> '+' | '-' | '*' | '/' | '^'
+```
+
+Operator overloads must specify the (outermost) type of every parameter.
+Also, at least one parameter to an overload ought to be defined in the same module.
+For example, a module defining the arithmetic of complex numbers might contain something like:
+
+`operator * (a:complex, b:complex) = complex(a.real*b.real - a.imm*b.imm, a.real*b.imm + a.imm*b.real);`
+
+Sophie *intentionally* will not support user-defined operators.
+A small and standard set of operators imposes essentially no learning curve.
+For anything else, named functions are recommended.
 
 -----
 
@@ -136,23 +156,23 @@ expr -> integer | real | short_string | list_expr | case_expr | match_expr
 | '(' expr ')'
 | expr '.' name :FieldReference
 | .expr .IF .expr ELSE .expr :Cond
-| '-' expr :Negative %prec UMINUS
-| expr '^' expr :PowerOf
-| expr '*' expr :Mul
-| expr '/' expr :FloatDiv
-| .expr .DIV .expr :IntDiv
-| .expr .MOD .expr :Modulo
-| expr '+' expr :Add
-| expr '-' expr :Sub
-| expr '==' expr :EQ
-| expr '!=' expr :NE
-| expr '<=' expr :LE
-| expr '<' expr :LT
-| expr '>' expr :GT
-| expr '>=' expr :GE
-| .expr .AND .expr :LogicalAnd
-| .expr .OR .expr :LogicalOr
-| .NOT .expr  :LogicalNot
+| '-' expr :UnaryExp %prec UMINUS
+| expr '^' expr :BinExp
+| expr '*' expr :BinExp
+| expr '/' expr :BinExp
+| .expr .DIV .expr :BinExp
+| .expr .MOD .expr :BinExp
+| expr '+' expr :BinExp
+| expr '-' expr :BinExp
+| expr '==' expr :BinExp
+| expr '!=' expr :BinExp
+| expr '<=' expr :BinExp
+| expr '<' expr :BinExp
+| expr '>' expr :BinExp
+| expr '>=' expr :BinExp
+| .expr .AND .expr :ShortCutExp
+| .expr .OR .expr :ShortCutExp
+| .NOT .expr  :UnaryExp
 
 | reference :Lookup
 | expr round_list(expr) :Call

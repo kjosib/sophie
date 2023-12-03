@@ -343,8 +343,7 @@ class _WordDefiner(_ResolutionPass):
 		key = sym.nom.key() if sym.alias is None else sym.alias.value
 		try: sym.val = getattr(py_module, key)
 		except AttributeError:
-			guilty = (sym.alias or sym.nom).head()
-			self.report.undefined_name(guilty)
+			self.report.undefined_name(sym.alias or sym.nom)
 		else: self._install(self.globals, sym)
 
 class _WordResolver(_ResolutionPass):
@@ -401,7 +400,7 @@ class _WordResolver(_ResolutionPass):
 	def _lookup(self, nom:syntax.Nom, env:NS):
 		try: return env[nom.key()]
 		except NoSuchSymbol:
-			self.report.undefined_name(nom.head())
+			self.report.undefined_name(nom)
 			return Bogon(nom)
 
 	def visit_PlainReference(self, ref:syntax.PlainReference, env:NS):
@@ -638,7 +637,7 @@ def _check_one_match_expression(mx: syntax.MatchExpr, module_scope: NS, report: 
 		first = mx.alternatives[0].nom
 		try: case = module_scope[first.key()]
 		except NoSuchSymbol:
-			report.undefined_name(first.head())
+			report.undefined_name(first)
 			return
 		if not isinstance(case, syntax.SubTypeSpec):
 			report.not_a_case(first)

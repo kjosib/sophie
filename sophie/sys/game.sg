@@ -14,8 +14,9 @@ import:
 type:
     screen is (size:rect, background:color);
     color is (red:number, green:number, blue:number);
-    rect is (x:number, y:number);
-    polar is (magnitude:number, angle:number);  # Angle in radians, presumably.
+    rect is (x:number, y:number);               # Cartesian / Rectangular Coordinates
+    polar is (magnitude:number, theta:number);  # Theta is expressed in radians.
+    area is (left:number, top:number, width:number, height:number);
 
     GameLoop is agent:
         play(rect, number);
@@ -52,8 +53,8 @@ type:
     esac;
 
 assume:
-    r, r1, r2 : rect;
-    scalar, angle: number;
+    r : rect;
+    scalar, theta: number;
     p, p1, p2 : polar;
 
 define:
@@ -64,15 +65,18 @@ define:
     white = color(255,255,255);
 
     # Simple 2-D vector math and trigonometry:
-    add_rect(r1, r2) = rect(r1.x+r2.x, r1.y+r2.y);
-    subtract_rect(r1, r2) = rect(r1.x-r2.x, r1.y-r2.y);
-    scale_rect(scalar, r) = rect(scalar*r.x, scalar*r.y);
-    unit_vector(angle) = rect(cos(angle), sin(angle));
-    as_rect(p) = scale_rect(p.magnitude, unit_vector(p.angle));
+    
+    operator + (a:rect, b:rect) = rect(a.x+b.x, a.y+b.y);
+    operator - (a:rect, b:rect) = rect(a.x-b.x, a.y-b.y);
+    operator * (scalar:number, c:rect) = rect(scalar*c.x, scalar*c.y);
+    operator * (c:rect, scalar:number) = rect(scalar*c.x, scalar*c.y);
+    operator / (a:rect, scalar:number) = rect(c.x/scalar, c.y/scalar);
+    
+    unit_vector(theta) = rect(cos(theta), sin(theta));
+    as_cartesian(p) = p.magnitude * unit_vector(p.theta);
     as_polar(r) = polar(magnitude_of(r), angle_of(r));
     magnitude_of(r) = sqrt(r.x*r.x + r.y*r.y);
     angle_of(r) = atan2(r.y, r.x);
-    norm(r) = scale_rect(1/magnitude_of(r), r);
-    dot(r1, r2) = r1.x*r2.x + r1.y*r2.y;
-
-
+    norm(r) = r/magnitude_of(r);
+    dot(a:rect, b:rect) = a.x*b.x + a.y*b.y;
+    
