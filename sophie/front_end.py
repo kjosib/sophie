@@ -26,7 +26,8 @@ class SophieParser(TypicalApplication):
 	@staticmethod
 	def scan_punctuation(yy: IterableScanner):
 		punctuation = sys.intern(yy.match())
-		yy.token(punctuation, yy.slice())
+		nom = syntax.Nom(punctuation, yy.slice())
+		yy.token(punctuation, nom)
 	
 	@staticmethod
 	def scan_integer(yy: IterableScanner): yy.token("integer", syntax.Literal(int(yy.match()), yy.slice()))
@@ -44,12 +45,8 @@ class SophieParser(TypicalApplication):
 	@staticmethod
 	def scan_word(yy: IterableScanner):
 		upper = yy.match().upper()
-		if upper in RESERVED: yy.token(upper, yy.slice())
+		if upper in RESERVED: yy.token(upper, syntax.Nom(upper, yy.slice()))
 		else: yy.token("name", syntax.Nom(sys.intern(yy.match()), yy.slice()))
-	
-	@staticmethod
-	def scan_relop(yy: IterableScanner, op:str):
-		yy.token("relop", op)
 	
 	@staticmethod
 	def parse_nothing(): return None
@@ -84,7 +81,8 @@ def parse_text(text:str, path:Path, report:Report) -> Union[syntax.Module, Issue
 	except ParseError as ex:
 		stack_symbols, lookahead, span = ex.args
 		hint = _best_hint(stack_symbols, lookahead)
-		report.generic_parse_error(path, lookahead, span, hint)
+		node = syntax.Nom(text[span], span)
+		report.generic_parse_error(path, lookahead, node, hint)
 
 ##########################
 #

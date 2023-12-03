@@ -18,7 +18,7 @@ typedef enum {
 } EVENT_FIELD;
 
 typedef enum {
-	L_RECT,
+	L_CARTESIAN,
 	L_MOUSE_EVENT,
 	L_BUTTON_EVENT,
 	L_KEY_EVENT,
@@ -45,24 +45,24 @@ static void compose(LINKAGE what) {
 	apply_constructor();
 }
 
-static void push_rect(Sint32 x, Sint32 y) {
-	// rect is (x:number, y:number);
+static void push_cartesian(Sint32 x, Sint32 y) {
+	// cartesian is (x:number, y:number);
 	push(NUMBER_VAL(x));
 	push(NUMBER_VAL(y));
-	compose(L_RECT);
+	compose(L_CARTESIAN);
 }
 
 static void push_motion_event(SDL_MouseMotionEvent *ev) {
 	/*
 	mouse_event is (
-		pos : rect, rel : rect,
+		pos : cartesian, rel : cartesian,
 		# This next part doesn't really line up with SDL.
 		left : flag, middle : flag, right : flag,
 		is_touch : flag,
 	);
 	*/
-	push_rect(ev->x, ev->y);
-	push_rect(ev->xrel, ev->yrel);
+	push_cartesian(ev->x, ev->y);
+	push_cartesian(ev->xrel, ev->yrel);
 	Uint32 buttons = SDL_GetMouseState(NULL, NULL);
 	push(BOOL_VAL(buttons & SDL_BUTTON_LMASK));
 	push(BOOL_VAL(buttons & SDL_BUTTON_MMASK));

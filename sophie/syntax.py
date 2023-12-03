@@ -66,23 +66,23 @@ ARGUMENT_TYPE = Union[SimpleType, "ImplicitTypeVariable", "ExplicitTypeVariable"
 
 class ArrowSpec(SimpleType):
 	lhs: Sequence[ARGUMENT_TYPE]
-	_head: slice
+	_head: Nom
 	rhs: ARGUMENT_TYPE
 	
-	def __init__(self, lhs, _head, rhs):
+	def __init__(self, lhs, _head:Nom, rhs):
 		assert rhs is not None
 		self.lhs = lhs
 		self._head = _head
 		self.rhs = rhs
-	def head(self) -> slice: return self._head
+	def head(self) -> slice: return self._head.head()
 	def can_construct(self) -> bool: return False
 
 class MessageSpec(SimpleType):
 	type_exprs: Sequence[ARGUMENT_TYPE]
-	def __init__(self, _head, type_exprs):
+	def __init__(self, _head:Nom, type_exprs):
 		self._head = _head
 		self.type_exprs = type_exprs or ()
-	def head(self): return self._head
+	def head(self): return self._head.head()
 	def can_construct(self) -> bool: return False
 
 class TypeCall(SimpleType):
@@ -94,11 +94,10 @@ class TypeCall(SimpleType):
 
 class ImplicitTypeVariable:
 	""" Stand-in as the relevant type-expression for when the syntax doesn't bother. """
-	_slice: slice
-	def __init__(self, a_slice):
-		self._slice = a_slice
+	def __init__(self, head:Nom):
+		self._head = head
 	def head(self) -> slice:
-		return self._slice
+		return self._head.head()
 
 class ExplicitTypeVariable(Reference):
 	def __init__(self, _hook, nom:Nom):
@@ -187,7 +186,11 @@ def _bookend(head: Nom, coda: Nom):
 	if head.text != coda.text:
 		raise MismatchedBookendsError(head.head(), coda.head())
 
-class UserFunction(Term):
+class Function(Term):
+	"""
+	Representation shared between two subclasses.
+	They differ only to distinguish semantics.
+	"""
 	source_path: Path
 	namespace: NS
 	params: Sequence[FormalParameter]
@@ -213,6 +216,13 @@ class UserFunction(Term):
 			self.where = where.sub_fns
 		else:
 			self.where = ()
+
+
+class UserFunction(Function):
+	pass
+
+class OperatorOverload(Function):
+	pass
 
 class WhereClause(NamedTuple):
 	sub_fns: Sequence[UserFunction]
@@ -256,13 +266,6 @@ class Behavior(Term):
 		self.params = params or ()
 		self.expr = expr
 
-class Overload(Term):
-	# There's not yet a user-mode way to create one of these.
-	# So it is far from perfect.
-	def __init__(self, nom: Nom, arity:int):
-		super().__init__(nom)
-		self.arity = arity
-
 class Literal(ValExpr):
 	def __init__(self, value: Any, a_slice: slice):
 		self.value, self._slice = value, a_slice
@@ -290,9 +293,9 @@ class FieldReference(ValExpr):
 	def head(self) -> slice: return self.field_name.head()
 
 class BindMethod(ValExpr):
-	def __init__(self, receiver: ValExpr, _bang, method_name: Nom):
+	def __init__(self, receiver: ValExpr, _bang:Nom, method_name: Nom):
 		self.receiver, self.method_name = receiver, method_name
-		self._head = slice(_bang.start, method_name.head().stop)
+		self._head = _bang.head()
 	def __str__(self): return "(%s.%s)" % (self.receiver, self.method_name.text)
 	def head(self) -> slice: return self._head
 
@@ -307,48 +310,19 @@ class Skip(ValExpr):
 		self._head = head
 	def head(self) -> slice: return self._head
 
-class BinExp(ValExpr):
-	def __init__(self, glyph: str, lhs: ValExpr, o:slice, rhs: ValExpr):
-		self.glyph, self.lhs, self.rhs = glyph, lhs, rhs
-		self._head = o
-	def head(self) -> slice: return self._head
+class Binary(ValExpr):
+	def __init__(self, lhs: ValExpr, op:Nom, rhs: ValExpr):
+		self.lhs, self.op, self.rhs = lhs, op, rhs
+	def head(self) -> slice: return self.op.head()
 
-def _be(glyph: str): return lambda a, o, b: BinExp(glyph, a, o, b)
-
-PowerOf = _be("^")
-Mul = _be("*")
-FloatDiv = _be("/")
-IntDiv = _be("DIV")
-Modulo = _be("MOD")
-Add = _be("+")
-Sub = _be("-")
-
-EQ = _be("==")
-NE = _be("!=")
-LE = _be("<=")
-LT = _be("<")
-GE = _be(">=")
-GT = _be(">")
-
-class ShortCutExp(ValExpr):
-	def __init__(self, glyph: str, lhs: ValExpr, o:slice, rhs: ValExpr):
-		self.glyph, self.lhs, self._head, self.rhs = glyph, lhs, o, rhs
-	
-	def head(self) -> slice:
-		return self._head
-def LogicalAnd(a, o, b): return ShortCutExp("LogicalAnd", a, o, b)
-def LogicalOr(a, o, b): return ShortCutExp("LogicalOr", a, o, b)
+class BinExp(Binary): pass
+class ShortCutExp(Binary): pass
 
 class UnaryExp(ValExpr):
-	def __init__(self, glyph: str, o:slice, arg: ValExpr):
-		self.glyph, self.arg = glyph, arg
-		self._head = o
+	def __init__(self, op:Nom, arg: ValExpr):
+		self.op, self.arg = op, arg
 
-	def head(self) -> slice: return self._head
-
-def Negative(o, arg): return UnaryExp("Negative", o, arg)
-
-def LogicalNot(o, arg): return UnaryExp("LogicalNot", o, arg)
+	def head(self) -> slice: return self.op.head()
 
 class Cond(ValExpr):
 	_kw: slice
@@ -389,7 +363,7 @@ class Alternative(Symbol):
 	
 	namespace: NS  # WordDefiner fills
 
-	def __init__(self, pattern:Nom, _head:slice, sub_expr:ValExpr, where:Optional[WhereClause]):
+	def __init__(self, pattern:Nom, _head:Nom, sub_expr:ValExpr, where:Optional[WhereClause]):
 		super().__init__(pattern)
 		self._head = _head
 		self.sub_expr = sub_expr
@@ -399,7 +373,7 @@ class Alternative(Symbol):
 		else:
 			self.where = ()
 	def head(self) -> slice:
-		return self._head
+		return self._head.head()
 
 class Absurdity(ValExpr):
 	def __init__(self, _head:slice, reason:Literal):
@@ -408,7 +382,7 @@ class Absurdity(ValExpr):
 	def head(self) -> slice:
 		return slice(self._head.start, self.reason.head().stop)
 
-def absurdAlternative(pattern:Nom, _head:slice, absurdity:Absurdity):
+def absurdAlternative(pattern:Nom, _head:Nom, absurdity:Absurdity):
 	return Alternative(pattern, _head, absurdity, None)
 	
 class Subject(Term):
@@ -448,13 +422,13 @@ class NewAgent(Term):
 class DoBlock(ValExpr):
 	namespace: NS  # WordDefiner fills
 
-	def __init__(self, agents:list[NewAgent], _head:slice, steps:list[ValExpr]):
+	def __init__(self, agents:list[NewAgent], _head:Nom, steps:list[ValExpr]):
 		self.agents = agents
 		self.steps = steps
 		self._head = _head
 		
 	def head(self) -> slice:
-		return self._head
+		return self._head.head()
 
 
 class AssignField(Reference):
@@ -508,6 +482,7 @@ class Module:
 	foreign: list[ImportForeign]
 	outer_functions: list[UserFunction]
 	agent_definitions: list[UserAgent]
+	op_overloads: list[OperatorOverload]
 	
 	source_path: Path  # Module loader fills this.
 	all_functions: list[UserFunction]  # Resolver fills this.
@@ -519,10 +494,12 @@ class Module:
 		self.types = types
 		self.outer_functions = []
 		self.agent_definitions = []
+		self.op_overloads = []
 		self.all_functions = []
 		for item in top_levels:
 			if isinstance(item, UserFunction): self.outer_functions.append(item)
 			elif isinstance(item, UserAgent): self.agent_definitions.append(item)
+			elif isinstance(item, OperatorOverload): self.op_overloads.append(item)
 			else: assert False, type(item)
 		self.main = main
 	
