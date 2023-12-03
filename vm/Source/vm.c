@@ -253,14 +253,7 @@ dispatch:
 			case VAL_CLOSURE:
 				push(run(AS_CLOSURE(pop())));  // The callee will clean the stack.
 				NEXT;
-			case VAL_CTOR:
-			{
-				Record *record = construct_record();
-				Value *slot = vm.stackTop - record->constructor->nr_fields;
-				*slot = GC_VAL(record);
-				vm.stackTop = slot + 1;
-				NEXT;
-			}
+			case VAL_CTOR: apply_constructor(); NEXT;
 			case VAL_NATIVE:
 			{
 				Native *native = AS_NATIVE(pop());
@@ -269,11 +262,7 @@ dispatch:
 				vm.stackTop = slot + 1;
 				NEXT;
 			}
-			case VAL_BOUND:
-			{
-				apply_bound_method();
-				NEXT;
-			}
+			case VAL_BOUND: apply_bound_method(); NEXT;
 			default:
 				printValue(TOP);
 				runtimeError(vpc, base, "CALL needs a callable object; got %s.", valKind[TOP.type]);

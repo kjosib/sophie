@@ -30,6 +30,7 @@ static char *readFile(const char *path) {
 static void run_program(const char *path) {
 	init_gc();
 	vm_init(); // This first so that the string table is initialized first, before its first sweep.
+	ffi_prepare_modules();
 	init_actor_model();
 	char *source = readFile(path);
 	assemble(source);
@@ -55,7 +56,6 @@ int main(int argc, const char *argv[]) {
 		fprintf(stderr, "ChaCha20 Block: %d\n", (int)sizeof(ChaCha_Block));
 		chacha_test_quarter_round();
 		chacha_test_make_noise();
-
 		exit(64);
 	}
 }

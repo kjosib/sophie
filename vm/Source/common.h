@@ -32,20 +32,20 @@ typedef enum { // written to match the standard preamble's order type
 //#define DEBUG_PRINT_GLOBALS
 //#define DEBUG_PRINT_CODE
 //#define DEBUG_TRACE_EXECUTION
-#define DEBUG_TRACE_QUEUE
+//#define DEBUG_TRACE_QUEUE
 //#define DEBUG_STRESS_GC
-#define DEBUG_ANNOUNCE_GC
+//#define DEBUG_ANNOUNCE_GC
 #endif // _DEBUG
 
 #define byte uint8_t
 #define BYTE_CARDINALITY 256
 
 #define DEFINE_VECTOR_TYPE(kind, type) \
-    typedef struct { size_t cnt; size_t cap; type *at; } kind; \
-    void init   ## kind(kind* vec); \
-    void free   ## kind(kind* vec); \
-    void resize ## kind(kind* vec, size_t cap); \
-    size_t  append ## kind(kind* vec, type item);
+	typedef struct { size_t cnt; size_t cap; type *at; } kind; \
+	void init   ## kind(kind* vec); \
+	void free   ## kind(kind* vec); \
+	void resize ## kind(kind* vec, size_t cap); \
+	size_t  append ## kind(kind* vec, type item);
 
 __declspec(noreturn) void crashAndBurn(const char *why, ...);
 
@@ -88,9 +88,9 @@ void must_finalize(GC *item);
 #define GROW(cap) ((cap) < 8 ? 8 : (cap) * 2)
 
 #define DEFINE_VECTOR_CODE(Kind, type) \
-    void init   ## Kind (Kind *vec)            { vec->cnt = vec->cap = 0; vec->at = NULL; } \
-    void free   ## Kind (Kind *vec)            { FREE_ARRAY(type, vec->at); init ## Kind (vec); } \
-    void resize ## Kind (Kind *vec, size_t cap){ vec->at = (type*)reallocate(vec->at, sizeof(type) * cap); vec->cap = cap; }
+	void init   ## Kind (Kind *vec)            { vec->cnt = vec->cap = 0; vec->at = NULL; } \
+	void free   ## Kind (Kind *vec)            { FREE_ARRAY(type, vec->at); init ## Kind (vec); } \
+	void resize ## Kind (Kind *vec, size_t cap){ vec->at = (type*)reallocate(vec->at, sizeof(type) * cap); vec->cap = cap; }
 
 #define DEFINE_VECTOR_APPEND(Kind, type) \
   size_t append ## Kind (Kind *vec, type item) { if (vec->cap <= vec->cnt) resize ## Kind (vec, GROW(vec->cap)); vec->at[vec->cnt++] = item; return vec->cnt - 1; }
@@ -318,6 +318,7 @@ typedef struct {
 
 Record *construct_record();
 void make_constructor(int tag, int nr_fields);  // ( field_name ... ctor_name -- ctor )
+void apply_constructor();
 
 #define AS_CTOR(value) ((Constructor*)AS_PTR(value))
 #define AS_RECORD(value) ((Record*)AS_PTR(value))
@@ -351,6 +352,8 @@ typedef struct {
 
 typedef struct {
 	GC header;
+	// It might be useful to capture the sender's source location as
+	// a clue in case an actor panics while responding to a message.
 	Actor *self;
 	Value callable;
 	Value payload[];
@@ -412,6 +415,7 @@ Value run(Closure *closure);
 void perform(Value action);
 
 static inline void push(Value value) {
+	assert(vm.stackTop >= vm.stack);
 	*vm.stackTop = value;
 	vm.stackTop++;
 }
@@ -452,4 +456,15 @@ typedef struct {
 
 #define AS_NATIVE(value) ((Native *)AS_PTR(value))
 
-void install_native_functions();
+void native_install_functions();
+void native_create_function(const char *name, byte arity, NativeFn function);  // ( -- )
+void native_create_method(const char *name, byte arity, NativeFn function);  // ( ActorDfn -- ActorDfn )
+
+/* ffi.h */
+
+void ffi_prepare_modules();
+NativeFn ffi_find_module(String *key);
+
+/* game.h */
+
+Value game_sophie_init(Value *args);

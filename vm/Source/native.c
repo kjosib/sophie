@@ -4,9 +4,6 @@
 #include <math.h>
 #include <time.h>
 
-#define SDL_MAIN_HANDLED
-#include <SDL.h>
-
 #include "common.h"
 #include "chacha.h"
 #include "platform_specific.h"
@@ -152,56 +149,6 @@ static Value console_random(Value *args) {
 
 /***********************************************************************************/
 
-typedef enum {
-	ON_QUIT,
-
-} EVENT_FIELD;
-
-static Value game_on_mouse(Value *args) {
-	return NIL_VAL;
-}
-
-static Value game_on_tick(Value *args) {
-	return NIL_VAL;
-}
-
-static Value game_play(Value *args) {
-	SDL_SetMainReady();
-	if (SDL_Init(SDL_INIT_EVERYTHING) < 0) {
-		fprintf(stderr, "Failed to init SDL: %s\n", SDL_GetError());
-	}
-	else {
-		puts("Hello, World!\n");
-		SDL_Window *window = SDL_CreateWindow("Yay this works!", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 800, 600, SDL_WINDOW_SHOWN);
-		if (window == NULL) {
-			fprintf(stderr, "Failed to create window: %s\n", SDL_GetError());
-		}
-		else {
-			SDL_Event ev;
-
-			for (bool is_running = true; is_running;) {
-				while (SDL_PollEvent(&ev)) {
-					switch (ev.type) {
-					case SDL_QUIT: is_running = false; break;
-					case SDL_KEYDOWN: printf("Key Symbol: %d\n", ev.key.keysym.sym); break;
-					case SDL_MOUSEMOTION: printf("Mouse Moved: %d, %d\n", ev.motion.x, ev.motion.y); break;
-					case SDL_MOUSEBUTTONDOWN: printf("Click %d: %d, %d\n", ev.button.button, ev.button.x, ev.button.y); break;
-					default: printf("Event %d\n", ev.type); break;
-					}
-					SDL_UpdateWindowSurface(window);
-				}
-			}
-			SDL_DestroyWindow(window);
-		}
-	}
-
-	SDL_Quit();
-
-	return NIL_VAL;
-}
-
-/***********************************************************************************/
-
 static void display_native(Native *native) { printf("<fn %s>", native->name->text); }
 
 static void blacken_native(Native *native) { darken_in_place(&native->name); }
@@ -229,7 +176,7 @@ static void install_native() {
 	defineGlobal();
 }
 
-static void defineNative(const char *name, byte arity, NativeFn function) {  // ( -- )
+void native_create_function(const char *name, byte arity, NativeFn function) {  // ( -- )
 	create_native(name, arity, function);
 	install_native();
 }
@@ -241,7 +188,7 @@ static void install_method() {  // ( ActorDfn Native -- ActorDfn )
 	if (!was_new) crashAndBurn("already installed %s into %s", key->text, dfn->name->text);
 }
 
-static void create_native_method(const char *name, byte arity, NativeFn function) {  // ( ActorDfn -- ActorDfn )
+void native_create_method(const char *name, byte arity, NativeFn function) {  // ( ActorDfn -- ActorDfn )
 	create_native(name, arity, function);
 	install_method();
 }
@@ -304,42 +251,42 @@ static Value ldexp_native(Value *args) {
 NUMERIC_2(pow)
 
 static void install_numerics() {
-	defineNative("acos", 1, acos_native);
-	defineNative("acosh", 1, acosh_native);
-	defineNative("asin", 1, asin_native);
-	defineNative("asinh", 1, asinh_native);
-	defineNative("atan", 1, atan_native);
-	defineNative("atanh", 1, atanh_native);
-	defineNative("ceil", 1, ceil_native);
-	defineNative("cos", 1, cos_native);
-	defineNative("cosh", 1, cosh_native);
-	defineNative("erf", 1, erf_native);
-	defineNative("erfc", 1, erfc_native);
-	defineNative("exp", 1, exp_native);
-	defineNative("expm1", 1, expm1_native);
-	defineNative("factorial", 1, factorial_native);
-	defineNative("abs", 1, fabs_native);
-	defineNative("floor", 1, floor_native);
-	defineNative("lgamma", 1, lgamma_native);
-	defineNative("log", 1, log_native);
-	defineNative("log10", 1, log10_native);
-	defineNative("log1p", 1, log1p_native);
-	defineNative("log2", 1, log2_native);
-	defineNative("sin", 1, sin_native);
-	defineNative("sinh", 1, sinh_native);
-	defineNative("sqrt", 1, sqrt_native);
-	defineNative("tan", 1, tan_native);
-	defineNative("tanh", 1, tanh_native);
-	defineNative("gamma", 1, tgamma_native);
-	defineNative("trunc", 1, trunc_native);
-	defineNative("int", 1, trunc_native);
-	defineNative("fib_native", 1, fib_native); // Just for access to that baseline microbenchmark
+	native_create_function("acos", 1, acos_native);
+	native_create_function("acosh", 1, acosh_native);
+	native_create_function("asin", 1, asin_native);
+	native_create_function("asinh", 1, asinh_native);
+	native_create_function("atan", 1, atan_native);
+	native_create_function("atanh", 1, atanh_native);
+	native_create_function("ceil", 1, ceil_native);
+	native_create_function("cos", 1, cos_native);
+	native_create_function("cosh", 1, cosh_native);
+	native_create_function("erf", 1, erf_native);
+	native_create_function("erfc", 1, erfc_native);
+	native_create_function("exp", 1, exp_native);
+	native_create_function("expm1", 1, expm1_native);
+	native_create_function("factorial", 1, factorial_native);
+	native_create_function("abs", 1, fabs_native);
+	native_create_function("floor", 1, floor_native);
+	native_create_function("lgamma", 1, lgamma_native);
+	native_create_function("log", 1, log_native);
+	native_create_function("log10", 1, log10_native);
+	native_create_function("log1p", 1, log1p_native);
+	native_create_function("log2", 1, log2_native);
+	native_create_function("sin", 1, sin_native);
+	native_create_function("sinh", 1, sinh_native);
+	native_create_function("sqrt", 1, sqrt_native);
+	native_create_function("tan", 1, tan_native);
+	native_create_function("tanh", 1, tanh_native);
+	native_create_function("gamma", 1, tgamma_native);
+	native_create_function("trunc", 1, trunc_native);
+	native_create_function("int", 1, trunc_native);
+	native_create_function("fib_native", 1, fib_native); // Just for access to that baseline microbenchmark
 
-	defineNative("atan2", 2, atan2_native);
-	defineNative("copysign", 2, copysign_native);
-	defineNative("fmod", 2, fmod_native);
-	defineNative("ldexp", 2, ldexp_native);
-	defineNative("pow", 2, pow_native);
+	native_create_function("atan2", 2, atan2_native);
+	native_create_function("copysign", 2, copysign_native);
+	native_create_function("fmod", 2, fmod_native);
+	native_create_function("ldexp", 2, ldexp_native);
+	native_create_function("pow", 2, pow_native);
 
 	math_constant("e", M_E);
 	math_constant("inf", HUGE_VAL);
@@ -351,12 +298,12 @@ static void install_numerics() {
 /***********************************************************************************/
 
 static void install_strings() {
-	defineNative("strcat", 2, concatenate);
-	defineNative("val", 1, val_native);
-	defineNative("chr", 1, chr_native);
-	defineNative("str", 1, str_native);
-	defineNative("len", 1, len_native);
-	defineNative("mid", 3, mid_native);
+	native_create_function("strcat", 2, concatenate);
+	native_create_function("val", 1, val_native);
+	native_create_function("chr", 1, chr_native);
+	native_create_function("str", 1, str_native);
+	native_create_function("len", 1, len_native);
+	native_create_function("mid", 3, mid_native);
 }
 
 static void install_the_console() {
@@ -367,9 +314,9 @@ static void install_the_console() {
 	define_actor(0);
 
 	// Next up, define some methods:
-	create_native_method("echo", 1, console_echo);
-	create_native_method("read", 1, console_read);
-	create_native_method("random", 1, console_random);
+	native_create_method("echo", 1, console_echo);
+	native_create_method("read", 1, console_read);
+	native_create_method("random", 1, console_random);
 
 	// Oh yeah about that...
 	seed_random_number_generator();
@@ -382,33 +329,9 @@ static void install_the_console() {
 	defineGlobal();
 }
 
-static void install_sdl_bindings() {
-	// Eventually this should fall under control of the user-program opting into this.
-	// That extends to loading SDL on-demand via platform DLL facilities.
-	// For now I'll live with implicit linking.
-
-	// Push additional field names here...
-	// Works much like defining a constructor.
-	push_C_string("SDL_GameLoop"); // Implements the GameLoop interface.
-	define_actor(0);  // Will need fields soon enough at least for main display.
-
-	// Continue to follow the trail forged by the console-actor:
-
-	create_native_method("on_mouse", 1, game_on_mouse);
-	create_native_method("on_tick", 1, game_on_tick);
-	create_native_method("play", 2, game_play);
-
-	make_template_from_dfn();
-	make_actor_from_template();
-
-	push_C_string("events");
-	defineGlobal();
-}
-
-void install_native_functions() {
-	defineNative("clock", 0, clock_native);
+void native_install_functions() {
+	native_create_function("clock", 0, clock_native);
 	install_numerics();
 	install_strings();
 	install_the_console();
-	install_sdl_bindings();
 }

@@ -215,7 +215,6 @@ static void parse_function_block() {
 	emit(fn_count);
 }
 
-
 static void parse_global_functions() {
 	do {
 		push(parse_normal_function());
@@ -263,12 +262,39 @@ static void parse_record() {
 	consume(TOKEN_RIGHT_PAREN, "expected ')'");
 }
 
-static void parseScript() {
-	while (maybe_token(TOKEN_LEFT_PAREN)) {
-		if (maybe_token(TOKEN_STAR)) parse_tagged_value();
-		else parse_record();
+static void parse_ffi_init() {
+	// Read the name of the module to initialize.
+	String *module_name = parseString();
+	NativeFn init_function = ffi_find_module(module_name);
+	if (init_function == NULL) crashAndBurn("there is no module called \"%s\"", module_name->text);
+	// Note the current stack pointer for later...
+	Value *args = vm.stackTop;
+	// Read symbols, and push their definitions, until encoutering a semicolon.
+	while (predictToken(TOKEN_STRING)) {
+		push(tableGet(&globals, parseString()));
 	}
-	while (predictToken(TOKEN_LEFT_BRACE)) parse_global_functions();
+	consume(TOKEN_SEMICOLON, "expected semicolon or string");
+	// The init function can veto the operation. Keep the module name around during.
+	push(GC_VAL(module_name));
+	bool success = AS_BOOL(init_function(args));
+	module_name = AS_STRING(pop());
+	if (!success) crashAndBurn("Unable to initialize module \"%s\"", module_name->text);
+	// This consumes stack. That is the design, at least for now.
+	// It means foreign modules don't have to designate roots specifically.
+	// They can merely preserve a pointer to where their arguments live on the stack,
+	// and all the GC magic just works.
+}
+
+static void parseScript() {
+	for (;;) {
+		if (maybe_token(TOKEN_LEFT_PAREN)) {
+			if (maybe_token(TOKEN_STAR)) parse_tagged_value();
+			else parse_record();
+		}
+		else if (predictToken(TOKEN_LEFT_BRACE)) parse_global_functions();
+		else if (maybe_token(TOKEN_BANG)) parse_ffi_init();
+		else break;
+	}
 	initChunk(&current->chunk);
 	push(GC_VAL(import_C_string("<script>", 8)));
 	parse_instructions();
@@ -297,7 +323,7 @@ static void snap_global_pointers(Function *fn) {
 void assemble(const char *source) {
 	initScanner(source);
 	init_assembler();
-	install_native_functions();
+	native_install_functions();
 #ifdef DEBUG_PRINT_GLOBALS
 	tableDump(&globals);
 #endif // DEBUG_PRINT_GLOBALS
