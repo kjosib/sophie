@@ -162,6 +162,7 @@ void make_template_from_dfn() {
 	tpl->actor_dfn = AS_ACTOR_DFN(pop());
 	memcpy(&tpl->fields, vm.stackTop - nr_fields, payload_size);
 	vm.stackTop -= nr_fields;
+	assert(vm.stackTop >= vm.stack);
 	push(GC_VAL(tpl));
 }
 

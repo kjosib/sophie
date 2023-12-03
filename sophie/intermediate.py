@@ -54,6 +54,7 @@ SHORTCUTS = {
 def emit(*xs):
 	print(*xs, end=" ")
 def quote(x):
+	assert isinstance(x, str), x
 	assert '"' not in x
 	return '"'+x+'"'
 
@@ -338,8 +339,9 @@ class Translation(Visitor):
 		
 		# Write all functions (including FFI):
 		for scope, module in each_piece(roadmap):
-			self.write_ffi_declarations(module.foreign)
+			self.mangle_foreign_symbols(module.foreign)
 			self.write_functions(module.outer_functions, scope)
+			self.write_ffi_init(module.foreign)
 		
 		# Write all begin-expressions:
 		for scope, module in each_piece(roadmap):
@@ -373,15 +375,22 @@ class Translation(Visitor):
 			else:
 				write_tagged_value(st, tag)
 
-	def write_ffi_declarations(self, foreign:list[syntax.ImportForeign]):
-		# Somewhat incomplete at the moment, but necessary to make
-		# foreign declarations play along with name-mangling game.
+	def mangle_foreign_symbols(self, foreign:list[syntax.ImportForeign]):
 		for fi in foreign:
 			for group in fi.groups:
 				for symbol in group.symbols:
 					MANGLED[symbol] = symbol.nom.text
 		pass
-
+	
+	def write_ffi_init(self, foreign:list[syntax.ImportForeign]):
+		for fi in foreign:
+			if fi.linkage is not None:
+				emit("!")
+				emit(quote(fi.source.value))
+				for ref in fi.linkage:
+					emit(quote(MANGLED[ref.dfn]))
+				emit(";")
+	
 	def write_functions(self, fns, outer:VMScope):
 		if not fns: return
 		for fn in fns:

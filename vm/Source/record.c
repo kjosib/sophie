@@ -53,6 +53,12 @@ Record *construct_record() {
 	return record;
 }
 
+void apply_constructor() {
+	Record *record = construct_record();
+	Value *slot = vm.stackTop - record->constructor->nr_fields;
+	*slot = GC_VAL(record);
+	vm.stackTop = slot + 1;
+}
 
 static void display_constructor(Constructor *constructor) {
 	printf("(%s/%d)", constructor->name->text, constructor->nr_fields);

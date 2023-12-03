@@ -72,6 +72,10 @@ Some ideas for bindings:
 * Typical OS and filesystem things.
 * More prosaic applications. Perhaps QT.
 
+Native FFI symbols still do not get their names prefixed with a name-space in the VM symbol table.
+I've a notion to change that someday, and keep the prefixes distinct between pure and native.
+(That way, native modules can just install everything without concern for name clashes.)
+
 
 Source Code
 ============
@@ -1198,3 +1202,25 @@ That can wait, but eventually the namespace information ought to fall
 under control of the assembler module.
 
 Anyway, that's enough rambling for one night. 
+
+2 December 2023
+---------------
+
+It's ALIVE! (Sort of: The mouse-print demo *partially* works.)
+
+The VM's game-adapter now dispatches mouse motion events in much the same way as the Python version does.
+It was a minor head-scratcher to build Sophie data structures corresponding to SDL events.
+The main idea behind my solution is to pass record constructors as FFI linkage parameters.
+I prototyped that in Python first by adjusting the Python version of the game-adapter.
+
+The intermediate language now has a way to instruct the assembler to invoke an FFI linkage.
+It looks up the module's name in a table of native initializer functions (population one, *game-adapter*) 
+and then invokes that function, which is expected to return ``BOOL_VAL(true)`` if all went well.
+
+I also decided on an easier way to deal with the linkage GC problem:
+Do not pop the linkage parameters off the stack after the native initializer runs.
+That way, the native module can simply preserve a pointer into the stack.
+
+By the way, mouse movement events in PyGame have the state of the buttons,
+but SDL does not expose that directly in its movement event structure.
+

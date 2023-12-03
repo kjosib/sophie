@@ -22,7 +22,7 @@ add_executable (svm
 
 	"Source/common.h" "Source/opcodes.h" "Source/prep.h"
 	"Source/chacha.h" "Source/platform_specific.h"
-)
+ "Source/ffi.c"   "Source/game.c" )
 
 target_link_libraries(svm SDL2)
 
