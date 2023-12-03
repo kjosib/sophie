@@ -29,10 +29,14 @@ from pygame import gfxdraw
 from ..runtime import iterate_list, force, Message, Action
 from ..scheduler import NativeObjectProxy, MAIN_QUEUE
 
-def sophie_init():
-	return {
-		'screen': run_game,
-	}
+linkage = {}
+
+def sophie_init(rect, mouse_event, button_event, key_event):
+	linkage['rect'] = rect
+	linkage['mouse_event'] = mouse_event
+	linkage['button_event'] = button_event
+	linkage['key_event'] = key_event
+	return { 'screen': run_game, }
 
 def run_game(env, screen):
 	pygame.init()
@@ -59,17 +63,20 @@ def run_game(env, screen):
 		
 		pygame.display.flip()
 
-def rect(x,y): return {"x":x, "y":y}
-def mouse_event(event): return {
-	"pos":rect(*event.pos),
-	"rel":rect(*event.rel),
-	"left":event.buttons[0],
-	"middle":event.buttons[1],
-	"right":event.buttons[2],
-	"is_touch":event.touch,
-}
-def button_event(event): return {"pos":rect(*event.pos), "button":event.button, "is_touch":event.touch}
-def key_event(event): return {"unicode":event.unicode, "key":event.key, "mods":event.mod, "scancode":event.scancode}
+def rect(x,y):
+	return linkage['rect'].apply([x,y], None)
+
+def mouse_event(e):
+	args = [rect(*e.pos), rect(*e.rel), e.buttons[0], e.buttons[1], e.buttons[2], e.touch, ]
+	return linkage['mouse_event'].apply(args, None)
+
+def button_event(e):
+	args = [rect(*e.pos), e.button, e.touch]
+	return linkage['button_event'].apply(args, None)
+
+def key_event(e):
+	args = [e.unicode, e.key, e.mod, e.scancode]
+	return linkage['key_event'].apply(args, None)
 
 class GameLoop:
 	"""

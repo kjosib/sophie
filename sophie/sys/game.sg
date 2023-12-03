@@ -5,7 +5,9 @@
 # For now, it's just a spike.
 
 import:
-    foreign "sophie.adapters.game_adapter"() where
+    foreign "sophie.adapters.game_adapter" (
+        rect, mouse_event, button_event, key_event
+    ) where
         events : GameLoop;
     end;
 
