@@ -42,9 +42,11 @@ Here are some open problems, in no particular order:
 * [DONE] Improve how the GC treats snapped thunks.
 * [DONE] Dismiss the bytecode-translator's data (including the global symbol table) before
   starting the user program. (After picking up the special-cased constants, though...)
-* SDL bindings, at least for some simple graphics and the mouse.
+* [PARTIAL] SDL bindings, at least for some simple graphics and the mouse.
+* Improved stack safety based on a max-depth analysis
+* ``do``-blocks should have tail-calls eliminated. (This may be trickier than it sounds. Or not.)
 * User-Defined Actors.
-* FFI improvements.
+* [PARTIAL] FFI improvements.
 * Turtle Graphics, perhaps in terms of SDL.
 * Make SDL optional and load on demand.
 * Source line numbers. In case of a run-time panic, a cross-reference is most helpful.
@@ -1223,4 +1225,39 @@ That way, the native module can simply preserve a pointer into the stack.
 
 By the way, mouse movement events in PyGame have the state of the buttons,
 but SDL does not expose that directly in its movement event structure.
+
+3 December 2023
+---------------
+
+I thought I'd work on adding complex-number arithmetic by way of operator-overloading.
+So of course one needs a suitable application for complex numbers.
+The obvious plan is to render the Mandelbrot set. And before I worry about new features,
+I should at least be confident in a version that works with the current feature set.
+So I wrote a Mandelbrot set plotter for text mode. (Find it under the mathematical examples.)
+It works great (if a bit slow) on the tree-walking interpreter,
+assuming you make the console big enough. Naturally, I thought to run it on the VM.
+
+The compiler needed a few small repairs after some adjustments to the AST structure.
+The VM also got a ``SKIP`` instruction, which does something unintuitive:
+It pushes the (internal) nil value onto the stack.
+Why? Well, there will no-doubt be a ``PERFORM`` instruction coming,
+which will expect to pop an *action*. The VM treats ``NIL_VAL`` as the empty action.
+
+The Mandelbrot program then managed to hit the VM's recursion depth limit of 64 frames.
+I doubled that number (which made the program work) but right now that also doubles the total size of the stack.
+I have some ideas how to improve that state of affairs (and it should be improved) but it's not the whole solution.
+
+The *reason* the Mandelbrot program recurred so deeply is this function here::
+
+    display(output, pic) = case pic of
+        nil -> skip;
+        cons -> do
+            output!echo(pic.head);
+            output!echo[EOL];
+            display(output, pic.tail);  # This is a tail-call.
+        end;
+    esac;
+
+In this case, ``pic`` is a list of 70 items, so this function goes 70 entries deep on the call stack.
+I have an idea how to fix this properly, but it's too late to worry about it tonight.
 

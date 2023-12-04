@@ -138,6 +138,7 @@ Instruction instruction[] = {
 	[OP_BIND] = {"BIND", &modeString},
 	[OP_TASK] = {"TASK", &modeSimple},
 	[OP_PERFORM] = {"PERFORM", &modeSimple},
-	//[] = {"", &modeSimple},
+	[OP_SKIP] = {"SKIP", &modeSimple},
+
 };
 

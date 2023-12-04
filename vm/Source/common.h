@@ -379,7 +379,7 @@ void drain_the_queue();
 
 /* vm.h */
 
-#define FRAMES_MAX 64
+#define FRAMES_MAX 128
 #define STACK_MAX (FRAMES_MAX * BYTE_CARDINALITY)
 
 
