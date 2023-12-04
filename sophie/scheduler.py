@@ -153,29 +153,30 @@ class Actor(Task):
 	
 	_mailbox : Optional[list]
 	def __init__(self):
-		self._mutex = Lock()  # Protects the mailbox for this actor
+		self._mutex = Lock()
 		self._mailbox = None
-	
-	def batch_of_messages(self):
-		# Atomically harvest a batch of queued-up messages,
-		# thus to minimize the time and frequency of holding the mutex:
-		self._mutex.acquire()
-		mailbox = self._mailbox
-		self._mailbox = None
-		self._mutex.release()
-		return mailbox
+		self._idle = True
 	
 	def proceed(self):
-		for message in self.batch_of_messages():
+		with self._mutex:
+			batch_of_messages = self._mailbox
+			self._mailbox = None
+		for message in batch_of_messages:
 			self.handle(*message)
+		with self._mutex:
+			if self._mailbox:
+				self.TASK_QUEUE.insert_task(self)
+			else:
+				self._idle = True
 	
 	def accept_message(self, method_name, args):
-		self._mutex.acquire()
-		if self._mailbox is None:
-			self._mailbox = []
-			self.TASK_QUEUE.insert_task(self)
-		self._mailbox.append((method_name, args))
-		self._mutex.release()
+		with self._mutex:
+			if self._mailbox is None:
+				self._mailbox = []
+			self._mailbox.append((method_name, args))
+			if self._idle:
+				self.TASK_QUEUE.insert_task(self)
+				self._idle = False
 	
 	def handle(self, message, args):
 		raise NotImplementedError(type(self))
