@@ -1,0 +1,36 @@
+# Complex-Number Arithmetic
+
+# This module is speculative. Some day I expect it to work as-is.
+# A first test driver will render a small Mandelbrot set as text.
+
+type:
+
+complex is (re:number, im:number);
+
+assume:
+
+# For the definitions below to make sense, the "assume:" directive will need to work.
+# I can start by tying it into the module structure.
+# Later, the type checker can build a dictionary and use that to infer the
+# intended types of formal parameters that lack explicit annotations.
+
+a, b: complex;
+r: number;
+
+define:
+
+# This set of definitions would exercise double-dispatch:
+
+operator + (a,b) = complex(a.re+b.re, a.im+b.im);
+operator - (a,b) = complex(a.re-b.re, a.im-b.im);
+operator * (a,b) = complex(a.re*b.re - a.im*b.im, a.im*b.re + b.im*a.re);
+operator / (a,b) = a*conjugate(b) / (b.re*b.re + b.im*b.im);
+operator / (a,r) = complex(a.re/r, a.im/r);
+
+conjugate(a) = complex(a.re, -a.im);
+
+# Here's a definition to exercise single dispatch:
+
+operator - (a) = complex(-a.re, -a.im);
+
+# Sophie will do without implicit promotion rules, at least for now.
