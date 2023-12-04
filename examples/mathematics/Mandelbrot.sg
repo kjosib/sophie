@@ -1,0 +1,51 @@
+# Mandelbrot set as text / ASCII art.
+
+type:
+
+complex is (re:number, im:number);
+
+define:
+
+horizontal = interpolation(-2, 0.6, 159);
+vertical = interpolation(-1.3, 1.3, 70);
+max_steps = 25;
+
+interpolation(p,q, steps) : list[number] = map(inter, inclusive(0,steps)) where
+    inter(x) = p + (x/steps) * (q-p);
+end interpolation;
+
+c_add(a,b) = complex(a.re+b.re, a.im+b.im);
+c_mul(a,b) = complex(a.re*b.re - a.im*b.im, a.im*b.re + b.im*a.re);
+
+escaped(c) = c.re*c.re + c.im*c.im > 4;
+
+color(n) = mid("#*+-.", n mod 5, 1);
+
+row(y) = map(cell, horizontal) where
+    cell(x) = case iterate(z_naught, complex(x,y), max_steps) as n of
+        this -> color(n.item);
+        nope -> " ";
+    esac;
+end row;
+
+z_naught = complex(0,0);
+
+iterate(z, c, n) : maybe[number] = case
+    when escaped(z) then this(n);
+    when n <= 0 then nope;
+    else iterate(advance(z,c), c, n-1);
+esac;
+
+advance(z,c) = c_add(c, c_mul(z,z));
+
+inclusive(a,b) = nil if a>b else cons(a, inclusive(a+1, b));
+
+display(output, pic) = case pic of
+    nil -> skip;
+    cons -> do output!echo(pic.head) ; output!echo[EOL]; display(output, pic.tail); end;
+esac;
+
+begin:
+
+display(console, map(row, vertical));
+
