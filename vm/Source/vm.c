@@ -131,6 +131,8 @@ void perform(Value action) {
 	// Where all the action happens, so to speak.
 	switch (action.type)
 	{
+	case VAL_NIL:  // The empty action
+		break;
 	case VAL_CLOSURE:
 		run(AS_CLOSURE(action));
 		break;
@@ -328,6 +330,14 @@ dispatch:
 				enqueue_message(pop());
 				drain_the_queue();
 				NEXT;
+			case VAL_CLOSURE:
+				if (AS_CLOSURE(TOP)->function->arity == 0) {
+					run(AS_CLOSURE(pop()));
+					drain_the_queue();
+					NEXT;
+				}
+			case VAL_NIL:  // The empty action
+				NEXT;
 			default:
 				printValueDeeply(TOP);
 				pop();
@@ -399,6 +409,9 @@ dispatch:
 			NEXT;
 		case OP_PERFORM:
 			perform(pop());
+			NEXT;
+		case OP_SKIP:
+			push(NIL_VAL);  // Something that will get treated as an empty action.
 			NEXT;
 		default:
 			runtimeError(vpc, base, "Unrecognized instruction %d.", vpc[-1]);

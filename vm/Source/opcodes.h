@@ -47,6 +47,7 @@ typedef enum {
 	OP_BIND,
 	OP_TASK,
 	OP_PERFORM,
+	OP_SKIP,
 
 	NR_OPCODES,
 } OpCode;
