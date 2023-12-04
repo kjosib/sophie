@@ -104,8 +104,8 @@ only by how you use it.
 -----
 **The general structure of a function:**
 ```
-function -> name formals annotation '=' expr where_clause     :UserFunction
-where_clause -> :nothing | WHERE semicolon_list(function) END name                 :WhereClause
+function -> name formals annotation '=' expr where_clause             :UserFunction
+where_clause -> :nothing | WHERE semicolon_list(function) END name    :WhereClause
 ```
 
 Parameters to a function allow things to be implied.
@@ -131,8 +131,9 @@ However, if you specify parameter types, then the type-checker will check them a
 You can define the meanings of (a small selection of) mathematical operators in conjunction with your data types:
 
 ```
-operator_overload -> OPERATOR operator formals annotation '=' expr where_clause     :OperatorOverload
 operator -> '+' | '-' | '*' | '/' | '^'
+operator_overload -> OPERATOR operator formals annotation '=' expr where_clause_for_operator     :OperatorOverload
+where_clause_for_operator -> :nothing | WHERE semicolon_list(function) END OPERATOR operator     :WhereClause
 ```
 
 Operator overloads must specify the (outermost) type of every parameter.
