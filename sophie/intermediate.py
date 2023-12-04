@@ -25,7 +25,7 @@ from .resolution import RoadMap
 class TooComplicated(Exception):
 	pass
 
-INSTRUCTION_FOR = {
+BINARY_INSTRUCTION = {
 	# glyph : (opcode, stack-effect)
 	'^': ("POW", -1),
 	'*': ("MUL", -1),
@@ -42,13 +42,15 @@ INSTRUCTION_FOR = {
 	'>=': ("LT NOT", -1),
 	True: ("TRUE", 1),
 	False: ("FALSE", 1),
-	"Negative" : ("NEG", 0),
-	"LogicalNot" : ("NOT", 0),
+}
+UNARY_INSTRUCTION = {
+	"-": "NEG",
+	"NOT": "NOT",
 }
 
 SHORTCUTS = {
-	"LogicalAnd" : False,
-	"LogicalOr" : True,
+	"AND" : False,
+	"OR" : True,
 }
 
 def emit(*xs):
@@ -179,7 +181,7 @@ class VMFunctionScope(VMScope):
 		self._depth = None
 		return label
 	
-	def cases(self, nr_cases):
+	def cases(self, nr_cases) -> list:
 		emit("CASE")
 		return [self.emit_hole() for _ in range(nr_cases)]
 	
@@ -249,6 +251,10 @@ class VMFunctionScope(VMScope):
 		emit("PERFORM")
 		self._pop()
 
+	def emit_skip(self):
+		emit("SKIP")
+		self._push()
+
 	def emit_return(self):
 		emit("RETURN")
 		self._depth = None
@@ -278,7 +284,7 @@ class VMFunctionScope(VMScope):
 		emit("FIELD", quote(key))
 	
 	def emit_ALU(self, glyph):
-		opcode, stack_effect = INSTRUCTION_FOR[glyph]
+		opcode, stack_effect = BINARY_INSTRUCTION[glyph]
 		emit(opcode)
 		self._depth += stack_effect
 	
@@ -375,14 +381,16 @@ class Translation(Visitor):
 			else:
 				write_tagged_value(st, tag)
 
-	def mangle_foreign_symbols(self, foreign:list[syntax.ImportForeign]):
+	@staticmethod
+	def mangle_foreign_symbols(foreign:list[syntax.ImportForeign]):
 		for fi in foreign:
 			for group in fi.groups:
 				for symbol in group.symbols:
 					MANGLED[symbol] = symbol.nom.text
 		pass
 	
-	def write_ffi_init(self, foreign:list[syntax.ImportForeign]):
+	@staticmethod
+	def write_ffi_init(foreign:list[syntax.ImportForeign]):
 		for fi in foreign:
 			if fi.linkage is not None:
 				emit("!")
@@ -469,11 +477,11 @@ class Translation(Visitor):
 	def visit_BinExp(self, it: syntax.BinExp, scope:VMFunctionScope):
 		self.force(it.lhs, scope)
 		self.force(it.rhs, scope)
-		scope.emit_ALU(it.glyph)
+		scope.emit_ALU(it.op.text)
 	
 	def visit_ShortCutExp(self, it: syntax.ShortCutExp, scope:VMFunctionScope, tail:bool):
 		self.force(it.lhs, scope)
-		satisfied = SHORTCUTS[it.glyph]
+		satisfied = SHORTCUTS[it.op.text]
 		label = scope.jump_if(satisfied)
 		if tail:
 			self.tail_call(it.rhs, scope)
@@ -485,7 +493,7 @@ class Translation(Visitor):
 	
 	def visit_UnaryExp(self, ux:syntax.UnaryExp, scope:VMFunctionScope):
 		self.force(ux.arg, scope)
-		scope.emit_ALU(ux.glyph)
+		emit(UNARY_INSTRUCTION[ux.op.text])  # No change to stack depth
 
 	def visit_Call(self, call:syntax.Call, scope:VMFunctionScope, tail:bool):
 		for arg in call.args:
@@ -574,4 +582,7 @@ class Translation(Visitor):
 	def visit_AsTask(self, task:syntax.AsTask, scope:VMFunctionScope):
 		self.force(task.sub, scope)
 		emit("TASK")
-		
+	
+	@staticmethod
+	def visit_Skip(_:syntax.Skip, scope:VMFunctionScope):
+		scope.emit_skip()
