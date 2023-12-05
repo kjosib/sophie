@@ -1,7 +1,6 @@
-# Built-in / primitive definitions and types are in the docstring of this Python file.
-# Native types flag, number, and string are installed separately in "native" Python.
-# Also for the moment, I import (most of) Python's math library.
+# Standard Preamble
 
+# The types called "flag", "number", and "string" are built-in and do not need to be declared.
 # The turtle-graphics stuff that used to be here has moved to its own separate library.
 
 import:
@@ -55,16 +54,16 @@ end;
 	# ``isqrt`` demands an integer argument, which clashes with the intended semantics of "numbers are numbers".
 
 foreign "sophie.adapters.teletype_adapter"
-    where console : Console;
+	where console : Console;
 end;
 
 type:
 
-    order is case:
-        less;
-        same;
-        more;
-    esac;
+	order is case:
+		less;
+		same;
+		more;
+	esac;
 
 	list[x] is CASE:
 		 cons(head:x, tail:list[x]);
@@ -72,8 +71,8 @@ type:
 	ESAC;
 
 	maybe[x] is case:
-	    this(item:x);
-	    nope;
+		this(item:x);
+		nope;
 	esac;
 
 	pair[a,b] is (fst:a, snd:b);
@@ -144,8 +143,8 @@ define:
 		from(n) = nil if n >= len(s) else cons(mid(s,n,1), from(n+1));
 	end each_chr;
 
-    EOL = chr(10);
-    
-    log_base(x, base) = log(x) / log(base);
+	EOL = chr(10);
+	
+	log_base(x, base) = log(x) / log(base);
 
 end.
