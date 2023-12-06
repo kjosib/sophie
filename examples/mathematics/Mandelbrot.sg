@@ -7,11 +7,12 @@ complex is (re:number, im:number);
 define:
 
 horizontal = interpolation(-2, 0.6, 159);
-vertical = interpolation(-1.3, 1.3, 70);
+vertical = interpolation(1.3, -1.3, 70);
 max_steps = 25;
 
-interpolation(p,q, steps) : list[number] = map(inter, inclusive(0,steps)) where
-    inter(x) = p + (x/steps) * (q-p);
+interpolation(p,q, nr_steps) : list[number] = map(scale, progression(0)) where
+    scale(step) = p + (step/nr_steps) * (q-p);
+    progression(step) = nil if step > nr_steps else cons(step, progression(step+1));
 end interpolation;
 
 c_add(a,b) = complex(a.re+b.re, a.im+b.im);
@@ -37,8 +38,6 @@ iterate(z, c, n) : maybe[number] = case
 esac;
 
 advance(z,c) = c_add(c, c_mul(z,z));
-
-inclusive(a,b) = nil if a>b else cons(a, inclusive(a+1, b));
 
 display(output, pic) = case pic of
     nil -> skip;
