@@ -267,6 +267,10 @@ class VMFunctionScope(VMScope):
 		emit("EXEC")
 		self._depth = None
 
+	def emit_perform_exec(self):
+		emit("PERFORM_EXEC")
+		self._depth = None
+
 	def emit_nil(self):
 		emit("NIL")
 		self._push()
@@ -571,11 +575,12 @@ class Translation(Visitor):
 		inner.nl()
 		emit('{ 0 "do"')
 		depth = inner.depth()
-		for step in do.steps:
+		for step in do.steps[:-1]:
 			self.force(step, inner)
 			inner.emit_perform()
 			assert inner.depth() == depth
-		inner.emit_return()
+		self.force(do.steps[-1], inner)
+		inner.emit_perform_exec()
 		inner.emit_epilogue()
 		emit("}")
 	

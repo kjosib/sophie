@@ -59,7 +59,7 @@ static void displaySomeValues(Value *first, size_t count) {
 }
 
 static void displayStack(Value *base) {
-	printf(" %s         ", vm.trace->closure->function->name->text);
+	printf(" %s         ", CLOSURE->function->name->text);
 	displaySomeValues(vm.stack, (base - vm.stack));
 	printf("------- ");
 	displaySomeValues(base, (vm.stackTop - base));
@@ -76,7 +76,7 @@ __declspec(noreturn) static void runtimeError(byte *vpc, Value *base, const char
 	va_end(args);
 	fputs("\n", stderr);
 	displayStack(base);
-	Function *function = vm.trace->closure->function;
+	Function *function = CLOSURE->function;
 	size_t offset = vpc - function->chunk.code.at - 1;
 	int line = findLine(&function->chunk, offset);
 	vm_panic("a runtime error in line %d", line);
@@ -154,11 +154,13 @@ void perform(Value action) {
 Value run(Closure *closure) {
 	if (vm.trace == &vm.traces[FRAMES_MAX]) crashAndBurn("Max recursion depth exceeded.");
 	vm.trace++;
-	vm.trace->closure = closure;
 	Value *base = vm.stackTop - closure->function->arity;
-	Value *constants = closure->function->chunk.constants.at;
-	byte *vpc = closure->function->chunk.code.at;
-
+	Value *constants;
+	byte *vpc;
+enter:
+	constants = closure->function->chunk.constants.at;
+	vpc = closure->function->chunk.code.at;
+	CLOSURE = closure;
 	// At this point, closure becomes invalid because allocations can happen.
 
 	assert(base >= vm.stack);  // If this fails, the script died of stack underflow.
@@ -169,7 +171,7 @@ dispatch:
 #ifdef DEBUG_TRACE_EXECUTION
 		printf("-----------------\n");
 		displayStack(base);
-		printf("%s > ", name_of_function(vm.trace->closure->function)->text);
+		printf("%s > ", name_of_function(CLOSURE->function)->text);
 		disassembleInstruction(&CLOSURE->function->chunk, (int)(vpc - CLOSURE->function->chunk.code.at));
 #endif // DEBUG_TRACE_EXECUTION
 
@@ -188,7 +190,7 @@ dispatch:
 			NEXT;
 		}
 
-		case OP_CAPTIVE: push(vm.trace->closure->captives[READ_BYTE()]); NEXT;
+		case OP_CAPTIVE: push(CLOSURE->captives[READ_BYTE()]); NEXT;
 		case OP_CLOSURE:
 		{
 			// Initialize a run of closures. The underlying function definitions are in the constant table.
@@ -274,16 +276,13 @@ dispatch:
 			case VAL_CLOSURE:
 			case VAL_THUNK:
 			{
-				Closure *subsequent = vm.trace->closure = AS_CLOSURE(pop());
-				constants = subsequent->function->chunk.constants.at;
-				vpc = subsequent->function->chunk.code.at;
-				int arity = subsequent->function->arity;
+				closure = AS_CLOSURE(pop());
+				int arity = closure->function->arity;
 				memmove(base, vm.stackTop - arity, arity * sizeof(Value));
 				vm.stackTop = base + arity;
-				NEXT;
+				goto enter;
 			}
-			case VAL_CTOR:
-				YIELD(GC_VAL(construct_record()));
+			case VAL_CTOR: YIELD(GC_VAL(construct_record()));
 			case VAL_NATIVE:
 			{
 				Native *native = AS_NATIVE(pop());
@@ -300,17 +299,15 @@ dispatch:
 		case OP_FORCE_RETURN:
 		{
 			if (IS_THUNK(TOP)) {
-				Closure *subsequent = vm.trace->closure = AS_CLOSURE(pop());
-				if (DID_SNAP(subsequent)) {
-					YIELD(SNAP_RESULT(subsequent));
+				closure = AS_CLOSURE(pop());
+				if (DID_SNAP(closure)) {
+					YIELD(SNAP_RESULT(closure));
 				}
 				else {
 					// Treat this like an exec / tail-call, but easier since arity is zero by definition.
-					constants = subsequent->function->chunk.constants.at;
-					vpc = subsequent->function->chunk.code.at;
 					vm.stackTop = base;
+					goto enter;
 				}
-				NEXT;
 			}
 			// else fall-through to OP_RETURN;
 		}
@@ -325,6 +322,7 @@ dispatch:
 			NEXT;
 		case OP_DISPLAY:
 			switch (TOP.type) {
+			case VAL_NIL: NEXT;  // The empty action
 			case VAL_BOUND:
 			case VAL_MESSAGE:
 				enqueue_message(pop());
@@ -336,8 +334,6 @@ dispatch:
 					drain_the_queue();
 					NEXT;
 				}
-			case VAL_NIL:  // The empty action
-				NEXT;
 			default:
 				printValueDeeply(TOP);
 				pop();
@@ -410,6 +406,23 @@ dispatch:
 		case OP_PERFORM:
 			perform(pop());
 			NEXT;
+		case OP_PERFORM_EXEC:
+			switch (TOP.type) {
+			case VAL_NIL: YIELD(NIL_VAL);
+			case VAL_CLOSURE:
+			{
+				closure = AS_CLOSURE(pop());
+				assert(0 == closure->function->arity);
+				vm.stackTop = base;
+				goto enter;
+			}
+			case VAL_MESSAGE:
+			case VAL_BOUND:
+				enqueue_message(TOP);
+				YIELD(NIL_VAL);
+			default:
+				crashAndBurn("Can't yet handle a %s action.", valKind[TOP.type]);
+			}
 		case OP_SKIP:
 			push(NIL_VAL);  // Something that will get treated as an empty action.
 			NEXT;

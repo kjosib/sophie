@@ -15,6 +15,10 @@ static void blacken_function(Function *function) {
 
 static size_t size_function(Function *function) { return sizeof(Function) + function->nr_captures * sizeof(Capture); }
 
+static void finalize_function(Function *function) {
+	freeChunk(&function->chunk);
+}
+
 static void display_closure(Closure *closure) {
 	display_function(closure->function);
 }
@@ -43,6 +47,7 @@ GC_Kind KIND_Function = {
 	.deeply = display_function,
 	.blacken = blacken_function,
 	.size = size_function,
+	.finalize = finalize_function,
 };
 
 GC_Kind KIND_Closure = {
@@ -69,6 +74,9 @@ Function *newFunction(FunctionType fn_type, Chunk *chunk, byte arity, byte nr_ca
 	function->visited = false;
 	function->chunk = *chunk;
 	initChunk(chunk);
+#if RECLAIM_CHUNKS
+	gc_must_finalize(function);
+#endif
 	return function;
 }
 

@@ -35,6 +35,9 @@ typedef enum { // written to match the standard preamble's order type
 //#define DEBUG_TRACE_QUEUE
 //#define DEBUG_STRESS_GC
 //#define DEBUG_ANNOUNCE_GC
+#define RECLAIM_CHUNKS 1
+#else
+#define RECLAIM_CHUNKS 0
 #endif // _DEBUG
 
 #define byte uint8_t
@@ -77,7 +80,7 @@ void gc_forget_roots(Verb verb);
 void *gc_allocate(GC_Kind *kind, size_t size);
 void *darken(void *gc);
 static inline void darken_in_place(void **gc) { *gc = darken(*gc); }
-void must_finalize(GC *item);
+void gc_must_finalize(GC *item);
 
 /* memory.h */
 
@@ -379,7 +382,7 @@ void drain_the_queue();
 
 /* vm.h */
 
-#define FRAMES_MAX 128
+#define FRAMES_MAX 64
 #define STACK_MAX (FRAMES_MAX * BYTE_CARDINALITY)
 
 
