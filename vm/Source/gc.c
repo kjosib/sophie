@@ -64,7 +64,7 @@ DEFINE_VECTOR_APPEND(PointerArray, GC*)
 
 static PointerArray resources;
 
-void must_finalize(GC *item) {
+void gc_must_finalize(GC *item) {
     assert(item->kind->finalize != NULL);
     appendPointerArray(&resources, item);
 }
@@ -123,8 +123,6 @@ void init_gc() {
     initPointerArray(&resources);
     newArena(INITIAL_ARENA_SIZE);
 }
-
-void must_finalize(GC *gc);
 
 static size_t gc_size(GC *gc) { return allotment_for(gc->kind->size(gc)); }
 static void break_heart(GC *gc) { gc->ptr = next_ptr; }

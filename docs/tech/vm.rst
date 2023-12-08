@@ -44,14 +44,14 @@ Here are some open problems, in no particular order:
   starting the user program. (After picking up the special-cased constants, though...)
 * [PARTIAL] SDL bindings, at least for some simple graphics and the mouse.
 * Improved stack safety based on a max-depth analysis
-* ``do``-blocks should have tail-calls eliminated. (This may be trickier than it sounds. Or not.)
+* [DONE] ``do``-blocks should have tail-calls eliminated. (This may be trickier than it sounds. Or not.)
 * User-Defined Actors.
 * [PARTIAL] FFI improvements.
 * Turtle Graphics, perhaps in terms of SDL.
 * Make SDL optional and load on demand.
 * Source line numbers. In case of a run-time panic, a cross-reference is most helpful.
 * Numeric field offsets. This could save cycles where a record-type is statically known.
-* Tuning the dial on eager evaluation. This may help with performance.
+* Tuning the dial on eager evaluation. (This should further improve performance.)
 * NaN-boxing.
 * Short-string representation: Very short strings fit in a value (and don't benefit from interning).
   Shorter than 4gb may benefit from a smaller header. It would make the string module a bit trickier,
@@ -1261,3 +1261,64 @@ The *reason* the Mandelbrot program recurred so deeply is this function here::
 In this case, ``pic`` is a list of 70 items, so this function goes 70 entries deep on the call stack.
 I have an idea how to fix this properly, but it's too late to worry about it tonight.
 
+7 December 2023
+---------------
+
+Pearl Harbor Day. (Go look it up.)
+
+I want do-blocks to have proper tail recursion.
+This is *almost* trivial: Just put an ``EXEC`` after the last step, right? Wrong!
+There is one super-subtle problem with that.
+
+Right now compiling a "statement" in a do-block works like this:
+
+1. Evaluate an expression, thus placing an "action" at the top of the stack.
+2. Emit a ``PERFORM`` instruction.
+
+The job of the ``PERFORM`` instruction is to cause the given action to actually happen.
+There are these kinds of action:
+
+* ``VAL_NIL`` is the empty action.
+* ``VAL_CLOSURE`` is presumed to be another do-block to run (recursively and synchronously).
+* ``VAL_MESSAGE`` is a fully-specified message ready for delivery to the message queue.
+* ``VAL_BOUND`` is the weird case.
+  If ``PERFORM`` gets hold of it,
+  then it means the message takes no arguments and should go to the message queue as-is.
+
+It's easy to see how the ``EXEC`` instruction can do the right thing for the first three cases.
+But in the case of ``VAL_BOUND`` we have a problem.
+Consider a pure function that constructs a message.
+It must not *send* that message, because sending a message is impure.
+But it ends by pushing a ``VAL_BOUND`` and then issuing an ``EXEC`` instruction.
+When ``EXEC`` is the last step of evaluating a pure expression in tail position,
+the correct operational semantic for a ``VAL_BOUND`` is thus to combine it with arguments.
+
+To correctly eliminate tail-calls from do-blocks, there are two options.
+
+1. Make the ``EXEC`` instruction sensitive to the *arity* of a ``VAL_BOUND``.
+2. Make a new instruction specific for the end of a do-block.
+
+I've chosen to go with the second option, along with a bit of refactoring the tail-call code path.
+As a result, the ``run`` function in the VM is now *officially* spaghetti code:
+It has ``goto`` instructions that cross paths.
+I never thought spaghetti code would be this delicious! 
+
+Anyway, that's a wrap for this night's hack.
+
+8 December 2023
+---------------
+
+I thought to test the finalizer mechanism by adding a finalizer for ``Function`` structures.
+This makes sense, because function-objects do reference the ``malloc`` heap
+for their ``Chunk`` structure: The VM could call ``freeChunk(...)`` and reclaim the space.
+
+It worked perfectly the first time.
+It was a bit confusing to watch because there several function-objects with identical names,
+but they turned out to represent sub-expression thunks. (I'd forgotten this factoid.)
+
+For now, I'll condition this behavior on running in the debug build, though.
+Each thing in the finalization queue adds cycles to garbage collection,
+and there's little if any benefit from releasing that miniscule portion
+of the ``malloc`` heap leaked when ``Function`` structures become unreachable.
+
+The main benefit is confidence that it will also work when applied to SDL structure proxies.
