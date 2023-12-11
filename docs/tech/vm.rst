@@ -1322,3 +1322,10 @@ and there's little if any benefit from releasing that miniscule portion
 of the ``malloc`` heap leaked when ``Function`` structures become unreachable.
 
 The main benefit is confidence that it will also work when applied to SDL structure proxies.
+
+10 December 2023
+----------------
+
+The compiler no longer puts do-blocks in thunks.
+I also spent way too long fighting with Python multi-threading issues in the reference run-time,
+but I think that's finally sorted out. Mostly.

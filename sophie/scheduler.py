@@ -3,13 +3,11 @@ This is the simple task-queue version of a scheduler.
 At some point I may do a work-stealing version for fun,
 but the semantics of the language are the same regardless.
 """
-import traceback
 from collections import deque
 from threading import Lock, Thread
 from typing import Optional
 
 POOL_SIZE = 3
-ALL_DONE = object()
 
 class ThreadPoolScheduler:
 	"""
@@ -19,60 +17,72 @@ class ThreadPoolScheduler:
 	"""
 
 	def __init__(self, nr_workers:int):
-		self.main_thread = DedicatedThread()
+		self.main_thread = MainThread(self)
+		self._is_shutting_down = False
 		self._mutex = Lock()
 		self._tasks = deque()
 		self._idle = deque()
+		self._all_done = Lock()
+		self._all_done.acquire()
 		self._nr_busy = nr_workers
 		for i in range(nr_workers):
-			Thread(target=self._worker, daemon=True, name="worker thread " + str(i)).start()
+			Thread(target=self._worker, args=[i], daemon=True, name="worker thread " + str(i)).start()
 		# The first thing all those worker-threads will do is become idle,
 		# which will result in an "all-done" message to the main thread queue.
 		# So we must wait for it.
-		self.await_completion()
+		try: self.main_thread.run()
+		finally: self._finish_up()
 		
-	def await_completion(self):
-		self.main_thread.run()
-	
-	def perform(self, task):
+	def execute(self, task:"Task"):
 		""" The main thread should call this to kick off a job. """
-		self.insert_task(task)
-		self.await_completion()
+		assert isinstance(task, Task)
+		self._is_shutting_down = False
+		assert self._all_done.locked()
+		task.enqueue()
+		try: self.main_thread.run()
+		finally: self._finish_up()
+		
+	def _finish_up(self):
+		self._all_done.acquire()
+		self._tasks.clear()
+		self.main_thread.recover()
 
 	def insert_task(self, task):
 		self._mutex.acquire()
 		self._tasks.append(task)
 		if self._idle:
 			# Let's wake workers LIFO rather than round-robin:
+			self._more_busy()
 			self._idle.pop().release()
 		self._mutex.release()
 
-	def _worker(self):
+	def _worker(self, i):
 		notify_me = Lock()
 		notify_me.acquire()
 		while True:
 			self._mutex.acquire()
-			while not self._tasks:
+			while self._is_shutting_down or not self._tasks:
 				self._idle.append(notify_me)
 				self._less_busy()
 				self._mutex.release()
 				notify_me.acquire()
 				self._mutex.acquire()
-				self._more_busy()
 			task = self._tasks.popleft()
 			self._mutex.release()
 			try: task.proceed()
-			except: traceback.print_exc()
+			except Exception as ex:
+				self.main_thread.insert_task(ex)
 	
 	def _less_busy(self):
+		# Precondition: self.mutex is held
 		self._nr_busy -= 1
-		if not self._nr_busy:
-			self._all_idle()
+		if 0 == self._nr_busy and not self._is_shutting_down:
+			self._is_shutting_down = True
+			self.main_thread.stop()
+			self._all_done.release()
 	
-	def _all_idle(self):
-		self.main_thread.insert_task(ALL_DONE)
-
 	def _more_busy(self):
+		# Precondition: self.mutex is held
 		self._nr_busy += 1
 
 	def pin(self):
@@ -91,50 +101,89 @@ class ThreadPoolScheduler:
 		with self._mutex:
 			self._less_busy()
 
-class DedicatedThread:
+class MainThread:
 	"""
-	Certain things need to consistently run in the same thread.
-	The simple way to make sure of that is to dedicate a thread thereto.
+	The main thread starts and stops the thread pool,
+	and also propagates exceptions outward.
+	As such, its run loop is a bit different.
+	
+	Also, certain things need to run from the main thread (e.g. Turtle Graphics)
+	or at least consistently in the same thread. The simple way to make sure of
+	that is to run all such picky things on the main thread.
 	"""
 	_tasks : Optional[list]
+	_is_zombie : bool
 	
-	def __init__(self):
+	def __init__(self, main_queue:ThreadPoolScheduler):
+		self._main_queue = main_queue
 		self._mutex = Lock()
-		self._tasks = None
 		self._ready = Lock()
 		self._ready.acquire()
+		self._tasks = None
+		self._is_zombie = False
 	
-	def start(self):
-		Thread(target=self.run, daemon=True).start()
-
 	def run(self):
+		# This function exits with self._ready in the locked state. Always.
 		while True:
 			self._ready.acquire()
-			self._mutex.acquire()
-			tasks = self._tasks
-			self._tasks = None
-			self._mutex.release()
-			for task in tasks:
-				if task is ALL_DONE:
-					return
-				else:
-					task.proceed()
-			MAIN_QUEUE.unpin()
+			with self._mutex:
+				tasks = self._tasks
+				self._tasks = None
+			if tasks is None:
+				return
+			try:
+				for task in tasks:
+					if isinstance(task, Exception):
+						self._zombify()
+						raise task
+					else: task.proceed()
+			finally:
+				self._main_queue.unpin()
+			
 
 	def insert_task(self, task):
-		self._mutex.acquire()
-		if self._tasks:
-			self._tasks.append(task)
-		else:
-			if task is not ALL_DONE:
-				MAIN_QUEUE.pin()
-			self._tasks = [task]
+		assert task is not None
+		with self._mutex:
+			if self._is_zombie: return
+			elif self._tasks: self._tasks.append(task)
+			else:
+				self._main_queue.pin()
+				self._tasks = [task]
+				self._ready.release()
+	
+	def _zombify(self):
+		# Stop new messages arriving.
+		# If any are pending, drop them and unpin once
+		# to counteract the pin from insert_task.
+		with self._mutex:
+			self._is_zombie = True
+			if self._tasks:
+				self._tasks = None
+				self._main_queue.unpin()
+	
+	def stop(self):
+		# This can only happen when the pin count reaches zero,
+		# which means (by definition) there are no messages in flight.
+		with self._mutex:
+			self._is_zombie = True
+			assert self._tasks is None, self._tasks
 			self._ready.release()
-		self._mutex.release()
+	
+	def recover(self):
+		# This can only run single-threaded on the main thread,
+		# and only after stop has been called.
+		assert self._tasks is None, self._tasks
+		self._is_zombie = False
+		if not self._ready.locked():
+			self._ready.acquire()
 
 MAIN_QUEUE = ThreadPoolScheduler(POOL_SIZE)
 
 class Task:
+	TASK_QUEUE = MAIN_QUEUE
+	def enqueue(self):
+		self.TASK_QUEUE.insert_task(self)
+	
 	def proceed(self):
 		raise NotImplementedError(type(self))
 
@@ -148,8 +197,6 @@ class Actor(Task):
 	The turtle-graphics / tkinter actor must use
 	this to stay on the main thread.
 	"""
-	
-	TASK_QUEUE = MAIN_QUEUE
 	
 	_mailbox : Optional[list]
 	def __init__(self):
@@ -165,7 +212,7 @@ class Actor(Task):
 			self.handle(*message)
 		with self._mutex:
 			if self._mailbox:
-				self.TASK_QUEUE.insert_task(self)
+				self.enqueue()
 			else:
 				self._idle = True
 	
@@ -175,7 +222,7 @@ class Actor(Task):
 				self._mailbox = []
 			self._mailbox.append((method_name, args))
 			if self._idle:
-				self.TASK_QUEUE.insert_task(self)
+				self.enqueue()
 				self._idle = False
 	
 	def handle(self, message, args):
@@ -187,16 +234,21 @@ class NativeObjectProxy(Actor):
 		super().__init__()
 		self._principal = principal
 		if pin:
-			self.TASK_QUEUE = DedicatedThread()
+			self.TASK_QUEUE = MAIN_QUEUE.main_thread
 	def handle(self, method_name, args):
 		method = getattr(self._principal, method_name)
 		method(*args)
 
 
-class SampleTask(Task):
+class SimpleTask(Task):
+	def __init__(self, job, *args, **kwargs):
+		assert callable(job)
+		self._job = job
+		self._args = args
+		self._kwargs = kwargs
 	def proceed(self):
-		print("Hello, Threading World!")
+		self._job(*self._args, **self._kwargs)
 
 if __name__ == '__main__':
-	MAIN_QUEUE.perform(SampleTask())
+	MAIN_QUEUE.execute(SimpleTask(print, "Hello, Threading World!"))
 

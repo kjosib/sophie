@@ -8,17 +8,12 @@ from . import syntax, primitive, runtime, ontology
 from .stacking import Frame, RootFrame, Activation
 from .runtime import (
 	force, _strict, Constructor, Primitive, Thunk,
-	Action, ActorClass, ActorTemplate
+	Action, ActorClass, ActorTemplate, iterate_list
 )
 from .resolution import RoadMap
-from .scheduler import MAIN_QUEUE
-
+from .scheduler import MAIN_QUEUE, SimpleTask
 
 def run_program(roadmap:RoadMap):
-	class MainTask:
-		@staticmethod
-		def proceed():
-			result.perform()
 
 	drivers = {}
 	preamble_scope = roadmap.module_scopes[roadmap.preamble]
@@ -36,7 +31,7 @@ def run_program(roadmap:RoadMap):
 			env.pc = expr
 			result = _strict(expr, env)
 			if isinstance(result, Action):
-				MAIN_QUEUE.perform(MainTask)
+				MAIN_QUEUE.execute(SimpleTask(result.perform))
 				continue
 			if isinstance(result, dict):
 				tag = result.get("")
@@ -45,7 +40,7 @@ def run_program(roadmap:RoadMap):
 					continue
 				dethunk(result)
 				if tag == 'cons':
-					result = decons(result)
+					result = list(iterate_list(result))
 			if result is not None:
 				print(result)
 		# This kludge makes QualifiedReference work,
@@ -115,15 +110,6 @@ def dethunk(result:dict):
 		for k,v in work_dict.items():
 			if isinstance(v, Thunk): work_dict[k] = v = force(v)
 			if isinstance(v, dict): dict_queue.append(v)
-
-def decons(item:dict) -> list:
-	result = []
-	while isinstance(item, dict) and item.get("") == 'cons':
-		result.append(item['head'])
-		item = item['tail']
-	if item is not runtime.NIL:
-		result.append(item)
-	return result
 
 ###############################################################################
 

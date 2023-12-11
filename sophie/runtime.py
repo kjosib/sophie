@@ -189,16 +189,20 @@ def evaluate(expr:EVALUABLE, dynamic_env:ENV) -> LAZY_VALUE:
 	try: fn = EVALUATE[type(expr)]
 	except KeyError: raise NotImplementedError(type(expr), expr)
 	try: return fn(expr, dynamic_env)
-	except Exception:
+	except:
 		traceback.print_exc()
+		# Something along these lines might be nice:
 		# for frame in THE_STACK:
 		# 	frame.trace(tracer)
 		exit(1)
 
+_NO_DELAY = {syntax.Literal, syntax.Lookup, syntax.DoBlock}
+
 def delay(dynamic_env:ENV, expr:syntax.ValExpr) -> LAZY_VALUE:
-	# For two kinds of expression, there is no profit to delay:
-	if isinstance(expr, syntax.Literal): return expr.value
-	if isinstance(expr, syntax.Lookup): return _eval_lookup(expr, dynamic_env)
+	# For certain kinds of expression, there is no profit to delay:
+	if type(expr) in _NO_DELAY: return evaluate(expr, dynamic_env)
+	# Volatile expressions (that depend on a field of SELF) must not delay:
+	if expr.is_volatile: return _strict(expr, dynamic_env)
 	# In less trivial cases, make a thunk and pass that instead.
 	return Thunk(dynamic_env, expr)
 
@@ -334,7 +338,7 @@ class TaskAction(Action):
 	def __init__(self, task:Task):
 		self._task = task
 	def perform(self):
-		MAIN_QUEUE.insert_task(self._task)
+		self._task.enqueue()
 
 ###############################################################################
 
@@ -399,9 +403,10 @@ CONS:Constructor
 
 def iterate_list(lst:LAZY_VALUE):
 	lst = force(lst)
-	while lst is not NIL:
+	while lst[""] == "cons":
 		yield force(lst['head'])
 		lst = force(lst['tail'])
+	assert lst[""] == "nil"
 
 ###############################################################################
 

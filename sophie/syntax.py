@@ -43,6 +43,7 @@ class SimpleType(Expr):
 	def can_construct(self) -> bool: raise NotImplementedError(type(self))
 
 class ValExpr(Expr):
+	is_volatile: bool
 	pass
 
 class PlainReference(Reference):
@@ -60,7 +61,6 @@ class QualifiedReference(Reference):
 
 def SelfReference(aSlice):
 	return PlainReference(Nom("SELF", aSlice))
-
 
 ARGUMENT_TYPE = Union[SimpleType, "ImplicitTypeVariable", "ExplicitTypeVariable"]
 
@@ -216,7 +216,8 @@ class Function(Term):
 			self.where = where.sub_fns
 		else:
 			self.where = ()
-
+	def has_volatility(self):
+		return self.expr.is_volatile or any(f.has_volatility() for f in self.where)
 
 class UserFunction(Function):
 	pass
@@ -267,6 +268,8 @@ class Behavior(Term):
 		self.expr = expr
 
 class Literal(ValExpr):
+	is_volatile = False  # Not that this will ever be tested, but it's well to be consistent.
+	
 	def __init__(self, value: Any, a_slice: slice):
 		self.value, self._slice = value, a_slice
 	
@@ -283,12 +286,21 @@ class Lookup(ValExpr):
 	# Reminder: This AST node exists in opposition to TypeCall so I can write
 	# behavior for references in value context vs. references in type context.
 	ref:Reference
+	is_volatile = False
 	def __init__(self, ref: Reference): self.ref = ref
 	def head(self) -> slice: return self.ref.head()
 	def __str__(self): return str(self.ref)
 
+def _is_self_reference(it):
+	if isinstance(it, Lookup):
+		if isinstance(it.ref, PlainReference):
+			return it.ref.nom.text == "SELF"
+	return False
+
 class FieldReference(ValExpr):
-	def __init__(self, lhs: ValExpr, field_name: Nom): self.lhs, self.field_name = lhs, field_name
+	def __init__(self, lhs: ValExpr, field_name: Nom):
+		self.lhs, self.field_name = lhs, field_name
+		self.is_volatile = lhs.is_volatile or _is_self_reference(lhs)
 	def __str__(self): return "(%s.%s)" % (self.lhs, self.field_name.text)
 	def head(self) -> slice: return self.field_name.head()
 
@@ -296,23 +308,26 @@ class BindMethod(ValExpr):
 	def __init__(self, receiver: ValExpr, _bang:Nom, method_name: Nom):
 		self.receiver, self.method_name = receiver, method_name
 		self._head = _bang.head()
+		self.is_volatile = receiver.is_volatile
 	def __str__(self): return "(%s.%s)" % (self.receiver, self.method_name.text)
 	def head(self) -> slice: return self._head
 
 class AsTask(ValExpr):
+	is_volatile = False
 	def __init__(self, head:slice, sub:ValExpr):
 		self._head = head
 		self.sub = sub
 	def head(self) -> slice: return self._head
 
 class Skip(ValExpr):
-	def __init__(self, head: slice):
-		self._head = head
+	is_volatile = False
+	def __init__(self, head: slice): self._head = head
 	def head(self) -> slice: return self._head
 
 class Binary(ValExpr):
 	def __init__(self, lhs: ValExpr, op:Nom, rhs: ValExpr):
 		self.lhs, self.op, self.rhs = lhs, op, rhs
+		self.is_volatile = self.lhs.is_volatile or self.rhs.is_volatile
 	def head(self) -> slice: return self.op.head()
 
 class BinExp(Binary): pass
@@ -321,6 +336,7 @@ class ShortCutExp(Binary): pass
 class UnaryExp(ValExpr):
 	def __init__(self, op:Nom, arg: ValExpr):
 		self.op, self.arg = op, arg
+		self.is_volatile = arg.is_volatile
 
 	def head(self) -> slice: return self.op.head()
 
@@ -329,6 +345,7 @@ class Cond(ValExpr):
 	def __init__(self, then_part: ValExpr, _kw, if_part: ValExpr, else_part: ValExpr):
 		self._kw = _kw
 		self.then_part, self.if_part, self.else_part = then_part, if_part, else_part
+		self.is_volatile = any(x.is_volatile for x in (then_part, if_part, else_part))
 	def head(self) -> slice:
 		return self._kw
 
@@ -340,6 +357,7 @@ def CaseWhen(when_parts: list, else_part: ValExpr):
 class Call(ValExpr):
 	def __init__(self, fn_exp: ValExpr, args: list[ValExpr]):
 		self.fn_exp, self.args = fn_exp, args
+		self.is_volatile = self.fn_exp.is_volatile or any(a.is_volatile for a in args)
 	
 	def __str__(self):
 		return "%s(%s)" % (self.fn_exp, ', '.join(map(str, self.args)))
@@ -354,6 +372,8 @@ class ExplicitList(ValExpr):
 		for e in elts:
 			assert isinstance(e, ValExpr), e
 		self.elts = elts
+		self.is_volatile = any(e.is_volatile for e in elts)
+		
 	def head(self) -> slice:
 		return slice(self.elts[0].head().start, self.elts[-1].head().stop)
 
@@ -374,8 +394,12 @@ class Alternative(Symbol):
 			self.where = ()
 	def head(self) -> slice:
 		return self._head.head()
+	
+	def has_volatility(self):
+		return self.sub_expr.is_volatile or any(f.has_volatility() for f in self.where)
 
 class Absurdity(ValExpr):
+	is_volatile = False
 	def __init__(self, _head:slice, reason:Literal):
 		self._head = _head
 		self.reason = reason
@@ -410,6 +434,7 @@ class MatchExpr(ValExpr):
 		self.subject = subject
 		self.hint = hint
 		self.alternatives, self.otherwise = alternatives, otherwise
+		self.is_volatile = subject.expr.is_volatile or any(a.has_volatility() for a in alternatives) or (otherwise and otherwise.is_volatile)
 	
 	def head(self) -> slice:
 		return self.subject.head()
@@ -421,6 +446,11 @@ class NewAgent(Term):
 
 class DoBlock(ValExpr):
 	namespace: NS  # WordDefiner fills
+	
+	# The value of a do-block does not depend on when it runs.
+	# Its consequence may so depend, but by definition steps run in sequence.
+
+	is_volatile = False
 
 	def __init__(self, agents:list[NewAgent], _head:Nom, steps:list[ValExpr]):
 		self.agents = agents
@@ -429,7 +459,6 @@ class DoBlock(ValExpr):
 		
 	def head(self) -> slice:
 		return self._head.head()
-
 
 class AssignField(Reference):
 	def __init__(self, nom:Nom, expr:ValExpr):
