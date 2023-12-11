@@ -59,6 +59,5 @@ class TurtleGraphics:
 		root.bind("<KeyPress>", lambda event:root.destroy())
 		tkinter.mainloop()
 
-tortoise = NativeObjectProxy(TurtleGraphics())
-tortoise.TASK_QUEUE = MAIN_QUEUE.main_thread
+tortoise = NativeObjectProxy(TurtleGraphics(), pin=True)
 worker = NativeObjectProxy(Worker())

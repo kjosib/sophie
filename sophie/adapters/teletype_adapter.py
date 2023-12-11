@@ -20,5 +20,5 @@ class Console:
 	def random(target:Message):
 		target.dispatch_with(random.random())
 
-console = NativeObjectProxy(Console())
+console = NativeObjectProxy(Console(), pin=True)
 

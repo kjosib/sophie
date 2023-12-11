@@ -159,6 +159,5 @@ class DisplayProxy:
 		gfxdraw.vline(self._display, force(x), force(y1), force(y2), (r,g,b))
 		
 
-events = NativeObjectProxy(GameLoop())
-events.TASK_QUEUE = MAIN_QUEUE.main_thread
+events = NativeObjectProxy(GameLoop(), pin=True)
 

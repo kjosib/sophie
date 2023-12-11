@@ -328,7 +328,7 @@ def symbol_harbors_thunks(sym:ontology.Symbol):
 def handles_tails(expr: syntax.Expr):
 	return isinstance(expr, (syntax.Call, syntax.ShortCutExp, syntax.Cond, syntax.MatchExpr))
 
-def is_eager(expr: syntax.Expr):
+def is_eager(expr: syntax.ValExpr):
 	"""Basically, loads that are guaranteed not to be a thunk. So match-subjects mainly..."""
 	if isinstance(expr, syntax.Lookup):
 		return not symbol_harbors_thunks(expr.ref.dfn)
@@ -422,7 +422,7 @@ class Translation(Visitor):
 		self.tail_call(fn.expr, inner)
 		inner.emit_epilogue()
 	
-	def delay(self, expr:syntax.Expr, scope:VMFunctionScope):
+	def delay(self, expr:syntax.ValExpr, scope:VMFunctionScope):
 		"""
 		Similar policy (for now) to the version in the simple evaluator:
 		Literals and references/look-ups do not get thunked.
@@ -437,10 +437,14 @@ class Translation(Visitor):
 			scope.emit_field(expr.field_name.key())
 		elif isinstance(expr, syntax.ExplicitList):
 			self.visit_ExplicitList(expr, scope)
+		elif isinstance(expr, syntax.DoBlock):
+			self.visit_DoBlock(expr, scope)
+		elif expr.is_volatile:
+			self.force(expr, scope)
 		else:
 			scope.make_thunk(self, expr)
 	
-	def force(self, expr:syntax.Expr, scope:VMFunctionScope):
+	def force(self, expr:syntax.ValExpr, scope:VMFunctionScope):
 		"""
 		Respond to the fact that params and fields may harbor thunks.
 		"""
@@ -456,7 +460,7 @@ class Translation(Visitor):
 		else:
 			self.visit(expr, scope)
 	
-	def tail_call(self, expr:syntax.Expr, scope:VMFunctionScope):
+	def tail_call(self, expr:syntax.ValExpr, scope:VMFunctionScope):
 		if isinstance(expr, syntax.Literal):
 			scope.constant(expr.value)
 			scope.emit_return()
@@ -473,7 +477,7 @@ class Translation(Visitor):
 			self.visit(expr, scope)
 			scope.emit_return()
 
-	def write_begin_expression(self, expr:syntax.Expr, scope:VMFunctionScope):
+	def write_begin_expression(self, expr:syntax.ValExpr, scope:VMFunctionScope):
 		scope.nl()
 		self.force(expr, scope)
 		scope.display()
