@@ -75,7 +75,7 @@ Function *newFunction(FunctionType fn_type, Chunk *chunk, byte arity, byte nr_ca
 	function->chunk = *chunk;
 	initChunk(chunk);
 #if RECLAIM_CHUNKS
-	gc_must_finalize(function);
+	gc_must_finalize((GC*)function);
 #endif
 	return function;
 }
