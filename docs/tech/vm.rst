@@ -1329,3 +1329,17 @@ The main benefit is confidence that it will also work when applied to SDL struct
 The compiler no longer puts do-blocks in thunks.
 I also spent way too long fighting with Python multi-threading issues in the reference run-time,
 but I think that's finally sorted out. Mostly.
+
+15 December 2023
+----------------
+
+I worked on the VM's game adapter. It:
+
+* Respects the requested window size and frame rate.
+* Has a suitably accurate frame-rate limiter that compensates for scheduling jitter.
+* Colors the window using an ``SDL_Renderer``, which seems to be how the cool kids do accelerated graphics.
+* Properly garbage-collects and finalizes the display window object.
+* Dispatches mouse button events to the Sophie program.
+
+Probably the next step will be actual graphics.
+I'll have to sleep on that.
