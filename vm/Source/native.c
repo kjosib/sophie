@@ -171,14 +171,10 @@ static void create_native(const char *name, byte arity, NativeFn function) {  //
 	TOP = NATIVE_VAL(native);
 }
 
-static void install_native() {
+void create_native_function(const char *name, byte arity, NativeFn function) {  // ( -- )
+	create_native(name, arity, function);
 	push(GC_VAL(AS_NATIVE(TOP)->name));
 	defineGlobal();
-}
-
-void native_create_function(const char *name, byte arity, NativeFn function) {  // ( -- )
-	create_native(name, arity, function);
-	install_native();
 }
 
 static void install_method() {  // ( ActorDfn Native -- ActorDfn )
@@ -188,7 +184,7 @@ static void install_method() {  // ( ActorDfn Native -- ActorDfn )
 	if (!was_new) crashAndBurn("already installed %s into %s", key->text, dfn->name->text);
 }
 
-void native_create_method(const char *name, byte arity, NativeFn function) {  // ( ActorDfn -- ActorDfn )
+void create_native_method(const char *name, byte arity, NativeFn function) {  // ( ActorDfn -- ActorDfn )
 	create_native(name, arity, function);
 	install_method();
 }
@@ -251,42 +247,42 @@ static Value ldexp_native(Value *args) {
 NUMERIC_2(pow)
 
 static void install_numerics() {
-	native_create_function("acos", 1, acos_native);
-	native_create_function("acosh", 1, acosh_native);
-	native_create_function("asin", 1, asin_native);
-	native_create_function("asinh", 1, asinh_native);
-	native_create_function("atan", 1, atan_native);
-	native_create_function("atanh", 1, atanh_native);
-	native_create_function("ceil", 1, ceil_native);
-	native_create_function("cos", 1, cos_native);
-	native_create_function("cosh", 1, cosh_native);
-	native_create_function("erf", 1, erf_native);
-	native_create_function("erfc", 1, erfc_native);
-	native_create_function("exp", 1, exp_native);
-	native_create_function("expm1", 1, expm1_native);
-	native_create_function("factorial", 1, factorial_native);
-	native_create_function("abs", 1, fabs_native);
-	native_create_function("floor", 1, floor_native);
-	native_create_function("lgamma", 1, lgamma_native);
-	native_create_function("log", 1, log_native);
-	native_create_function("log10", 1, log10_native);
-	native_create_function("log1p", 1, log1p_native);
-	native_create_function("log2", 1, log2_native);
-	native_create_function("sin", 1, sin_native);
-	native_create_function("sinh", 1, sinh_native);
-	native_create_function("sqrt", 1, sqrt_native);
-	native_create_function("tan", 1, tan_native);
-	native_create_function("tanh", 1, tanh_native);
-	native_create_function("gamma", 1, tgamma_native);
-	native_create_function("trunc", 1, trunc_native);
-	native_create_function("int", 1, trunc_native);
-	native_create_function("fib_native", 1, fib_native); // Just for access to that baseline microbenchmark
+	create_native_function("acos", 1, acos_native);
+	create_native_function("acosh", 1, acosh_native);
+	create_native_function("asin", 1, asin_native);
+	create_native_function("asinh", 1, asinh_native);
+	create_native_function("atan", 1, atan_native);
+	create_native_function("atanh", 1, atanh_native);
+	create_native_function("ceil", 1, ceil_native);
+	create_native_function("cos", 1, cos_native);
+	create_native_function("cosh", 1, cosh_native);
+	create_native_function("erf", 1, erf_native);
+	create_native_function("erfc", 1, erfc_native);
+	create_native_function("exp", 1, exp_native);
+	create_native_function("expm1", 1, expm1_native);
+	create_native_function("factorial", 1, factorial_native);
+	create_native_function("abs", 1, fabs_native);
+	create_native_function("floor", 1, floor_native);
+	create_native_function("lgamma", 1, lgamma_native);
+	create_native_function("log", 1, log_native);
+	create_native_function("log10", 1, log10_native);
+	create_native_function("log1p", 1, log1p_native);
+	create_native_function("log2", 1, log2_native);
+	create_native_function("sin", 1, sin_native);
+	create_native_function("sinh", 1, sinh_native);
+	create_native_function("sqrt", 1, sqrt_native);
+	create_native_function("tan", 1, tan_native);
+	create_native_function("tanh", 1, tanh_native);
+	create_native_function("gamma", 1, tgamma_native);
+	create_native_function("trunc", 1, trunc_native);
+	create_native_function("int", 1, trunc_native);
+	create_native_function("fib_native", 1, fib_native); // Just for access to that baseline microbenchmark
 
-	native_create_function("atan2", 2, atan2_native);
-	native_create_function("copysign", 2, copysign_native);
-	native_create_function("fmod", 2, fmod_native);
-	native_create_function("ldexp", 2, ldexp_native);
-	native_create_function("pow", 2, pow_native);
+	create_native_function("atan2", 2, atan2_native);
+	create_native_function("copysign", 2, copysign_native);
+	create_native_function("fmod", 2, fmod_native);
+	create_native_function("ldexp", 2, ldexp_native);
+	create_native_function("pow", 2, pow_native);
 
 	math_constant("e", M_E);
 	math_constant("inf", HUGE_VAL);
@@ -298,12 +294,12 @@ static void install_numerics() {
 /***********************************************************************************/
 
 static void install_strings() {
-	native_create_function("strcat", 2, concatenate);
-	native_create_function("val", 1, val_native);
-	native_create_function("chr", 1, chr_native);
-	native_create_function("str", 1, str_native);
-	native_create_function("len", 1, len_native);
-	native_create_function("mid", 3, mid_native);
+	create_native_function("strcat", 2, concatenate);
+	create_native_function("val", 1, val_native);
+	create_native_function("chr", 1, chr_native);
+	create_native_function("str", 1, str_native);
+	create_native_function("len", 1, len_native);
+	create_native_function("mid", 3, mid_native);
 }
 
 static void install_the_console() {
@@ -314,9 +310,9 @@ static void install_the_console() {
 	define_actor(0);
 
 	// Next up, define some methods:
-	native_create_method("echo", 1, console_echo);
-	native_create_method("read", 1, console_read);
-	native_create_method("random", 1, console_random);
+	create_native_method("echo", 1, console_echo);
+	create_native_method("read", 1, console_read);
+	create_native_method("random", 1, console_random);
 
 	// Oh yeah about that...
 	seed_random_number_generator();
@@ -329,8 +325,8 @@ static void install_the_console() {
 	defineGlobal();
 }
 
-void native_install_functions() {
-	native_create_function("clock", 0, clock_native);
+void install_native_functions() {
+	create_native_function("clock", 0, clock_native);
 	install_numerics();
 	install_strings();
 	install_the_console();

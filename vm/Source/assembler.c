@@ -275,10 +275,9 @@ static void parse_ffi_init() {
 	}
 	consume(TOKEN_SEMICOLON, "expected semicolon or string");
 	// The init function can veto the operation. Keep the module name around during.
-	push(GC_VAL(module_name));
-	bool success = AS_BOOL(init_function(args));
-	module_name = AS_STRING(pop());
-	if (!success) crashAndBurn("Unable to initialize module \"%s\"", module_name->text);
+	char *name_text = strdup(module_name->text);
+	if (AS_BOOL(init_function(args))) free(name_text);
+	else crashAndBurn("Unable to initialize module \"%s\"", name_text);
 	// This consumes stack. That is the design, at least for now.
 	// It means foreign modules don't have to designate roots specifically.
 	// They can merely preserve a pointer to where their arguments live on the stack,
@@ -323,7 +322,7 @@ static void snap_global_pointers(Function *fn) {
 void assemble(const char *source) {
 	initScanner(source);
 	init_assembler();
-	native_install_functions();
+	install_native_functions();
 #ifdef DEBUG_PRINT_GLOBALS
 	tableDump(&globals);
 #endif // DEBUG_PRINT_GLOBALS

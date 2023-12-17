@@ -370,7 +370,7 @@ void define_actor(byte nr_fields);  // ( field_names... name -- dfn )
 void make_template_from_dfn();  // ( args... dfn -- tpl )
 void make_actor_from_template();  // ( tpl -- actor )
 void bind_task_from_closure();  // ( closure -- message )
-void bind_method();  // ( actor callable -- bound_method )
+void bind_method_by_name();  // ( actor message_name -- bound_method )
 void apply_bound_method();  // ( args... bound_method -- message )
 void drain_the_queue();
 
@@ -459,9 +459,9 @@ typedef struct {
 
 #define AS_NATIVE(value) ((Native *)AS_PTR(value))
 
-void native_install_functions();
-void native_create_function(const char *name, byte arity, NativeFn function);  // ( -- )
-void native_create_method(const char *name, byte arity, NativeFn function);  // ( ActorDfn -- ActorDfn )
+void install_native_functions();
+void create_native_function(const char *name, byte arity, NativeFn function);  // ( -- )
+void create_native_method(const char *name, byte arity, NativeFn function);  // ( ActorDfn -- ActorDfn )
 
 /* ffi.h */
 

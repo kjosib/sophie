@@ -209,10 +209,10 @@ static GC_Kind KIND_bound = {
 	.size = size_bound,
 };
 
-void bind_method() {
+void bind_method_by_name() {  // ( actor message_name -- bound_method )
 	Message *bound = gc_allocate(&KIND_bound, sizeof(Message));
-	bound->self = AS_ACTOR(SND);
-	bound->callable = TOP;
+	Actor *self = bound->self = AS_ACTOR(SND);
+	bound->callable = tableGet(&self->actor_dfn->msg_handler, AS_STRING(TOP));
 	SND = BOUND_VAL(bound);
 	pop();
 }
