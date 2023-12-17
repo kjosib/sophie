@@ -135,6 +135,9 @@ That is, no co-data in a message. But to reconcile this with lazy semantics *is 
 Design Log
 ==============
 
+September 2023
+^^^^^^^^^^^^^^
+
 16 September 2023
 -----------------
 Felt the performance impact of Sophie's Python-based tree-walk runtime for the first time.
@@ -379,6 +382,9 @@ The test-case for today is::
     CONST 5 GLOBAL "factorial" CALL DISPLAY
 
 I expect the thing to produce the number ``120``. And it works!
+
+October 2023
+^^^^^^^^^^^^
 
 7 October 2023
 --------------
@@ -740,6 +746,9 @@ I think the next semantic to port would be :doc:`lazy evaluation <lazy>`.
 Without :doc:`strictness analysis <strict>`, I expect it would slow things down considerably.
 So it will soon be time to make a strictness pass.
 
+November 2023
+^^^^^^^^^^^^^
+
 2 November 2023
 ---------------
 
@@ -1087,7 +1096,7 @@ we should just use a cryptographically-secure generator for everything.
 There is no *significant* performance advantage to the unsecure generators,
 and there *are* significant problems. So I checked out a few options and
 settled on implementing ChaCha20 as a random bit generator.
-I followed `RFC 7593<https://datatracker.ietf.org/doc/rfc7539/>`_.
+I followed `RFC 7593 <https://datatracker.ietf.org/doc/rfc7539/>`_.
 The standard test vectors now run when you start the VM without any arguments.
 
 Incidentally, this means Sophie's VM now has a platform dependency and an
@@ -1171,6 +1180,9 @@ You know that thing in the VM which reads almost-bytecode and translates it into
 "Assemble" is a better description of that than "compile".
 From now on it's called "assembler" instead of "compiler".
 All relevant C source code is changed to match.
+
+December 2023
+^^^^^^^^^^^^^
 
 1 December 2023
 ---------------
@@ -1343,3 +1355,42 @@ I worked on the VM's game adapter. It:
 
 Probably the next step will be actual graphics.
 I'll have to sleep on that.
+
+16 December 2023
+----------------
+
+Wow! It's been precisely three months since starting this harebrained project.
+It's time for a retrospective:
+
+* A surprising amount works.
+* There is infinity left to do.
+
+-----
+
+The graphics display problem highlights some tedium in bridging the gap between C and Sophie.
+I expect I'll end up creating a "display proxy" actor with native methods aimed at rendering things.
+It's all about reading data (not composing it) so the native methods can take advantage of known layout.
+But there's a fair bit to know, and there will be ever more as the ``pic`` type gains
+cases to cover more graphics primitives.
+
+As I move forward with this, I begin to see systematic repetition.
+(That's one sign of an incomplete design.)
+Specifically, the "system actors" take a bit of ritual to set up.
+It's not too crazy for now, but it might soon merit further attention.
+What about hybrid actors with some native methods and some Sophie ones?
+Native *procedures* offer a work-around, but native *methods* might be more clear.
+They would need:
+
+* Some way to hook these up at assembly-time.
+* Either careful agreement on data layout or else some sort of dynamic linkage.
+
+There is always a risk of mis-categorized data when crossing the Sophie-C barrier.
+Something to make the FFI self-check at start-up might be nice.
+
+-----
+
+Progress achieved: The game layer emits tick events with a display-proxy actor as argument.
+This actor responds to "draw" events -- not quite yet by drawing, but it prints ``Draw `` to the console at least.
+Maybe next time I'll try interpreting ``list[pic]`` things.
+
+

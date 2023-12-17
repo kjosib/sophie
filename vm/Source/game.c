@@ -6,7 +6,6 @@
 /***********************************************************************************/
 
 typedef enum {
-	FIELD_DISPLAY,
 	ON_QUIT,
 	ON_MOUSE,
 	ON_BUTTON_DOWN,
@@ -15,30 +14,39 @@ typedef enum {
 	ON_KEY_UP,
 	ON_TICK,
 
-	NR_FIELDS,
-} EVENT_FIELD;
+	NR_GAME_FIELDS
+} GAME_FIELD;
+
+typedef enum {
+	DP_DISPLAY,
+
+	NR_DP_FIELDS
+} DISPLAY_PROXY_FIELD;
 
 typedef enum {
 	L_CARTESIAN,
 	L_MOUSE_EVENT,
 	L_BUTTON_EVENT,
 	L_KEY_EVENT,
+	LL_DISPLAY_PROXY,  // Local Linakge made here and saved for later.
+
+	NR_LINKAGES
 } LINKAGE;
 
 static Value *linkage;
 
-#define GAME AS_ACTOR(args[0])
-#define DISPLAY GAME->fields[FIELD_DISPLAY]
-#define DISPLAY_PTR ((Display*)AS_PTR(DISPLAY))
+#define SELF AS_ACTOR(args[0])
+
+#define DISPLAY_PTR ((Display*)AS_PTR(SELF->fields[DP_DISPLAY]))
 
 static Value game_on_mouse(Value *args) {
-	GAME->fields[ON_MOUSE] = args[1];
+	SELF->fields[ON_MOUSE] = args[1];
 	printValue(args[1]);
 	return NIL_VAL;
 }
 
 static Value game_on_tick(Value *args) {
-	GAME->fields[ON_TICK] = args[1];
+	SELF->fields[ON_TICK] = args[1];
 	return NIL_VAL;
 }
 
@@ -132,17 +140,54 @@ static Display *init_display(int width, int height) {
 	return display;
 }
 
-static Value game_play(Value *args) {
+/***********************************************************************************/
+
+static void push_display_proxy(int width, int height) {
+	push(GC_VAL(init_display(width, height)));
+	push(linkage[LL_DISPLAY_PROXY]);
+	make_template_from_dfn();
+	make_actor_from_template();
+}
+
+static Value dp_hgr2(Value *args) {
+	SDL_SetRenderDrawColor(DISPLAY_PTR->renderer, 96, 128, 255, 255);
+	SDL_RenderClear(DISPLAY_PTR->renderer);
+
+	SDL_RenderPresent(DISPLAY_PTR->renderer);
+	return NIL_VAL;
+}
+
+static Value dp_draw(Value *args) {
+	fputs("Draw ", stdout);
+	SDL_RenderPresent(DISPLAY_PTR->renderer);
+	return NIL_VAL;
+}
+
+static Value dp_close(Value *args) {
+	finalize_display(DISPLAY_PTR);
+	return NIL_VAL;
+}
+
+static void define_display_proxy_as_linkage() {
+	push_C_string("display");
+
+	push_C_string("DisplayProxy");
+	define_actor(NR_DP_FIELDS);
+	
+	create_native_method("draw", 1, dp_draw);
+	create_native_method("hgr2", 0, dp_hgr2);
+	create_native_method("close", 0, dp_close);
+
+	// Leave on stack for linkage.
+	assert(AS_ACTOR_DFN(linkage[LL_DISPLAY_PROXY]));
+}
+
+/***********************************************************************************/
+
+static Value game_play(Value *args) {  // ( SELF size fps -- )
 	if (is_running) {
 		crashAndBurn("Sophie does not know what it means to start a game while one is still playing");
 	}
-
-	SDL_SetMainReady();
-	if (SDL_Init(SDL_INIT_EVERYTHING) < 0) {
-		fprintf(stderr, "Failed to init SDL: %s\n", SDL_GetError());
-		exit(1);
-	}
-	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
 
 	Record *size = AS_RECORD(args[1]);
 	int width = (int)AS_NUMBER(force(size->fields[0]));
@@ -153,49 +198,57 @@ static Value game_play(Value *args) {
 	int frame_ticks = 1000 / fps;
 	int frame_wobble = 1000 % fps;
 
-	GAME->fields[FIELD_DISPLAY] = GC_VAL(init_display(width, height));
+	push_display_proxy(width, height);  // Becomes args[3]
 
-	SDL_SetRenderDrawColor(DISPLAY_PTR->renderer, 96, 128, 255, 255);
-	SDL_RenderClear(DISPLAY_PTR->renderer);
+	// Initial screen background (message)
+	dup();
+	push_C_string("hgr2");
+	bind_method_by_name();
+	enqueue_message(pop());
 
 	Uint64 next_tick = SDL_GetTicks64();
 	int wobble = 0;
 
 	for (;;) {
-		if (!IS_NIL(GAME->fields[ON_TICK])) {
-			fputs("Tick ", stdout);
+		if (!IS_NIL(SELF->fields[ON_TICK])) {
+			push(args[3]);
+			push(SELF->fields[ON_TICK]);
+			apply_bound_method();
+			enqueue_message(pop());
 		}
 
 		SDL_Event ev;
 		while (SDL_PollEvent(&ev)) {
 			switch (ev.type) {
 			case SDL_QUIT:
-				finalize_display(DISPLAY_PTR);
-				SDL_Quit();
+				push(args[3]);
+				push_C_string("close");
+				bind_method_by_name();
+				enqueue_message(pop());
 				return NIL_VAL;
 			case SDL_KEYDOWN:
 				printf("Key Symbol: %d\n", ev.key.keysym.sym);
 				break;
 			case SDL_MOUSEMOTION:
-				if (!IS_NIL(GAME->fields[ON_MOUSE])) {
+				if (!IS_NIL(SELF->fields[ON_MOUSE])) {
 					push_motion_event(&ev.motion);
-					push(GAME->fields[ON_MOUSE]);
+					push(SELF->fields[ON_MOUSE]);
 					apply_bound_method();
 					enqueue_message(pop());
 				}
 				break;
 			case SDL_MOUSEBUTTONDOWN:
-				if (!IS_NIL(GAME->fields[ON_BUTTON_DOWN])) {
+				if (!IS_NIL(SELF->fields[ON_BUTTON_DOWN])) {
 					push_button_event(&ev.button);
-					push(GAME->fields[ON_BUTTON_DOWN]);
+					push(SELF->fields[ON_BUTTON_DOWN]);
 					apply_bound_method();
 					enqueue_message(pop());
 				}
 				break;
 			case SDL_MOUSEBUTTONUP:
-				if (!IS_NIL(GAME->fields[ON_BUTTON_UP])) {
+				if (!IS_NIL(SELF->fields[ON_BUTTON_UP])) {
 					push_button_event(&ev.button);
-					push(GAME->fields[ON_BUTTON_UP]);
+					push(SELF->fields[ON_BUTTON_UP]);
 					apply_bound_method();
 					enqueue_message(pop());
 				}
@@ -206,7 +259,7 @@ static Value game_play(Value *args) {
 			}
 		}
 		drain_the_queue();
-		SDL_RenderPresent(DISPLAY_PTR->renderer);
+		
 
 
 		/*
@@ -231,14 +284,9 @@ static Value game_play(Value *args) {
 
 /***********************************************************************************/
 
-Value game_sophie_init(Value *args) {
-	// Current concept is to pass needed pure-Sophie symbols on the stack.
-	assert(args + 5 == vm.stackTop);
-	linkage = args;
-
-	// Push additional field names here...
+static void define_event_loop_as_global() {
+	// Push field names here...
 	// Works much like defining a constructor.
-	push_C_string("display");
 	push_C_string("on_quit");
 	push_C_string("on_mouse");
 	push_C_string("on_button_down");
@@ -248,23 +296,44 @@ Value game_sophie_init(Value *args) {
 	push_C_string("on_tick");
 
 	push_C_string("SDL_GameLoop"); // Implements the GameLoop interface.
-	define_actor(NR_FIELDS);  // Will need fields soon enough at least for main display.
+	define_actor(NR_GAME_FIELDS);  // Will need fields soon enough at least for main display.
 
 	// Continue to follow the trail forged by the console-actor:
 
-	native_create_method("on_mouse", 1, game_on_mouse);
-	native_create_method("on_tick", 1, game_on_tick);
-	native_create_method("play", 2, game_play);
+	create_native_method("on_mouse", 1, game_on_mouse);
+	create_native_method("on_tick", 1, game_on_tick);
+	create_native_method("play", 2, game_play);
 
 	Value dfn = pop();
-	for (int i = 0; i < NR_FIELDS; i++) push(NIL_VAL);
+	for (int i = 0; i < NR_GAME_FIELDS; i++) push(NIL_VAL);
 	push(dfn);
 	make_template_from_dfn();
 	make_actor_from_template();
 
 	push_C_string("events");
 	defineGlobal();
+}
 
+Value game_sophie_init(Value *args) {
+	// Current concept is to pass needed pure-Sophie symbols on the stack.
+	assert(args + LL_DISPLAY_PROXY == vm.stackTop);
+	linkage = args;
+
+	define_display_proxy_as_linkage();
+	define_event_loop_as_global();
+
+	SDL_SetMainReady();
+	if (SDL_Init(SDL_INIT_EVERYTHING) < 0) {
+		fprintf(stderr, "Failed to init SDL: %s\n", SDL_GetError());
+		exit(1);
+	}
+	if (atexit(SDL_Quit)) {
+		fprintf(stderr, "Failed to schedule SDL shut-down\n");
+		exit(1);
+	}
+	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
+
+	assert(args + NR_LINKAGES == vm.stackTop);
 	return BOOL_VAL(true);
 }
 

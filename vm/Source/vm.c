@@ -395,9 +395,8 @@ dispatch:
 		{
 			// ( actor -- bound_method )
 			// Simple approach: Push the callable and then snap these into a bound message.
-			Table *msg_handler = &AS_ACTOR(TOP)->actor_dfn->msg_handler;
-			push(tableGet(msg_handler, AS_STRING(constants[READ_BYTE()])));
-			bind_method();
+			push(constants[READ_BYTE()]);
+			bind_method_by_name();
 			NEXT;
 		}
 		case OP_TASK:
