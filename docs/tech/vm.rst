@@ -1393,4 +1393,31 @@ Progress achieved: The game layer emits tick events with a display-proxy actor a
 This actor responds to "draw" events -- not quite yet by drawing, but it prints ``Draw `` to the console at least.
 Maybe next time I'll try interpreting ``list[pic]`` things.
 
+17 December 2023
+----------------
 
+https://www.cs.rochester.edu/~scott/papers/1996_PODC_queues.pdf
+joins the bibliography. I'm nowhere near implementing threads just yet,
+but when the day comes, a good set of queues will be important.
+
+Today I got the ``fill`` operation working in the game layer.
+Now the mouse-print demo has the green background I'm used to seeing.
+In the process, I added a simple depth-first procedure to force a value and,
+if that value is a record, its fields recursively, thus to remove all thunks.
+This simplifies the code for the graphics messages.
+I thought whether that ought to happen in the the bit that enqueues messages.
+The problem is that the longest path would need to fit on the stack,
+which would probably break the "algorithm" demo.
+
+I want the contents of messages to be fully de-thunked for a couple reasons:
+
+* If some actor is composing expensive messages,
+  the costs should remain on the actor's own thread rather than
+  becoming a synchronous computation on what might be a U/I thread.
+* Regardless, thunks in messages represent a lost opportunity for parallel computing.
+
+Given experience with the console, the turtle-graphics, and the game layer,
+I'm seeing a common pattern: I tend to use lists quite a bit.
+I may end up wanting to *stream* long messages from an actor.
+
+This got weird.

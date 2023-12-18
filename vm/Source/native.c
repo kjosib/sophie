@@ -92,14 +92,8 @@ static Value str_native(Value *args) {
 
 static Value console_echo(Value *args) {
 	// Expect args[1] to be a (thunk of a) list of strings.
-	// (Eventually I'll cure the thunking problem.)
-
-	for (;;) {
-		if (IS_THUNK(args[1])) args[1] = force(args[1]);
-		if (IS_ENUM(args[1])) break;
-		String *item = AS_STRING(force(AS_RECORD(args[1])->fields[0]));
-		fputs(item->text, stdout);
-		args[1] = AS_RECORD(args[1])->fields[1];
+	FOR_LIST(args[1]) {
+		fputs(AS_STRING(LIST_HEAD(args[1]))->text, stdout);
 	}
 
 	return NIL_VAL;

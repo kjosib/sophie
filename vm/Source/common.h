@@ -329,6 +329,10 @@ void apply_constructor();
 extern GC_Kind KIND_Constructor;
 extern GC_Kind KIND_Record;
 
+static inline bool is_record(Value value) {
+	return (value.type == VAL_GC) && (&KIND_Record == AS_GC(value)->kind);
+}
+
 /* actor.h */
 
 typedef struct {
@@ -418,7 +422,7 @@ Value run(Closure *closure);
 void perform(Value action);
 
 static inline void push(Value value) {
-	assert(vm.stackTop >= vm.stack);
+	assert(vm.stackTop < &vm.stack[STACK_MAX]);
 	*vm.stackTop = value;
 	vm.stackTop++;
 }
@@ -446,6 +450,10 @@ void defineGlobal();  // ( value name -- )
 void vm_capture_preamble_specials(Table *globals);
 __declspec(noreturn) void vm_panic(const char *format, ...);
 
+// Force whatever object is at top-of-stack recursively until it reaches no thunks.
+// Handy for FFI things, but beware of limited stack depth.
+void force_deeply();
+
 /* native.h */
 
 typedef Value(*NativeFn)(Value *args);
@@ -462,6 +470,10 @@ typedef struct {
 void install_native_functions();
 void create_native_function(const char *name, byte arity, NativeFn function);  // ( -- )
 void create_native_method(const char *name, byte arity, NativeFn function);  // ( ActorDfn -- ActorDfn )
+
+// Macro for easier list-enumeration.
+#define FOR_LIST(arg) for (;arg = force(arg),!IS_ENUM(arg);arg = AS_RECORD(arg)->fields[1])
+#define LIST_HEAD(arg) force(AS_RECORD(arg)->fields[0])
 
 /* ffi.h */
 
