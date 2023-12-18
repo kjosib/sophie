@@ -371,9 +371,8 @@ dispatch:
 		}
 		case OP_FIELD:
 		{
-			assert(TOP.type == VAL_GC);
+			assert(is_record(TOP));
 			Record *record = AS_RECORD(TOP);
-			assert(record->header.kind == &KIND_Record);
 			Table *field_offset = &record->constructor->field_offset;
 			int offset = tableGet(field_offset, AS_STRING(constants[READ_BYTE()])).as.tag;
 			TOP = record->fields[offset];
@@ -456,3 +455,19 @@ Value force(Value value) {
 	else return value;
 }
 
+void force_deeply() {
+	// Force whatever object is at top-of-stack recursively until it reaches no thunks.
+	// Could overflow the stack unfurling an infinite structure. Don't do this repeatedly.
+	// The message-passing subsystem might adopt this soon, perhaps before enqueue...
+	TOP = force(TOP);
+	if (is_record(TOP)) {
+		int nr_fields = AS_RECORD(TOP)->constructor->nr_fields;
+		for (int i = 0; i < nr_fields; i++) {
+			if (IS_THUNK(AS_RECORD(TOP)->fields[i])) {
+				push(AS_RECORD(TOP)->fields[i]);
+				force_deeply();
+				AS_RECORD(TOP)->fields[i] = pop();
+			}
+		}
+	}
+}

@@ -24,6 +24,12 @@ typedef enum {
 } DISPLAY_PROXY_FIELD;
 
 typedef enum {
+	PIC_FILL,
+	PIC_HLIN,
+	PIC_VLIN,
+} TAG_PIC;
+
+typedef enum {
 	L_CARTESIAN,
 	L_MOUSE_EVENT,
 	L_BUTTON_EVENT,
@@ -149,16 +155,32 @@ static void push_display_proxy(int width, int height) {
 	make_actor_from_template();
 }
 
-static Value dp_hgr2(Value *args) {
-	SDL_SetRenderDrawColor(DISPLAY_PTR->renderer, 96, 128, 255, 255);
-	SDL_RenderClear(DISPLAY_PTR->renderer);
+static void set_sdl_color(SDL_Renderer *renderer, Record *color) {
+	Uint8 red = (Uint8)(AS_NUMBER(color->fields[0]));
+	Uint8 green = (Uint8)(AS_NUMBER(color->fields[1]));
+	Uint8 blue = (Uint8)(AS_NUMBER(color->fields[2]));
+	SDL_SetRenderDrawColor(renderer, red, green, blue, SDL_ALPHA_OPAQUE);
+}
 
-	SDL_RenderPresent(DISPLAY_PTR->renderer);
-	return NIL_VAL;
+static void dp_draw_fill(SDL_Renderer *renderer) {
+	set_sdl_color(renderer, AS_RECORD(AS_RECORD(TOP)->fields[0]));
+	SDL_RenderClear(renderer);
 }
 
 static Value dp_draw(Value *args) {
-	fputs("Draw ", stdout);
+	FOR_LIST(args[1]) {
+		push(LIST_HEAD(args[1]));  // Becomes args[2]
+		assert(VAL_GC == TOP.type);
+		force_deeply();
+		switch (AS_RECORD(TOP)->constructor->tag) {
+		case PIC_FILL:
+			dp_draw_fill(DISPLAY_PTR->renderer); break;
+		default:
+			printf("Draw %d ", AS_RECORD(args[2])->constructor->tag);
+		}
+		pop();
+	}
+	
 	SDL_RenderPresent(DISPLAY_PTR->renderer);
 	return NIL_VAL;
 }
@@ -175,7 +197,6 @@ static void define_display_proxy_as_linkage() {
 	define_actor(NR_DP_FIELDS);
 	
 	create_native_method("draw", 1, dp_draw);
-	create_native_method("hgr2", 0, dp_hgr2);
 	create_native_method("close", 0, dp_close);
 
 	// Leave on stack for linkage.
@@ -199,12 +220,6 @@ static Value game_play(Value *args) {  // ( SELF size fps -- )
 	int frame_wobble = 1000 % fps;
 
 	push_display_proxy(width, height);  // Becomes args[3]
-
-	// Initial screen background (message)
-	dup();
-	push_C_string("hgr2");
-	bind_method_by_name();
-	enqueue_message(pop());
 
 	Uint64 next_tick = SDL_GetTicks64();
 	int wobble = 0;
