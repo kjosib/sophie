@@ -1,0 +1,19 @@
+# Sophie includes a cute language feature called "assume":
+# It lets you declare default type-annotations for formal-parameters
+# by name, module-wide. Function signatures get shorter and nimbler,
+# but the design decision is still captured and checked automatically.
+
+# This module uses the feature specifically to trigger an error.
+
+assume:
+
+rope, twine: string;
+
+define:
+
+implicitly(rope) = rope;
+
+begin:
+
+implicitly("xyz");  # Pass type check; rope is assumed to be a string.
+implicitly(24576);  # Fail type check; rope is not expected to be a number.
