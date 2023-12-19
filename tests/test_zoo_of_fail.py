@@ -101,6 +101,8 @@ class ZooOfFail(unittest.TestCase):
 			"omega",
 			"undefined_comparison",
 			"wrong_arity",
+			"signature_violation_1",
+			"assume_incorrectly",
 		])
 	
 	def test_07_import(self):

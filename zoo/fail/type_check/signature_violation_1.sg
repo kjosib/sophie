@@ -1,0 +1,23 @@
+# Sophie's type-checker must respect signature annotations,
+# even when they are not the most-general-type for a function.
+
+# This checks that type annotations on formal parameters have teeth.
+# A mismatched argument yields a diagnostic message, even if the callee's
+# body-expression would have worked with some given actual argument.
+
+type:
+
+pizza is (bread: string, toppings:string);     # Two structurally
+sandwich is (bread: string, toppings:string);  # identical records
+
+define:
+
+picky_eater(food:pizza) = food.toppings;
+# Despite the fact that the body-expression would work equally with pizza or a sandwich,
+# this must reject sandwiches because this picky eater has annotated a demand for pizza.
+
+begin:
+
+picky_eater(pizza("deep dish crust", "anchovies and onions")); # Pass type checking 
+picky_eater(sandwich("cibatta", "spinach and feta")); # Fail type checking
+
