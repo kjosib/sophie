@@ -11,15 +11,15 @@ class TooManyIssues(Exception):
 	pass
 
 def _outburst():
-	particle = ["Oh, ", "Well, ", "", ""]
+	particle = ["Oh, ", "Well, ", "Aw, ", "", ""]
 	
 	minced_oaths = [
-		'Ack', 'ARGH', 'Aw, SNAP', 'Blargh', 'Blasted Thing',
+		'Ack', 'ARGH', 'Blargh', 'Blasted Thing',
 		'Confound it', 'Crud', 'Crud', 'Curses', "Crikey", "Cheese and Rice all Friday", 
 		'Dag Blammit', 'Dag Nabbit', 'Darkness Everywhere', 'Drat',
 		'Fiddlesticks', 'Flaming Flamingos',
 		'Gack', 'Good Grief', 'Golly Gee Willikers', 'Great Googly Moogly', "Great Scott",
-		"Snot", "Sweet Cheese and Crackers",
+		'SNAP', "Snot", "Sweet Cheese and Crackers",
 		"Infernal Tarnation", 'Jeepers', 'Heavens', "Heavens to Betsy",
 		"Mercy", 'Nuts', 'Rats',
 		'Whiskey Tango ....', 'Wretch it all', 'Woe be unto me', 'Woe is me',
