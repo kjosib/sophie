@@ -1,13 +1,13 @@
 from ..runtime import force, iterate_list
-from ..scheduler import NativeObjectProxy, MAIN_QUEUE
+from ..scheduler import NativeObjectProxy, MAIN_QUEUE, SimpleTask
 import turtle, tkinter
 
 def sophie_init():
 	return {'drawing':some_turtle_graphics}
 
 def some_turtle_graphics(env, drawing):
-	worker.accept_message("draw", (env, drawing))
-	MAIN_QUEUE.await_completion()
+	task = SimpleTask(worker.accept_message, "draw", (env, drawing))
+	MAIN_QUEUE.execute(task)
 
 class Worker:
 	@staticmethod
