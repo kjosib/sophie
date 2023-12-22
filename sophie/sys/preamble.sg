@@ -130,9 +130,8 @@ define:
 	product(xs) = reduce(mul, 1, xs) where mul(a,b) = a*b; end product;
 	hypot(xs) = sqrt(sum(map(square, xs))) where square(x) = x*x; end hypot;
 
-	## Sophie's first namespace conflict:
-	# left(s, n) = mid(s, 0, n);
-	# right(s, n) = mid(s, len(s)-n, len(s));
+	left(s, n) = mid(s, 0, n);
+	right(s, n) = mid(s, len(s)-n, len(s));
 
 	join(ss : list[string]) : string
 	= reduce(strcat, "", ss);  # Yes, this is O(n^2). Fixing that from within is nontrivial.
