@@ -509,6 +509,7 @@ ImportDirective = Union[ImportModule, ImportForeign]
 class Module:
 	imports: list[ImportModule]
 	foreign: list[ImportForeign]
+	assumptions: list[Assumption]
 	outer_functions: list[UserFunction]
 	agent_definitions: list[UserAgent]
 	op_overloads: list[OperatorOverload]
@@ -516,11 +517,12 @@ class Module:
 	source_path: Path  # Module loader fills this.
 	all_functions: list[UserFunction]  # Resolver fills this.
 
-	def __init__(self, exports:list, imports:list[ImportDirective], types:list[TypeDeclaration], assumption:list[Assumption], top_levels:list, main:list):
+	def __init__(self, exports:list, imports:list[ImportDirective], types:list[TypeDeclaration], assumptions:list[Assumption], top_levels:list, main:list):
 		self.exports = exports
 		self.imports = [i for i in imports if isinstance(i, ImportModule)]
 		self.foreign = [i for i in imports if isinstance(i, ImportForeign)]
 		self.types = types
+		self.assumptions = assumptions
 		self.outer_functions = []
 		self.agent_definitions = []
 		self.op_overloads = []

@@ -85,7 +85,6 @@ class RoadMap:
 				for alt in mx.alternatives
 			}
 
-
 class TopDown(Visitor):
 	"""
 	Convenience base-class to handle the dreary bits of a
@@ -161,12 +160,19 @@ class _WordDefiner(_ResolutionPass):
 
 	Attaches NameSpace objects in key places and install definitions.
 	Takes note of names with more than one definition in the same scope.
+	
+	Also, this pass will connect "assume" types to formal-parameters that lack annotations.
+	This is done by modifying the AST in-place, as if the programmer put the annotation directly.
 	"""
+	assume: NS
+	
 	def visit_Module(self):
 		module = self.module
 		for d in module.imports: self.visit_ImportModule(d)
 		for td in module.types: self.visit(td)
 		for d in module.foreign: self.visit_ImportForeign(d)
+		self.assume = NS(place=module.source_path)
+		for a in module.assumptions: self.visit_Assumption(a)
 		# Can't iterate all-functions yet; must build it first.
 		for fn in module.outer_functions:
 			self.visit(fn, self.globals)
@@ -231,6 +237,12 @@ class _WordDefiner(_ResolutionPass):
 		for a in it.arguments:
 			self.visit(a, env)
 
+	def visit_Assumption(self, a:syntax.Assumption):
+		""" Update the self.assume namespace accordingly. """
+		for nom in a.names:
+			fp = syntax.FormalParameter(nom, a.type_expr)
+			self._install(self.assume, fp)
+
 	def visit_UserFunction(self, udf:syntax.UserFunction, env:NS):
 		udf.source_path = self.module.source_path
 		self.module.all_functions.append(udf)
@@ -262,6 +274,8 @@ class _WordDefiner(_ResolutionPass):
 	
 	def visit_FormalParameter(self, fp:syntax.FormalParameter, env:NS):
 		self._install(env, fp)
+		if fp.type_expr is None and fp.nom.key() in self.assume.local:
+			fp.type_expr = self.assume.local[fp.nom.key()].type_expr
 		if fp.type_expr is not None:
 			self.visit(fp.type_expr, env)
 
@@ -352,6 +366,9 @@ class _WordResolver(_ResolutionPass):
 	That is, a corresponding definition-object is in scope. It may not make sense,
 	or be the right kind of name, but at least it's not an obvious misspelling.
 	
+	There is a subtle open question: Do assumed-types share a common namespace for parameters,
+	or do we take the parameter-names as if they appeared textually in the signature?
+	
 	This will not be able to handle field-access (or keyword-args, etc) in the first instance,
 	because those depend on some measure of type resolution. And to keep things simple,
 	I'm going to worry about that part in a separate pass.
@@ -364,7 +381,7 @@ class _WordResolver(_ResolutionPass):
 	
 	dubious_constructors: list[syntax.Reference]
 	_current_uda = None
-
+	
 	def visit_Module(self):
 		self.dubious_constructors = []
 		module = self.module
@@ -548,7 +565,9 @@ class _AliasChecker(Visitor):
 		self.visit(ta.body, False)
 	
 	def visit_TypeCall(self, tc:syntax.TypeCall, allow_elide:bool):
-		assert tc not in self.graph
+		if tc in self.graph:
+			# This happens when more than one function picks up the same assumption.
+			return
 		self.graph[tc] = edges = list(tc.arguments)
 		referent = tc.ref.dfn
 		if isinstance(referent, syntax.TypeDeclaration):
