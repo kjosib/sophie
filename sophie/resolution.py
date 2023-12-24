@@ -99,7 +99,7 @@ class TopDown(Visitor):
 	def visit_Absurdity(self, absurd: syntax.Absurdity, env): pass
 	def visit_Literal(self, l:syntax.Literal, env): pass
 	def visit_Skip(self, s:syntax.Skip, env): pass
-	def visit_ImplicitType(self, it:syntax.ImplicitTypeVariable, env): pass
+	def visit_ImplicitTypeVariable(self, it:syntax.ImplicitTypeVariable, env): pass
 
 	def visit_ShortCutExp(self, it: syntax.ShortCutExp, env):
 		self.visit(it.lhs, env)
@@ -623,8 +623,8 @@ class _AliasChecker(Visitor):
 	def visit_MessageSpec(self, ms: syntax.MessageSpec, allow_elide:bool):
 		self._tour(ms.type_exprs, allow_elide)
 
-	def visit_ExplicitTypeVariable(self, expr:syntax.ExplicitTypeVariable): pass
-	def visit_ImplicitTypeVariable(self, it:syntax.ImplicitTypeVariable): pass
+	def visit_ExplicitTypeVariable(self, expr:syntax.ExplicitTypeVariable, allow_elide:bool): pass
+	def visit_ImplicitTypeVariable(self, it:syntax.ImplicitTypeVariable, allow_elide:bool): pass
 
 	def visit_UserFunction(self, sym:syntax.UserFunction):
 		self._tour(sym.params, True)
