@@ -83,6 +83,13 @@ type:
 		random(!(number));
 	end;
 
+assume:
+    xs, ys: list[?];
+    xss: list[list[?]];
+    predicate: (?)->flag;
+    n: number;
+    s: string;
+
 define:
 
 	id(x) = x;
@@ -144,6 +151,6 @@ define:
 
 	EOL = chr(10);
 	
-	log_base(x, base) = log(x) / log(base);
+	log_base(n, base) = log(n) / log(base);
 
 end.
