@@ -141,5 +141,6 @@ Instruction instruction[] = {
 	[OP_PERFORM_EXEC] = {"PERFORM_EXEC", &modeSimple},
 	[OP_SKIP] = {"SKIP", &modeSimple},
 
+	[OP_CAST] = {"CAST", &modeSimple},
 };
 

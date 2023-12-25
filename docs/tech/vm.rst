@@ -1421,3 +1421,20 @@ I'm seeing a common pattern: I tend to use lists quite a bit.
 I may end up wanting to *stream* long messages from an actor.
 
 This got weird.
+
+24 December 2023
+----------------
+
+Made some progress toward being able to compile and use user-defined actors with the VM.
+It's not complete yet, but at least it is no longer a crash bug.
+The unit tests now also run all the examples through the translator.
+
+The assembler now uses a specific delimiter to tell when global functions are done.
+The first element of the ``begin:`` block for the mouse-chaser example was a do-block.
+These compile as functions inline.
+But the assembler considers the initial consecutive sequence of functions as all belonging to the global scope.
+This had me flummoxed for longer than I'd care to admit chasing down the weird consequence of a stack underflow:
+The first VM instruction to execute was consuming the wrong thing.
+
+This convinces me that it's time the assembler did its own stack analysis on functions.
+(This would probably prevent similar problems in the future.)

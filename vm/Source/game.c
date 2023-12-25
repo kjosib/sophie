@@ -200,7 +200,7 @@ static void define_display_proxy_as_linkage() {
 	create_native_method("close", 0, dp_close);
 
 	// Leave on stack for linkage.
-	assert(AS_ACTOR_DFN(linkage[LL_DISPLAY_PROXY]));
+	assert(is_actor_dfn(linkage[LL_DISPLAY_PROXY]));
 }
 
 /***********************************************************************************/
@@ -220,6 +220,7 @@ static Value game_play(Value *args) {  // ( SELF size fps -- )
 	int frame_wobble = 1000 % fps;
 
 	push_display_proxy(width, height);  // Becomes args[3]
+	assert(is_actor(args[3]));
 
 	Uint64 next_tick = SDL_GetTicks64();
 	int wobble = 0;
@@ -349,6 +350,8 @@ Value game_sophie_init(Value *args) {
 	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
 
 	assert(args + NR_LINKAGES == vm.stackTop);
+	assert(is_actor_dfn(linkage[LL_DISPLAY_PROXY]));
+
 	return BOOL_VAL(true);
 }
 

@@ -86,7 +86,11 @@ class VMScope:
 
 	def declare(self, symbol: ontology.Symbol):
 		MANGLED[symbol] = self._prefix + symbol.nom.text
-
+	
+	def declare_several(self, symbols: Iterable[ontology.Symbol]):
+		for sym in symbols:
+			self.declare(sym)
+	
 class VMGlobalScope(VMScope):
 	""" Mainly a null-object that encloses a nest of scopes without itself being enclosed. """
 	
@@ -138,6 +142,13 @@ class VMFunctionScope(VMScope):
 		assert symbol not in self._local
 		self._local[symbol] = self._depth
 		
+	def enter_do_block(self):
+		self._push()
+		inner = VMFunctionScope(self, "do", is_thunk=False)
+		inner.nl()
+		emit('{ 0 "do"')
+		return inner
+
 	def load(self, symbol: ontology.Symbol):
 		if symbol in self._local:
 			frame_offset = self._local[symbol]
@@ -346,13 +357,18 @@ class Translation(Visitor):
 		# Write all types:
 		for scope, module in each_piece(roadmap):
 			self.write_records(module.types, scope)
+			scope.declare_several(module.agent_definitions)
 		
 		# Write all functions (including FFI):
 		for scope, module in each_piece(roadmap):
 			self.mangle_foreign_symbols(module.foreign)
 			self.write_functions(module.outer_functions, scope)
+			self.write_actors(module.agent_definitions, scope)
 			self.write_ffi_init(module.foreign)
 		
+		# Delimiter so it's possible to start with a do-block:
+		emit(".")
+
 		# Write all begin-expressions:
 		for scope, module in each_piece(roadmap):
 			inner = VMFunctionScope(scope, "[BEGIN]", is_thunk=True)
@@ -375,8 +391,8 @@ class Translation(Visitor):
 		write_record(r.spec.field_names(), r, 0)
 		
 	def visit_Variant(self, variant:syntax.Variant, scope:VMGlobalScope):
+		scope.declare_several(variant.subtypes)
 		for tag, st in enumerate(variant.subtypes):
-			scope.declare(st)
 			self._tag_map[variant, st.nom.key()] = tag
 			if isinstance(st.body, syntax.RecordSpec):
 				write_record(st.body.field_names(), st, tag)
@@ -403,10 +419,13 @@ class Translation(Visitor):
 					emit(quote(MANGLED[ref.dfn]))
 				emit(";")
 	
+	def write_actors(self, agent_definitions:list[syntax.UserAgent], outer:VMScope):
+		# TODO: designate IL syntax for this.
+		pass
+	
 	def write_functions(self, fns, outer:VMScope):
 		if not fns: return
-		for fn in fns:
-			outer.declare(fn)
+		outer.declare_several(fns)
 		emit("{")
 		last = fns[-1]
 		for fn in fns:
@@ -575,9 +594,13 @@ class Translation(Visitor):
 		emit("BIND", quote(expr.method_name.key()))
 
 	def visit_DoBlock(self, do:syntax.DoBlock, outer:VMFunctionScope):
-		inner = VMFunctionScope(outer, "do", is_thunk=False)
-		inner.nl()
-		emit('{ 0 "do"')
+		inner = outer.enter_do_block()
+		for agent in do.agents:
+			inner.alias(agent)
+			self.force(agent.expr, inner)
+			# At this point a template is on the stack.
+			emit("CAST")
+			
 		depth = inner.depth()
 		for step in do.steps[:-1]:
 			self.force(step, inner)
