@@ -49,6 +49,8 @@ typedef enum {
 	OP_PERFORM,
 	OP_PERFORM_EXEC,
 	OP_SKIP,
+	
+	OP_CAST,
 
 	NR_OPCODES,
 } OpCode;

@@ -383,6 +383,9 @@ void drain_the_queue();
 #define AS_ACTOR(value) ((Actor*)AS_PTR(value))
 #define AS_MESSAGE(value) ((Message*)AS_PTR(value))
 
+bool is_actor_dfn(Value v);
+bool is_actor_tpl(Value v);
+bool is_actor(Value v);
 
 /* vm.h */
 

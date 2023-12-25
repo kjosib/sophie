@@ -156,6 +156,7 @@ static GC_Kind KIND_ActorTpl = {
 };
 
 void make_template_from_dfn() {
+	assert(is_actor_dfn(TOP));
 	size_t nr_fields = AS_ACTOR_DFN(TOP)->nr_fields;
 	size_t payload_size = nr_fields * sizeof(Value);
 	ActorTemplate *tpl = gc_allocate(&KIND_ActorTpl, sizeof(ActorTemplate) + payload_size);
@@ -187,6 +188,10 @@ static GC_Kind KIND_Actor = {
 	.size = size_actor,
 };
 
+bool is_actor_dfn(Value v) { return IS_GC_ABLE(v) && &KIND_ActorDef == AS_GC(v)->kind; }
+bool is_actor_tpl(Value v) { return IS_GC_ABLE(v) && &KIND_ActorTpl == AS_GC(v)->kind; }
+bool is_actor(Value v) { return IS_GC_ABLE(v) && &KIND_Actor == AS_GC(v)->kind; }
+
 void make_actor_from_template() {
 	size_t nr_fields = AS_ACTOR_TPL(TOP)->actor_dfn->nr_fields;
 	size_t payload_size = nr_fields * sizeof(Value);
@@ -210,6 +215,10 @@ static GC_Kind KIND_bound = {
 };
 
 void bind_method_by_name() {  // ( actor message_name -- bound_method )
+	assert(IS_GC_ABLE(SND));
+	assert(AS_GC(SND)->kind == &KIND_Actor);
+	assert(IS_GC_ABLE(TOP));
+	assert(is_string(AS_GC(TOP)));
 	Message *bound = gc_allocate(&KIND_bound, sizeof(Message));
 	Actor *self = bound->self = AS_ACTOR(SND);
 	bound->callable = tableGet(&self->actor_dfn->msg_handler, AS_STRING(TOP));

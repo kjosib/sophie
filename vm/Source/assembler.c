@@ -292,7 +292,8 @@ static void parseScript() {
 		}
 		else if (predictToken(TOKEN_LEFT_BRACE)) parse_global_functions();
 		else if (maybe_token(TOKEN_BANG)) parse_ffi_init();
-		else break;
+		else if (maybe_token(TOKEN_DOT)) break;
+		else errorAtCurrent("Missing section delimiter (period).");
 	}
 	initChunk(&current->chunk);
 	push(GC_VAL(import_C_string("<script>", 8)));
