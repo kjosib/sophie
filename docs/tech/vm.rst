@@ -1438,3 +1438,15 @@ The first VM instruction to execute was consuming the wrong thing.
 
 This convinces me that it's time the assembler did its own stack analysis on functions.
 (This would probably prevent similar problems in the future.)
+
+27 December 2023
+----------------
+
+I briefly had Sophie emitting pseudo-assembler for user-defined actors,
+but I realized there was a distinct problem: Assignment.
+Specifically, I'd like to compile assignment inline rather than
+making it have to be like a thunk. But that would break assumptions
+about how to compile ``do``-blocks.
+After a bit of chat on the programming-languages discord,
+I decided to change the translator to use richer context and exploit polymorphism to do it.
+This will take more time than I can put to it in one sitting, so no commit tonight. 
