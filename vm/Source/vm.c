@@ -424,6 +424,9 @@ dispatch:
 		case OP_SKIP:
 			push(NIL_VAL);  // Something that will get treated as an empty action.
 			NEXT;
+		case OP_CAST:
+			make_actor_from_template();
+			NEXT;
 		default:
 			runtimeError(vpc, base, "Unrecognized instruction %d.", vpc[-1]);
 		}

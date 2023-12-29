@@ -1,5 +1,5 @@
 """
-This is still a work in progress. 
+This is *still* a work in progress.
 
 The concept here is to emit text which the VM can read as a (low-ish level) language.
 This is mostly a tree-walk (beginning in class Translation, method visit_RoadMap)
@@ -8,16 +8,10 @@ implement lazy evaluation.
 
 You can invoke this code on a Sophie program using the -x command-line flag to the main
 Sophie interpreter. That still subjects your program to all normal syntax and type checks,
-but if it passes, then emit corresponding heaps of VM code on standard output.
-
-Major current holes:
-
-1. No support for module name-spacing yet.
-2. No support for actor-model stuff yet.
-
+but if that passes, then you get corresponding VM intermediate code on standard output.
 """
 
-from typing import Iterable, Optional
+from typing import Iterable, Optional, Sequence
 from boozetools.support.foundation import Visitor
 from . import syntax, ontology
 from .resolution import RoadMap
@@ -84,6 +78,9 @@ class VMScope:
 	def emit_captured(self, captives: list[Optional[ontology.Symbol]]):
 		raise NotImplementedError(type(self))
 
+	def member_number(self, field:str):
+		raise NotImplementedError(type(self))
+
 	def declare(self, symbol: ontology.Symbol):
 		MANGLED[symbol] = self._prefix + symbol.nom.text
 	
@@ -101,6 +98,37 @@ class VMGlobalScope(VMScope):
 		for sym in captives:
 			assert sym is None
 			emit("*")
+
+	def write_begin_expressions(self, module: syntax.Module):
+		inner = VMFunctionScope(self, "[BEGIN]", is_thunk=True)
+		for index, expr in enumerate(module.main):
+			inner.nl()
+			FORCE.visit(expr, inner)
+			inner.display()
+
+class VMActorScope(VMScope):
+	""" Specialized scope for the behaviors of an actor-definition """
+	def __init__(self, outer:VMScope, dfn:syntax.UserAgent):
+		super().__init__(outer._prefix + dfn.nom.text + ":")
+		self._outer = outer
+		self.indent = outer.indent+"  "
+		emit("<", *dfn.field_names(), quote(MANGLED[dfn]))
+		self._field_map = {field:i for i,field in enumerate(dfn.field_names())}
+
+	def capture(self, symbol: ontology.Symbol) -> bool:
+		return False
+
+	def emit_captured(self, captives: list[ontology.Symbol]):
+		assert not captives
+	
+	def member_number(self, field: str):
+		return self._field_map[field]
+
+_do_count = 0
+def _gensym():
+	global _do_count
+	_do_count += 1
+	return "do:"+str(_do_count)
 
 class VMFunctionScope(VMScope):
 	""" Encapsulates VM mechanics around the stack, parameters, closure capture, jumps, etc. """
@@ -142,11 +170,12 @@ class VMFunctionScope(VMScope):
 		assert symbol not in self._local
 		self._local[symbol] = self._depth
 		
-	def enter_do_block(self):
+	def enter_gensym(self):
 		self._push()
-		inner = VMFunctionScope(self, "do", is_thunk=False)
+		name = _gensym()
+		inner = VMFunctionScope(self, name, is_thunk=False)
 		inner.nl()
-		emit('{ 0 "do"')
+		emit("{", 0, quote(name))
 		return inner
 
 	def load(self, symbol: ontology.Symbol):
@@ -204,6 +233,7 @@ class VMFunctionScope(VMScope):
 		return label
 	
 	def come_from(self, label):
+		if label is None: return
 		emit("come_from", label)
 		(source, depth) = LABEL_MAP.pop(label)
 		assert source is self, "Improper Come-From"
@@ -213,10 +243,11 @@ class VMFunctionScope(VMScope):
 			assert self._depth == depth, "Inconsistent Come-From %d != %d"%(self._depth, depth)
 		LABEL_QUEUE.append(label)
 
-	def emit_preamble(self, fn:syntax.UserFunction):
-		emit(len(fn.params))
-		emit(quote(MANGLED[fn]))
-		for param in fn.params:
+	def emit_preamble(self, params:Sequence[syntax.FormalParameter], name:str):
+		self.nl()
+		emit(len(params))
+		emit(quote(name))
+		for param in params:
 			self.declare(param)
 
 	def emit_epilogue(self):
@@ -247,16 +278,22 @@ class VMFunctionScope(VMScope):
 			emit("ASCEND", self._depth - depth)
 			self._depth = depth
 	
-	def emit_call(self, tail, arity):
-		if tail:
-			self.emit_exec()
-		else:
-			emit("CALL")
-			self._depth -= arity
+	def emit_call(self, arity):
+		emit("CALL")
+		self._depth -= arity
 	
 	def emit_pop(self):
 		emit("POP")
 		self._pop()
+	
+	def emit_drop(self, how_many:int):
+		assert how_many >= 0
+		if self._depth is not None:
+			if how_many == 1:
+				self.emit_pop()
+			elif how_many > 1:
+				emit("DROP", how_many)
+				self._depth -= how_many
 
 	def emit_perform(self):
 		emit("PERFORM")
@@ -295,7 +332,7 @@ class VMFunctionScope(VMScope):
 		self._depth = None
 
 	@staticmethod
-	def emit_field(key):
+	def emit_read_field(key):
 		emit("FIELD", quote(key))
 	
 	def emit_ALU(self, glyph):
@@ -303,15 +340,27 @@ class VMFunctionScope(VMScope):
 		emit(opcode)
 		self._depth += stack_effect
 	
-	def make_thunk(self, xlat, expr):
+	def make_thunk(self, expr):
 		# Implicitly makes a THUNK instruction in the containing function.
 		self._thunk_count += 1
 		emit("[")
 		inner = VMFunctionScope(self, str(self._thunk_count) + "_", is_thunk=True)
-		xlat.tail_call(expr, inner)
+		TAIL.visit(expr, inner)
 		inner.emit_epilogue()
 		emit("]")
 		self._push()
+	
+	def emit_assign_member(self, field: str):
+		emit("ASSIGN", self.member_number(field))
+		self._pop()
+
+	def emit_read_member(self, field: str):
+		emit("MEMBER", self.member_number(field))
+		self._push()
+		
+	def member_number(self, field: str):
+		return self._outer.member_number(field)
+
 
 def write_record(names:Iterable[str], symbol:ontology.Symbol, tag:int):
 	emit("(")
@@ -349,35 +398,345 @@ def each_piece(roadmap:RoadMap):
 	for index, module in enumerate(roadmap.each_module):
 		yield VMGlobalScope(str(index+1) + ":"), module
 
-class Translation(Visitor):
-	def __init__(self):
-		self._tag_map = {}  # For compiling type-cases.  
-	
-	def visit_RoadMap(self, roadmap:RoadMap):
-		# Write all types:
-		for scope, module in each_piece(roadmap):
-			self.write_records(module.types, scope)
-			scope.declare_several(module.agent_definitions)
-		
-		# Write all functions (including FFI):
-		for scope, module in each_piece(roadmap):
-			self.mangle_foreign_symbols(module.foreign)
-			self.write_functions(module.outer_functions, scope)
-			self.write_actors(module.agent_definitions, scope)
-			self.write_ffi_init(module.foreign)
-		
-		# Delimiter so it's possible to start with a do-block:
-		emit(".")
+_TAG_MAP = {}  # For compiling type-cases.
 
-		# Write all begin-expressions:
-		for scope, module in each_piece(roadmap):
-			inner = VMFunctionScope(scope, "[BEGIN]", is_thunk=True)
-			self.visit_Module(module, inner)
-	
-	def visit_Module(self, module:syntax.Module, scope:VMFunctionScope):
-		for index, expr in enumerate(module.main):
-			self.write_begin_expression(expr, scope)
+class Context(Visitor):
+	"""
+	The best way to compile something can depend on context.
+	Rather than pass a ton of flags around,
+	it's polymorphism to the rescue!
 
+	(This may merit reconsideration for a pure-functional approach.)
+	"""
+	
+	def call(self, scope: VMFunctionScope, arity:int):
+		""" Called at the end of a call. """
+		raise NotImplementedError(type(self))
+
+	@staticmethod
+	def visit_Absurdity(_: syntax.Absurdity, scope: VMFunctionScope):
+		scope.emit_panic()
+
+class LazyContext(Context):
+	@staticmethod
+	def visit_FieldReference(fr: syntax.FieldReference, scope: VMFunctionScope):
+		if fr.is_volatile or is_eager(fr.lhs): FORCE.visit(fr, scope)
+		else: scope.make_thunk(fr)
+	
+	@staticmethod
+	def _thunk_it(expr:syntax.ValExpr, scope: VMFunctionScope):
+		if expr.is_volatile: FORCE.visit(expr, scope)
+		scope.make_thunk(expr)
+	
+	visit_Call = _thunk_it
+	visit_BinExp = _thunk_it
+	visit_UnaryExp = _thunk_it
+	visit_ShortCutExp = _thunk_it
+	visit_Cond = _thunk_it
+	visit_MatchExpr = _thunk_it
+	visit_AsTask = _thunk_it
+	visit_BindMethod = _thunk_it
+	
+	@staticmethod
+	def _force_it(expr:syntax.ValExpr, scope: VMFunctionScope):
+		FORCE.visit(expr, scope)
+	
+	visit_Literal = _force_it
+	visit_Lookup = _force_it
+	visit_ExplicitList = _force_it
+
+class EagerContext(Context):
+	"""
+	The best way to compile something can depend on context.
+	Rather than pass a ton of flags around,
+	it's polymorphism to the rescue!
+	
+	(This may merit reconsideration for a pure-functional approach.)
+	"""
+	def visit_Call(self, call: syntax.Call, scope: VMFunctionScope):
+		for arg in call.args:
+			strict = arg.is_volatile  # There could be more reasons later, e.g. stricture analysis
+			(FORCE if strict else DELAY).visit(arg, scope)
+		FORCE.visit(call.fn_exp, scope)
+		self.call(scope, len(call.args))
+	
+	def visit_MatchExpr(self, mx:syntax.MatchExpr, scope:VMFunctionScope):
+		scope.alias(mx.subject)
+		FORCE.visit(mx.subject.expr, scope)
+		depth = scope.depth()
+		nr_cases = len(mx.variant.subtypes)
+		cases = scope.cases(nr_cases)
+		after = []
+		for alt in mx.alternatives:
+			tag = _TAG_MAP[mx.variant, alt.nom.key()]
+			scope.come_from(cases[tag])
+			cases[tag] = None
+			write_functions(alt.where, scope)
+			self.visit(alt.sub_expr, scope)
+			after.append(self.sequel(scope, depth, True))
+		if mx.otherwise is not None:
+			for tag, label in enumerate(cases):
+				if label is not None:
+					scope.come_from(label)
+			self.visit(mx.otherwise, scope)
+			self.sequel(scope, depth, False)
+		for label in after:
+			scope.come_from(label)
+		pass
+	
+	@staticmethod
+	def sequel(scope:VMFunctionScope, depth:int, more:bool):
+		""" Called at the end of a consequence. """
+		raise NotImplementedError()
+
+	def visit_UnaryExp(self, ux:syntax.UnaryExp, scope:VMFunctionScope):
+		FORCE.visit(ux.arg, scope)
+		emit(UNARY_INSTRUCTION[ux.op.text])  # No change to stack depth
+		self.answer(scope)
+
+	def visit_BinExp(self, it: syntax.BinExp, scope:VMFunctionScope):
+		FORCE.visit(it.lhs, scope)
+		FORCE.visit(it.rhs, scope)
+		scope.emit_ALU(it.op.text)
+		self.answer(scope)
+
+	def visit_ShortCutExp(self, it: syntax.ShortCutExp, scope: VMFunctionScope):
+		FORCE.visit(it.lhs, scope)
+		satisfied = SHORTCUTS[it.op.text]
+		label = scope.jump_if(satisfied)
+		self.visit(it.rhs, scope)
+		scope.come_from(label)
+		self.answer(scope)
+		
+	@staticmethod
+	def answer(scope: VMFunctionScope):
+		""" Answer is on stack; now what? """
+		raise NotImplementedError()
+	
+	def visit_Literal(self, expr: syntax.Literal, scope: VMFunctionScope):
+		scope.constant(expr.value)
+		self.answer(scope)
+		
+	def visit_FieldReference(self, fr: syntax.FieldReference, scope: VMFunctionScope):
+		FORCE.visit(fr.lhs, scope)
+		if syntax.is_self_reference(fr.lhs):
+			scope.emit_read_member(fr.field_name.key())
+		else:
+			scope.emit_read_field(fr.field_name.key())
+			emit("FORCE")
+		self.answer(scope)
+	
+	def visit_ExplicitList(self, el:syntax.ExplicitList, scope:VMFunctionScope):
+		scope.emit_nil()
+		for item in reversed(el.elts):
+			DELAY.visit(item, scope)
+			scope.emit_snoc()
+		self.answer(scope)
+	
+	def visit_BindMethod(self, expr:syntax.BindMethod, scope:VMFunctionScope):
+		FORCE.visit(expr.receiver, scope)
+		emit("BIND", quote(expr.method_name.key()))
+		self.answer(scope)
+
+
+class FunctionContext(EagerContext):
+
+	def visit_DoBlock(self, do:syntax.DoBlock, outer:VMFunctionScope):
+		inner = outer.enter_gensym()
+		LAST.visit(do, inner)
+		inner.emit_epilogue()
+		emit("}")
+		self.answer(outer)
+	
+	def visit_AsTask(self, task:syntax.AsTask, scope:VMFunctionScope):
+		FORCE.visit(task.sub, scope)
+		emit("TASK")
+		self.answer(scope)
+	
+	def visit_Skip(self, _:syntax.Skip, scope:VMFunctionScope):
+		scope.emit_skip()
+		self.answer(scope)
+
+		
+class ForceContext(FunctionContext):
+	@staticmethod
+	def visit_Lookup(expr:syntax.Lookup, scope:VMFunctionScope):
+		sym = expr.ref.dfn
+		scope.load(sym)
+		if symbol_harbors_thunks(sym):
+			emit("FORCE")
+	
+	def call(self, scope: VMFunctionScope, arity:int):
+		scope.emit_call(arity)
+	
+	@staticmethod
+	def sequel(scope:VMFunctionScope, depth:int, more:bool):
+		scope.ascend_to(depth)
+		if more:
+			return scope.jump_always()
+	
+	@staticmethod
+	def answer(scope: VMFunctionScope):
+		""" Just leave the answer on the stack. """
+		pass
+
+	@staticmethod
+	def visit_Cond(cond:syntax.Cond, scope:VMFunctionScope):
+		FORCE.visit(cond.if_part, scope)
+		label_else = scope.jump_if(False)
+		FORCE.visit(cond.then_part, scope)
+		after = scope.jump_always()
+		scope.come_from(label_else)
+		scope.emit_pop()
+		FORCE.visit(cond.else_part, scope)
+		scope.come_from(after)
+
+class TailContext(FunctionContext):
+	@staticmethod
+	def visit_Lookup(expr:syntax.Lookup, scope:VMFunctionScope):
+		sym = expr.ref.dfn
+		scope.load(sym)
+		if symbol_harbors_thunks(sym):
+			scope.emit_force_return()
+		else:
+			scope.emit_return()
+	
+	def call(self, scope: VMFunctionScope, arity:int):
+		scope.emit_exec()
+	
+	@staticmethod
+	def sequel(scope:VMFunctionScope, depth:int, more:bool):
+		pass
+	
+	@staticmethod
+	def answer(scope:VMFunctionScope):
+		""" Have answer on stack; time to return it. """
+		scope.emit_return()
+
+	@staticmethod
+	def visit_Cond(cond:syntax.Cond, scope:VMFunctionScope):
+		FORCE.visit(cond.if_part, scope)
+		label_else = scope.jump_if(False)
+		TAIL.visit(cond.then_part, scope)
+		scope.come_from(label_else)
+		TAIL.visit(cond.else_part, scope)
+
+
+class ProcContext(EagerContext):
+	
+	def call(self, scope: VMFunctionScope, arity:int):
+		scope.emit_call(arity)
+		self.perform(scope)
+
+	def perform(self, scope: VMFunctionScope):
+		raise NotImplementedError(type(self))
+
+	def semicolon(self, scope: VMFunctionScope):
+		raise NotImplementedError(type(self))
+
+	def visit_DoBlock(self, do: syntax.DoBlock, scope: VMFunctionScope):
+		for agent in do.agents:
+			scope.alias(agent)
+			FORCE.visit(agent.expr, scope)
+			# At this point a template is on the stack.
+			emit("CAST")
+		
+		depth = scope.depth()
+		for step in do.steps[:-1]:
+			STEP.visit(step, scope)
+			assert scope.depth() == depth
+		self.visit(do.steps[-1], scope)
+		assert scope.depth() in (depth, None)
+		scope.emit_drop(len(do.agents))
+
+	def visit_AssignField(self, af:syntax.AssignField, scope:VMFunctionScope):
+		FORCE.visit(af.expr, scope)
+		scope.emit_assign_member(af.nom.text)
+		self.semicolon(scope)
+	
+class StepContext(ProcContext):
+	def perform(self, scope: VMFunctionScope):
+		scope.emit_perform()
+
+	def semicolon(self, scope: VMFunctionScope):
+		pass
+
+
+class LastContext(ProcContext):
+	""" The procedural context just before return-to-caller """
+	def perform(self, scope: VMFunctionScope):
+		scope.emit_perform_exec()
+		
+	def semicolon(self, scope: VMFunctionScope):
+		scope.emit_return()
+
+
+DELAY = LazyContext()
+FORCE = ForceContext()
+TAIL = TailContext()
+STEP = StepContext()
+LAST = LastContext()
+
+def mangle_foreign_symbols(foreign:list[syntax.ImportForeign]):
+	for fi in foreign:
+		for group in fi.groups:
+			for symbol in group.symbols:
+				MANGLED[symbol] = symbol.nom.text
+	pass
+
+def write_ffi_init(foreign: list[syntax.ImportForeign]):
+	for fi in foreign:
+		if fi.linkage is not None:
+			emit("!")
+			emit(quote(fi.source.value))
+			for ref in fi.linkage:
+				emit(quote(MANGLED[ref.dfn]))
+			emit(";")
+
+def write_functions(fns, outer: VMScope):
+	if not fns: return
+	outer.declare_several(fns)
+	emit("{")
+	last = fns[-1]
+	for fn in fns:
+		write_one_function(fn, outer)
+		emit("}" if fn is last else ";")
+	outer.nl()
+
+def write_one_function(fn: syntax.UserFunction, outer: VMScope):
+	inner = VMFunctionScope(outer, fn.nom.text, is_thunk=not fn.params)
+	inner.emit_preamble(fn.params, MANGLED[fn])
+	write_functions(fn.where, inner)
+	TAIL.visit(fn.expr, inner)
+	inner.emit_epilogue()
+	
+def write_one_behavior(b:syntax.Behavior, outer:VMActorScope):
+	# The way this works is similar to a function.
+	# However, there's a special "self" object implicitly the first parameter.
+	# Also, access to self-dot-foo will use actor-specific instructions.
+	inner = VMFunctionScope(outer, b.nom.text, is_thunk=False)
+	inner.declare(ontology.SELF)
+	inner.emit_preamble(b.params, b.nom.text)
+	LAST.visit(b.expr, inner)
+	inner.emit_epilogue()
+
+def write_one_actor(dfn:syntax.UserAgent, outer:VMGlobalScope):
+	inner = VMActorScope(outer, dfn)
+	last = dfn.behaviors[-1]
+	for b in dfn.behaviors:
+		write_one_behavior(b, inner)
+		emit(">" if b is last else ";")
+	outer.nl()
+
+def write_actors(agent_definitions:list[syntax.UserAgent], outer:VMGlobalScope):
+	outer.declare_several(agent_definitions)
+	for dfn in agent_definitions:
+		write_one_actor(dfn, outer)
+	pass
+
+class StructureDefiner(Visitor):
+	""" Just defines data structures. """
+	
 	def write_records(self, types, scope:VMGlobalScope):
 		for t in types:
 			self.visit(t, scope)
@@ -390,10 +749,11 @@ class Translation(Visitor):
 		scope.declare(r)
 		write_record(r.spec.field_names(), r, 0)
 		
-	def visit_Variant(self, variant:syntax.Variant, scope:VMGlobalScope):
+	@staticmethod
+	def visit_Variant(variant:syntax.Variant, scope:VMGlobalScope):
 		scope.declare_several(variant.subtypes)
 		for tag, st in enumerate(variant.subtypes):
-			self._tag_map[variant, st.nom.key()] = tag
+			_TAG_MAP[variant, st.nom.key()] = tag
 			if isinstance(st.body, syntax.RecordSpec):
 				write_record(st.body.field_names(), st, tag)
 			elif st.body is None:
@@ -401,220 +761,29 @@ class Translation(Visitor):
 			else:
 				write_tagged_value(st, tag)
 
-	@staticmethod
-	def mangle_foreign_symbols(foreign:list[syntax.ImportForeign]):
-		for fi in foreign:
-			for group in fi.groups:
-				for symbol in group.symbols:
-					MANGLED[symbol] = symbol.nom.text
-		pass
-	
-	@staticmethod
-	def write_ffi_init(foreign:list[syntax.ImportForeign]):
-		for fi in foreign:
-			if fi.linkage is not None:
-				emit("!")
-				emit(quote(fi.source.value))
-				for ref in fi.linkage:
-					emit(quote(MANGLED[ref.dfn]))
-				emit(";")
-	
-	def write_actors(self, agent_definitions:list[syntax.UserAgent], outer:VMScope):
-		# TODO: designate IL syntax for this.
-		pass
-	
-	def write_functions(self, fns, outer:VMScope):
-		if not fns: return
-		outer.declare_several(fns)
-		emit("{")
-		last = fns[-1]
-		for fn in fns:
-			self.write_one_function(fn, outer)
-			emit("}" if fn is last else ";")
-		outer.nl()
+STRUCTURE = StructureDefiner()
 
-	def write_one_function(self, fn:syntax.UserFunction, outer:VMScope):
-		inner = VMFunctionScope(outer, fn.nom.text, is_thunk=not fn.params)
-		inner.nl()
-		inner.emit_preamble(fn)
-		self.write_functions(fn.where, inner)
-		self.tail_call(fn.expr, inner)
-		inner.emit_epilogue()
+def translate(roadmap:RoadMap):
+	# Write all types:
+	for scope, module in each_piece(roadmap):
+		STRUCTURE.write_records(module.types, scope)
+		scope.declare_several(module.agent_definitions)
 	
-	def delay(self, expr:syntax.ValExpr, scope:VMFunctionScope):
-		"""
-		Similar policy (for now) to the version in the simple evaluator:
-		Literals and references/look-ups do not get thunked.
-		However, the latter may already refer to a thunk in certain cases.
-		"""
-		if isinstance(expr, syntax.Literal):
-			scope.constant(expr.value)
-		elif isinstance(expr, syntax.Lookup):
-			scope.load(expr.ref.dfn)
-		elif isinstance(expr, syntax.FieldReference) and is_eager(expr.lhs):
-			self.force(expr.lhs, scope)
-			scope.emit_field(expr.field_name.key())
-		elif isinstance(expr, syntax.ExplicitList):
-			self.visit_ExplicitList(expr, scope)
-		elif isinstance(expr, syntax.DoBlock):
-			self.visit_DoBlock(expr, scope)
-		elif expr.is_volatile:
-			self.force(expr, scope)
-		else:
-			scope.make_thunk(self, expr)
+	# Write all functions (including FFI):
+	for scope, module in each_piece(roadmap):
+		mangle_foreign_symbols(module.foreign)
+		write_functions(module.outer_functions, scope)
+		write_actors(module.agent_definitions, scope)
+		write_ffi_init(module.foreign)
 	
-	def force(self, expr:syntax.ValExpr, scope:VMFunctionScope):
-		"""
-		Respond to the fact that params and fields may harbor thunks.
-		"""
-		if isinstance(expr, syntax.Literal):
-			scope.constant(expr.value)
-		elif isinstance(expr, syntax.Lookup):
-			sym = expr.ref.dfn
-			scope.load(sym)
-			if symbol_harbors_thunks(sym):
-				emit("FORCE")
-		elif handles_tails(expr):
-			self.visit(expr, scope, False)
-		else:
-			self.visit(expr, scope)
-	
-	def tail_call(self, expr:syntax.ValExpr, scope:VMFunctionScope):
-		if isinstance(expr, syntax.Literal):
-			scope.constant(expr.value)
-			scope.emit_return()
-		elif isinstance(expr, syntax.Lookup):
-			sym = expr.ref.dfn
-			scope.load(sym)
-			if symbol_harbors_thunks(sym):
-				scope.emit_force_return()
-			else:
-				scope.emit_return()
-		elif handles_tails(expr):
-			self.visit(expr, scope, True)
-		else:
-			self.visit(expr, scope)
-			scope.emit_return()
+	# Delimiter so it's possible to start a begin-expression with a do-block:
+	emit(".")
 
-	def write_begin_expression(self, expr:syntax.ValExpr, scope:VMFunctionScope):
-		scope.nl()
-		self.force(expr, scope)
-		scope.display()
+	# Write all begin-expressions:
+	for scope, module in each_piece(roadmap):
+		scope.write_begin_expressions(module)
 	
-	def visit_BinExp(self, it: syntax.BinExp, scope:VMFunctionScope):
-		self.force(it.lhs, scope)
-		self.force(it.rhs, scope)
-		scope.emit_ALU(it.op.text)
-	
-	def visit_ShortCutExp(self, it: syntax.ShortCutExp, scope:VMFunctionScope, tail:bool):
-		self.force(it.lhs, scope)
-		satisfied = SHORTCUTS[it.op.text]
-		label = scope.jump_if(satisfied)
-		if tail:
-			self.tail_call(it.rhs, scope)
-			scope.come_from(label)
-			scope.emit_return()
-		else:
-			self.force(it.rhs, scope)
-			scope.come_from(label)
-	
-	def visit_UnaryExp(self, ux:syntax.UnaryExp, scope:VMFunctionScope):
-		self.force(ux.arg, scope)
-		emit(UNARY_INSTRUCTION[ux.op.text])  # No change to stack depth
+	# All done:
+	_TAG_MAP.clear()
 
-	def visit_Call(self, call:syntax.Call, scope:VMFunctionScope, tail:bool):
-		for arg in call.args:
-			self.delay(arg, scope)
-		self.force(call.fn_exp, scope)
-		scope.emit_call(tail, len(call.args))
-	
-	def visit_Cond(self, cond:syntax.Cond, scope:VMFunctionScope, tail:bool):
-		self.force(cond.if_part, scope)
-		label_else = scope.jump_if(False)
-		if tail:
-			self.tail_call(cond.then_part, scope)
-			scope.come_from(label_else)
-			self.tail_call(cond.else_part, scope)
-		else:
-			self.force(cond.then_part, scope)
-			after = scope.jump_always()
-			scope.come_from(label_else)
-			scope.emit_pop()
-			self.force(cond.else_part, scope)
-			scope.come_from(after)
 
-	def visit_MatchExpr(self, mx:syntax.MatchExpr, scope:VMFunctionScope, tail:bool):
-		scope.alias(mx.subject)
-		self.force(mx.subject.expr, scope)
-		depth = scope.depth()
-		nr_cases = len(mx.variant.subtypes)
-		cases = scope.cases(nr_cases)
-		after = []
-		for alt in mx.alternatives:
-			tag = self._tag_map[mx.variant, alt.nom.key()]
-			scope.come_from(cases[tag])
-			cases[tag] = None
-			self.write_functions(alt.where, scope)
-			if tail:
-				self.tail_call(alt.sub_expr, scope)
-			else:
-				self.force(alt.sub_expr, scope)
-				scope.ascend_to(depth)
-				after.append(scope.jump_always())
-		if mx.otherwise is not None:
-			for tag, label in enumerate(cases):
-				if label is not None:
-					scope.come_from(label)
-			if tail:
-				self.tail_call(mx.otherwise, scope)
-			else:
-				self.force(mx.otherwise, scope)
-				scope.ascend_to(depth)
-		for label in after:
-			scope.come_from(label)
-		pass
-	
-	def visit_FieldReference(self, fr:syntax.FieldReference, scope:VMFunctionScope):
-		self.force(fr.lhs, scope)
-		scope.emit_field(fr.field_name.key())
-		emit("FORCE")
-		
-	def visit_ExplicitList(self, el:syntax.ExplicitList, scope:VMFunctionScope):
-		scope.emit_nil()
-		for item in reversed(el.elts):
-			self.delay(item, scope)
-			scope.emit_snoc()
-
-	@staticmethod
-	def visit_Absurdity(_:syntax.Absurdity, scope:VMFunctionScope):
-		scope.emit_panic()
-	
-	def visit_BindMethod(self, expr:syntax.BindMethod, scope:VMFunctionScope):
-		self.force(expr.receiver, scope)
-		emit("BIND", quote(expr.method_name.key()))
-
-	def visit_DoBlock(self, do:syntax.DoBlock, outer:VMFunctionScope):
-		inner = outer.enter_do_block()
-		for agent in do.agents:
-			inner.alias(agent)
-			self.force(agent.expr, inner)
-			# At this point a template is on the stack.
-			emit("CAST")
-			
-		depth = inner.depth()
-		for step in do.steps[:-1]:
-			self.force(step, inner)
-			inner.emit_perform()
-			assert inner.depth() == depth
-		self.force(do.steps[-1], inner)
-		inner.emit_perform_exec()
-		inner.emit_epilogue()
-		emit("}")
-	
-	def visit_AsTask(self, task:syntax.AsTask, scope:VMFunctionScope):
-		self.force(task.sub, scope)
-		emit("TASK")
-	
-	@staticmethod
-	def visit_Skip(_:syntax.Skip, scope:VMFunctionScope):
-		scope.emit_skip()

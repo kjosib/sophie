@@ -193,6 +193,7 @@ bool is_actor_tpl(Value v) { return IS_GC_ABLE(v) && &KIND_ActorTpl == AS_GC(v)-
 bool is_actor(Value v) { return IS_GC_ABLE(v) && &KIND_Actor == AS_GC(v)->kind; }
 
 void make_actor_from_template() {
+	assert(is_actor_tpl(TOP));
 	size_t nr_fields = AS_ACTOR_TPL(TOP)->actor_dfn->nr_fields;
 	size_t payload_size = nr_fields * sizeof(Value);
 	Actor *actor = gc_allocate(&KIND_Actor, sizeof(Actor) + payload_size);

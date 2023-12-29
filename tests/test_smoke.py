@@ -1,7 +1,7 @@
 from pathlib import Path
 import unittest
 from sophie import executive, diagnostics, resolution, type_evaluator
-from sophie.intermediate import Translation
+from sophie.intermediate import translate
 
 base_folder = Path(__file__).parent.parent
 examples = base_folder/"examples"
@@ -14,7 +14,7 @@ def _good(folder, which) -> resolution.RoadMap:
 		roadmap = resolution.RoadMap(folder / (which + ".sg"), report)
 		type_evaluator.DeductionEngine(roadmap, report)
 		report.assert_no_issues()
-		Translation().visit(roadmap)
+		translate(roadmap)
 		return roadmap
 	except resolution.Yuck as ex:
 		assert report.sick()
@@ -39,6 +39,8 @@ class ExampleSmokeTests(unittest.TestCase):
 		for name in ["guess_the_number", "99 bottles", "mouse_print", "mouse"]:
 			with self.subTest(name):
 				_good(examples, "games/"+name)
+		with self.subTest("Mandelbrot"):
+			_good(examples, "mathematics/Mandelbrot")
 
 	def test_other_examples(self):
 		for name in [
