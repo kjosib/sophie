@@ -45,7 +45,7 @@ Here are some open problems, in no particular order:
 * [PARTIAL] SDL bindings, at least for some simple graphics and the mouse.
 * Improved stack safety based on a max-depth analysis
 * [DONE] ``do``-blocks should have tail-calls eliminated. (This may be trickier than it sounds. Or not.)
-* User-Defined Actors.
+* [PARTIAL] User-Defined Actors.
 * [PARTIAL] FFI improvements.
 * Turtle Graphics, perhaps in terms of SDL.
 * Make SDL optional and load on demand.
@@ -1450,3 +1450,18 @@ about how to compile ``do``-blocks.
 After a bit of chat on the programming-languages discord,
 I decided to change the translator to use richer context and exploit polymorphism to do it.
 This will take more time than I can put to it in one sitting, so no commit tonight. 
+
+28 December 2023
+----------------
+
+The new context-sensitive compiler architecture successfully compiles all the examples,
+and more sensibly than before. Everything that *did* run before, runs again.
+User-defined actors still don't load into the VM, but that will change soon enough.
+The point of this change is realized: The compiler now recognizes four contexts that
+each compile interesting bits differently.
+That opens more ways for the translator to be incomplete, and I'm sure it is,
+but at this point holes should be easy to patch.
+
+More of the work that once seemed the job of a translator's tree-walk is percolating
+down to the per-scope classes. That suggests a natural dividing line.
+

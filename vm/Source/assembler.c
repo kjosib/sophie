@@ -140,7 +140,10 @@ static void parse_one_instruction() {
 static void parse_instructions() {
 	for(;;) {
 		if (maybe_token(TOKEN_NAME)) parse_one_instruction();
-		else if (predictToken(TOKEN_LEFT_BRACE)) parse_function_block();
+		else if (maybe_token(TOKEN_LEFT_BRACE)) {
+			parse_function_block();
+			consume(TOKEN_RIGHT_BRACE, "expected semicolon or right-brace.");
+		}
 		else if (maybe_token(TOKEN_LEFT_BRACKET)) parse_thunk();
 		else break;
 	}
@@ -192,7 +195,6 @@ static void parse_thunk() {
 static Value parse_normal_function() {
 	// The function's name goes in the first constant entry.
 	// That way the right garbage collection things happen automatically.
-	advance();
 	byte arity = parseByte("arity");
 	push(GC_VAL(parseString()));
 	return parse_rest_of_function(arity);
@@ -209,8 +211,7 @@ static void parse_function_block() {
 	do {
 		fn_count++;
 		appendValueArray(&outer->chunk.constants, parse_normal_function());
-	} while (predictToken(TOKEN_SEMICOLON));
-	consume(TOKEN_RIGHT_BRACE, "expected semicolon or right-brace.");
+	} while (maybe_token(TOKEN_SEMICOLON));
 	pop_scope();
 	emit(fn_count);
 }
@@ -221,7 +222,7 @@ static void parse_global_functions() {
 		close_function(&TOP);
 		push(GC_VAL(name_of_function(AS_CLOSURE(TOP)->function)));
 		defineGlobal();
-	} while (predictToken(TOKEN_SEMICOLON));
+	} while (maybe_token(TOKEN_SEMICOLON));
 	consume(TOKEN_RIGHT_BRACE, "expected semicolon or right-brace.");
 }
 
@@ -284,13 +285,18 @@ static void parse_ffi_init() {
 	// and all the GC magic just works.
 }
 
+static void parse_actor_dfn() {
+	crashAndBurn("the bit to assemble actors isn't finished");
+}
+
 static void parseScript() {
 	for (;;) {
 		if (maybe_token(TOKEN_LEFT_PAREN)) {
 			if (maybe_token(TOKEN_STAR)) parse_tagged_value();
 			else parse_record();
 		}
-		else if (predictToken(TOKEN_LEFT_BRACE)) parse_global_functions();
+		else if (maybe_token(TOKEN_LEFT_BRACE)) parse_global_functions();
+		else if (maybe_token(TOKEN_LESS)) parse_actor_dfn();
 		else if (maybe_token(TOKEN_BANG)) parse_ffi_init();
 		else if (maybe_token(TOKEN_DOT)) break;
 		else errorAtCurrent("Missing section delimiter (period).");

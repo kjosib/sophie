@@ -47,7 +47,6 @@ static Value *linkage;
 
 static Value game_on_mouse(Value *args) {
 	SELF->fields[ON_MOUSE] = args[1];
-	printValue(args[1]);
 	return NIL_VAL;
 }
 

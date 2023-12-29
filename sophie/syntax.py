@@ -232,6 +232,7 @@ class WhereClause(NamedTuple):
 class UserAgent(Term):
 	source_path: Path
 	field_space: NS
+	fields: Sequence[FormalParameter]
 	message_space: NS
 	def head(self) -> slice: return self.nom.head()
 	def __init__(
@@ -291,7 +292,7 @@ class Lookup(ValExpr):
 	def head(self) -> slice: return self.ref.head()
 	def __str__(self): return str(self.ref)
 
-def _is_self_reference(it):
+def is_self_reference(it):
 	if isinstance(it, Lookup):
 		if isinstance(it.ref, PlainReference):
 			return it.ref.nom.text == "SELF"
@@ -300,7 +301,7 @@ def _is_self_reference(it):
 class FieldReference(ValExpr):
 	def __init__(self, lhs: ValExpr, field_name: Nom):
 		self.lhs, self.field_name = lhs, field_name
-		self.is_volatile = lhs.is_volatile or _is_self_reference(lhs)
+		self.is_volatile = lhs.is_volatile or is_self_reference(lhs)
 	def __str__(self): return "(%s.%s)" % (self.lhs, self.field_name.text)
 	def head(self) -> slice: return self.field_name.head()
 
