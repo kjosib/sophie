@@ -142,5 +142,7 @@ Instruction instruction[] = {
 	[OP_SKIP] = {"SKIP", &modeSimple},
 
 	[OP_CAST] = {"CAST", &modeSimple},
+	[OP_MEMBER] = {"MEMBER", &modeImmediate},
+	[OP_ASSIGN] = {"ASSIGN", &modeImmediate},
 };
 

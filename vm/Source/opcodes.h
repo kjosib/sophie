@@ -51,6 +51,8 @@ typedef enum {
 	OP_SKIP,
 	
 	OP_CAST,
+	OP_MEMBER,
+	OP_ASSIGN,
 
 	NR_OPCODES,
 } OpCode;

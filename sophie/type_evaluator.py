@@ -1032,7 +1032,7 @@ class DeductionEngine(Visitor):
 		elif isinstance(inner, ArrowType) and is_act(inner.res):
 			return MessageType(inner.arg).exemplar()
 		elif isinstance(inner, UDFType):
-			return UserTaskType(inner)
+			return UserTaskType(inner).exemplar()
 		else:
 			self._report.bad_type(env, at.sub, "procedure", inner, "Concurrent tasks cannot return a value.")
 			return ERROR

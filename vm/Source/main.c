@@ -35,7 +35,7 @@ static void run_program(const char *path) {
 	char *source = readFile(path);
 	assemble(source);
 	free(source);
-	run(AS_CLOSURE(pop()));
+	vm_run();
 	vm_dispose();
 }
 

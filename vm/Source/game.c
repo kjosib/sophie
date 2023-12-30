@@ -57,7 +57,7 @@ static Value game_on_tick(Value *args) {
 
 static void compose(LINKAGE what) {
 	push(linkage[what]);
-	apply_constructor();
+	push(construct_record());
 }
 
 static void push_cartesian(Sint32 x, Sint32 y) {
@@ -122,6 +122,7 @@ GC_Kind KIND_Display = {
 	.blacken = blacken_display,
 	.size = size_display,
 	.finalize = finalize_display,
+	.name = "SDL Display",
 };
 
 static Display *init_display(int width, int height) {
@@ -150,7 +151,7 @@ static Display *init_display(int width, int height) {
 static void push_display_proxy(int width, int height) {
 	push(GC_VAL(init_display(width, height)));
 	push(linkage[LL_DISPLAY_PROXY]);
-	make_template_from_dfn();
+	push(make_template_from_dfn());
 	make_actor_from_template();
 }
 
@@ -167,6 +168,7 @@ static void dp_draw_fill(SDL_Renderer *renderer) {
 }
 
 static Value dp_draw(Value *args) {
+	assert(vm.stackTop == args + 2);
 	FOR_LIST(args[1]) {
 		push(LIST_HEAD(args[1]));  // Becomes args[2]
 		assert(VAL_GC == TOP.type);
@@ -175,9 +177,10 @@ static Value dp_draw(Value *args) {
 		case PIC_FILL:
 			dp_draw_fill(DISPLAY_PTR->renderer); break;
 		default:
-			printf("Draw %d ", AS_RECORD(args[2])->constructor->tag);
+			printf("Draw %d ", AS_RECORD(TOP)->constructor->tag);
 		}
 		pop();
+		assert(vm.stackTop == args + 2);
 	}
 	
 	SDL_RenderPresent(DISPLAY_PTR->renderer);
@@ -195,8 +198,8 @@ static void define_display_proxy_as_linkage() {
 	push_C_string("DisplayProxy");
 	define_actor(NR_DP_FIELDS);
 	
-	create_native_method("draw", 1, dp_draw);
-	create_native_method("close", 0, dp_close);
+	create_native_method("draw", 2, dp_draw);
+	create_native_method("close", 1, dp_close);
 
 	// Leave on stack for linkage.
 	assert(is_actor_dfn(linkage[LL_DISPLAY_PROXY]));
@@ -228,8 +231,7 @@ static Value game_play(Value *args) {  // ( SELF size fps -- )
 		if (!IS_NIL(SELF->fields[ON_TICK])) {
 			push(args[3]);
 			push(SELF->fields[ON_TICK]);
-			apply_bound_method();
-			enqueue_message(pop());
+			enqueue_message(apply());
 		}
 
 		SDL_Event ev;
@@ -248,24 +250,21 @@ static Value game_play(Value *args) {  // ( SELF size fps -- )
 				if (!IS_NIL(SELF->fields[ON_MOUSE])) {
 					push_motion_event(&ev.motion);
 					push(SELF->fields[ON_MOUSE]);
-					apply_bound_method();
-					enqueue_message(pop());
+					enqueue_message(apply());
 				}
 				break;
 			case SDL_MOUSEBUTTONDOWN:
 				if (!IS_NIL(SELF->fields[ON_BUTTON_DOWN])) {
 					push_button_event(&ev.button);
 					push(SELF->fields[ON_BUTTON_DOWN]);
-					apply_bound_method();
-					enqueue_message(pop());
+					enqueue_message(apply());
 				}
 				break;
 			case SDL_MOUSEBUTTONUP:
 				if (!IS_NIL(SELF->fields[ON_BUTTON_UP])) {
 					push_button_event(&ev.button);
 					push(SELF->fields[ON_BUTTON_UP]);
-					apply_bound_method();
-					enqueue_message(pop());
+					enqueue_message(apply());
 				}
 				break;
 			default:
@@ -315,14 +314,14 @@ static void define_event_loop_as_global() {
 
 	// Continue to follow the trail forged by the console-actor:
 
-	create_native_method("on_mouse", 1, game_on_mouse);
-	create_native_method("on_tick", 1, game_on_tick);
-	create_native_method("play", 2, game_play);
+	create_native_method("on_mouse", 2, game_on_mouse);
+	create_native_method("on_tick", 2, game_on_tick);
+	create_native_method("play", 3, game_play);
 
 	Value dfn = pop();
 	for (int i = 0; i < NR_GAME_FIELDS; i++) push(NIL_VAL);
 	push(dfn);
-	make_template_from_dfn();
+	push(make_template_from_dfn());
 	make_actor_from_template();
 
 	push_C_string("events");

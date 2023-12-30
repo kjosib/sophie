@@ -3,14 +3,16 @@
 DEFINE_VECTOR_CODE(ValueArray, Value)
 DEFINE_VECTOR_APPEND(ValueArray, Value)
 
-static void print_simply(Value value) {
+void print_simply(Value value) {
 switch (value.type) {
 	case VAL_NIL: printf("nil"); break;
 	case VAL_BOOL: printf(AS_BOOL(value) ? "true" : "false"); break;
 	case VAL_NUMBER: printf(NUMBER_FORMAT, AS_NUMBER(value)); break;
 	case VAL_ENUM: printf("<enum: %d>", AS_ENUM(value)); break;
 	case VAL_PTR: printf("<ptr: %p>", AS_PTR(value)); break;
-	default: printf("<<%d>>", value.type);
+	default:
+		assert(IS_GC_ABLE(value));
+		printf("<<%s>>", AS_GC(value)->kind->name);
 	}
 }
 
@@ -43,9 +45,6 @@ char *valKind[] = {
 	[VAL_GC] = "heap denizen",
 	[VAL_THUNK] = "thunk",
 	[VAL_CLOSURE] = "closure",
-	[VAL_NATIVE] = "native function",
-	[VAL_CTOR] = "constructor",
-	[VAL_BOUND] = "bound method",
 	[VAL_FN] = "open function",
 	[VAL_GLOBAL] = "global reference",
 };

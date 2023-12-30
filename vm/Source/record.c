@@ -42,22 +42,22 @@ GC_Kind KIND_Record = {
 	.deeply = display_record_deeply,
 	.blacken = blacken_record,
 	.size = size_record,
+	.name = "Record",
 };
 
-Record *construct_record() {
-	assert(IS_CTOR(TOP));
+static GC_Kind KIND_Constructor;
+
+static bool is_constructor(Value v) { return IS_GC_ABLE(v) && &KIND_Constructor == AS_GC(v)->kind; }
+
+Value construct_record() {
+	assert(is_constructor(TOP));
 	int nr_fields = AS_CTOR(TOP)->nr_fields;
 	Record *record = gc_allocate(&KIND_Record, size_for_nr_fields(nr_fields));
 	record->constructor = AS_CTOR(pop());
-	memcpy(&record->fields, vm.stackTop - nr_fields, sizeof(Value) * nr_fields);
-	return record;
-}
-
-void apply_constructor() {
-	Record *record = construct_record();
-	Value *slot = vm.stackTop - record->constructor->nr_fields;
-	*slot = GC_VAL(record);
-	vm.stackTop = slot + 1;
+	Value *base = vm.stackTop - nr_fields;
+	memcpy(&record->fields, base, sizeof(Value) * nr_fields);
+	vm.stackTop = base;
+	return GC_VAL(record);
 }
 
 static void display_constructor(Constructor *constructor) {
@@ -78,6 +78,8 @@ GC_Kind KIND_Constructor = {
 	.deeply = display_constructor,
 	.blacken = blacken_constructor,
 	.size = size_constructor,
+	.apply = construct_record,
+	.name = "Constructor",
 };
 
 
@@ -87,7 +89,7 @@ void make_constructor(int tag, int nr_fields) {
 	constructor->tag = (byte)tag;
 	constructor->nr_fields = (byte)nr_fields;
 	populate_field_offset_table(&constructor->field_offset, nr_fields);
-	push(CTOR_VAL(constructor));
+	push(GC_VAL(constructor));
 }
 
 

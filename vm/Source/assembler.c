@@ -216,14 +216,13 @@ static void parse_function_block() {
 	emit(fn_count);
 }
 
-static void parse_global_functions() {
+static void parse_some_functions(Verb define) {
 	do {
 		push(parse_normal_function());
 		close_function(&TOP);
 		push(GC_VAL(name_of_function(AS_CLOSURE(TOP)->function)));
-		defineGlobal();
+		define();
 	} while (maybe_token(TOKEN_SEMICOLON));
-	consume(TOKEN_RIGHT_BRACE, "expected semicolon or right-brace.");
 }
 
 static Value tag_definition(int tag) {
@@ -239,14 +238,18 @@ static parse_tagged_value() {
 	pop();
 }
 
-static void parse_record() {
+static int parse_zero_or_more_field_names_onto_the_stack() {
 	// Parse zero or more names. Keep them on the stack. Track how many.
 	int nr_fields = 0;
 	while (predictToken(TOKEN_NAME)) {
 		push(GC_VAL(parseName()));
 		nr_fields++;
 	}
-	
+	return nr_fields;
+}
+
+static void parse_record() {
+	int nr_fields = parse_zero_or_more_field_names_onto_the_stack();
 	if (nr_fields) {
 		int tag = parseByte("tag");
 		push(GC_VAL(parseString()));
@@ -286,7 +289,22 @@ static void parse_ffi_init() {
 }
 
 static void parse_actor_dfn() {
-	crashAndBurn("the bit to assemble actors isn't finished");
+	int nr_fields = parse_zero_or_more_field_names_onto_the_stack();
+	// Then, the name for the actor is a quoted string. Make that into an actor-definition.
+	push(GC_VAL(parseString()));  // In retrospect, this part is probably mostly pointless.
+	define_actor(nr_fields);     // The only thing that can see an actor's fields knows their offsets.
+
+	parse_some_functions(install_method);
+
+	// Define it as a global.
+	if (nr_fields) {
+		push(GC_VAL(AS_ACTOR_DFN(TOP)->name));
+	}
+	else {
+		push(make_template_from_dfn());
+		push(GC_VAL(AS_ACTOR_TPL(TOP)->actor_dfn->name));
+	}
+	defineGlobal();
 }
 
 static void parseScript() {
@@ -295,8 +313,14 @@ static void parseScript() {
 			if (maybe_token(TOKEN_STAR)) parse_tagged_value();
 			else parse_record();
 		}
-		else if (maybe_token(TOKEN_LEFT_BRACE)) parse_global_functions();
-		else if (maybe_token(TOKEN_LESS)) parse_actor_dfn();
+		else if (maybe_token(TOKEN_LEFT_BRACE)) {
+			parse_some_functions(defineGlobal);
+			consume(TOKEN_RIGHT_BRACE, "expected semicolon or right-brace.");
+		}
+		else if (maybe_token(TOKEN_LESS)) {
+			parse_actor_dfn();
+			consume(TOKEN_GREATER, "Expected semicolon or right angle bracket.");
+		}
 		else if (maybe_token(TOKEN_BANG)) parse_ffi_init();
 		else if (maybe_token(TOKEN_DOT)) break;
 		else errorAtCurrent("Missing section delimiter (period).");
@@ -323,6 +347,15 @@ static void snap_global_pointers(Function *fn) {
 		}
 		if (IS_CLOSURE(*item) || IS_THUNK(*item)) snap_global_pointers(AS_CLOSURE(*item)->function);
 		else if (IS_FN(*item)) snap_global_pointers(AS_FN(*item));
+		else if (is_actor_dfn(*item)) {
+			Table *table = &AS_ACTOR_DFN(*item)->msg_handler;
+			for (size_t index = 0; index < table->cap; index++) {
+				Entry *entry = &table->at[index];
+				if (entry->key != NULL && IS_CLOSURE(entry->value)) {
+					snap_global_pointers(AS_CLOSURE(entry->value)->function);
+				}
+			}
+		}
 	}
 }
 
