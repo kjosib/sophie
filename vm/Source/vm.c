@@ -127,21 +127,22 @@ static double x_num(byte *vpc, Value *base, Value it) {
 #define num AS_NUMBER
 #endif // _DEBUG
 
-void perform(Value action) {
+void perform() {
 	// Where all the action happens, so to speak.
-	switch (action.type)
+	switch (TOP.type)
 	{
 	case VAL_NIL:  // The empty action
 		break;
 	case VAL_CLOSURE:
-		run(AS_CLOSURE(action));
+		vm_run();
 		break;
-	case VAL_MESSAGE:
-	case VAL_BOUND:
-		enqueue_message(action);
+	case VAL_GC:
+		// By definition this must be either a message or a bound-method.
+		// Either way, the proper response is to enqueue the thing.
+		enqueue_message(pop());
 		break;
 	default:
-		crashAndBurn("Can't yet handle a %s action.", valKind[action.type]);
+		crashAndBurn("Can't perform a %s action.", valKind[TOP.type]);
 	}
 }
 
@@ -151,7 +152,8 @@ void perform(Value action) {
 #define SKIP_AND_POP() do { pop(); vpc += 2; } while(0)
 #define YIELD(value) do { Value retval = (value); vm.stackTop = base; vm.trace--; return retval; } while (0)
 
-Value run(Closure *closure) {
+Value vm_run() {
+	Closure *closure = AS_CLOSURE(pop());
 	if (vm.trace == &vm.traces[FRAMES_MAX]) crashAndBurn("Max recursion depth exceeded.");
 	vm.trace++;
 	Value *base = vm.stackTop - closure->function->arity;
@@ -255,18 +257,9 @@ dispatch:
 		case OP_CALL:
 			switch (TOP.type) {
 			case VAL_CLOSURE:
-				push(run(AS_CLOSURE(pop())));  // The callee will clean the stack.
+			case VAL_GC:
+				push(AS_GC(TOP)->kind->apply());
 				NEXT;
-			case VAL_CTOR: apply_constructor(); NEXT;
-			case VAL_NATIVE:
-			{
-				Native *native = AS_NATIVE(pop());
-				Value *slot = vm.stackTop - native->arity;
-				*slot = native->function(slot);
-				vm.stackTop = slot + 1;
-				NEXT;
-			}
-			case VAL_BOUND: apply_bound_method(); NEXT;
 			default:
 				printValue(TOP);
 				runtimeError(vpc, base, "CALL needs a callable object; got %s.", valKind[TOP.type]);
@@ -282,17 +275,8 @@ dispatch:
 				vm.stackTop = base + arity;
 				goto enter;
 			}
-			case VAL_CTOR: YIELD(GC_VAL(construct_record()));
-			case VAL_NATIVE:
-			{
-				Native *native = AS_NATIVE(pop());
-				YIELD(native->function(vm.stackTop - native->arity));
-			}
-			case VAL_BOUND:
-			{
-				apply_bound_method();
-				YIELD(TOP);
-			}
+			case VAL_GC:
+				YIELD(AS_GC(TOP)->kind->apply());
 			default:
 				runtimeError(vpc, base, "EXEC needs a callable object; got val %s.", valKind[TOP.type]);
 			}
@@ -323,19 +307,28 @@ dispatch:
 		case OP_DISPLAY:
 			switch (TOP.type) {
 			case VAL_NIL: NEXT;  // The empty action
-			case VAL_BOUND:
-			case VAL_MESSAGE:
-				enqueue_message(pop());
-				drain_the_queue();
+			case VAL_GC:
+			{
+				GC *item = AS_GC(TOP);
+				if (item->kind->proceed) {
+					enqueue_message(pop());
+					drain_the_queue();
+				}
+				else {
+					printObjectDeeply(AS_GC(TOP));
+					pop();
+					printf("\n");
+				}
 				NEXT;
+			}
 			case VAL_CLOSURE:
 				if (AS_CLOSURE(TOP)->function->arity == 0) {
-					run(AS_CLOSURE(pop()));
+					vm_run();
 					drain_the_queue();
 					NEXT;
 				}
 			default:
-				printValueDeeply(TOP);
+				print_simply(TOP);
 				pop();
 				printf("\n");
 				NEXT;
@@ -383,10 +376,7 @@ dispatch:
 			swap();
 			// Construct a "cons" in the usual way
 			push(vm.cons);
-			Record *record = construct_record();
-			// Fix up the stack
-			pop();
-			TOP = GC_VAL(record);
+			push(construct_record());
 			// And begone
 			NEXT;
 		}
@@ -402,7 +392,7 @@ dispatch:
 			bind_task_from_closure();
 			NEXT;
 		case OP_PERFORM:
-			perform(pop());
+			perform();
 			NEXT;
 		case OP_PERFORM_EXEC:
 			switch (TOP.type) {
@@ -414,8 +404,7 @@ dispatch:
 				vm.stackTop = base;
 				goto enter;
 			}
-			case VAL_MESSAGE:
-			case VAL_BOUND:
+			case VAL_GC:
 				enqueue_message(TOP);
 				YIELD(NIL_VAL);
 			default:
@@ -427,6 +416,20 @@ dispatch:
 		case OP_CAST:
 			make_actor_from_template();
 			NEXT;
+		case OP_MEMBER:
+		{
+			assert(is_actor(TOP));
+			TOP = AS_ACTOR(TOP)->fields[READ_BYTE()];
+			NEXT;
+		}
+		case OP_ASSIGN:
+		{
+			assert(is_actor(SND));
+			Actor *actor = AS_ACTOR(SND);
+			actor->fields[READ_BYTE()] = TOP;
+			vm.stackTop -= 2;
+			NEXT;
+		}
 		default:
 			runtimeError(vpc, base, "Unrecognized instruction %d.", vpc[-1]);
 		}
@@ -447,11 +450,11 @@ Value force(Value value) {
 		else {
 			// Thunk has yet to be snapped.
 			push(value);
-			Value result = run(thunk_ptr);
+			push(value);
+			Value result = vm_run();
 			thunk_ptr = AS_CLOSURE(pop());
 			SNAP_RESULT(thunk_ptr) = result;
-			thunk_ptr->header.kind = &KIND_snapped;  // Lest a snapped thunk somehow survives GC?
-			// That last assignment probably serves more to align code with cache lines.
+			thunk_ptr->header.kind = &KIND_Snapped;  // Help with debug until GC clears these out.
 			return result;
 		}
 	}
@@ -469,7 +472,8 @@ void force_deeply() {
 			if (IS_THUNK(AS_RECORD(TOP)->fields[i])) {
 				push(AS_RECORD(TOP)->fields[i]);
 				force_deeply();
-				AS_RECORD(TOP)->fields[i] = pop();
+				Value result = pop();
+				AS_RECORD(TOP)->fields[i] = result;
 			}
 		}
 	}

@@ -48,6 +48,7 @@ GC_Kind KIND_Function = {
 	.blacken = blacken_function,
 	.size = size_function,
 	.finalize = finalize_function,
+	.name = "Function",
 };
 
 GC_Kind KIND_Closure = {
@@ -55,13 +56,16 @@ GC_Kind KIND_Closure = {
 	.deeply = display_closure,
 	.blacken = blacken_closure,
 	.size = size_closure,
+	.apply = vm_run,
+	.name = "Closure",
 };
 
-GC_Kind KIND_snapped = {
+GC_Kind KIND_Snapped = {
 	.display = display_snapped,
 	.deeply = display_snapped,
 	.blacken = blacken_snapped,
 	.size = size_snapped,
+	.name = "Snapped Thunk",
 };
 
 

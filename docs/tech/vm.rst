@@ -45,7 +45,7 @@ Here are some open problems, in no particular order:
 * [PARTIAL] SDL bindings, at least for some simple graphics and the mouse.
 * Improved stack safety based on a max-depth analysis
 * [DONE] ``do``-blocks should have tail-calls eliminated. (This may be trickier than it sounds. Or not.)
-* [PARTIAL] User-Defined Actors.
+* [DONE] User-Defined Actors.
 * [PARTIAL] FFI improvements.
 * Turtle Graphics, perhaps in terms of SDL.
 * Make SDL optional and load on demand.
@@ -767,8 +767,8 @@ The VM has no way to signal errors. And for the foreseeable future, that's the a
 The code should not generate errors: They've been mostly ruled out in the type system.
 Anything left is a panic.
 
-3 November 2023
----------------
+3 November 2023 - A Milestone!
+------------------------------
 
 Getting laziness right in the VM was rather like whack-a-mole.
 I lost count of the irksome bugs and trouble-spots.
@@ -990,8 +990,8 @@ Incidentally, I'm not planning to use the normal relational operators for
 partial orders like the subset relationship. Instead, for the short term
 normally-named functions will work.
 
-21 November 2023
-----------------
+21 November 2023 - A Milestone!
+-------------------------------
 
 Milestone: The VM can play simple text games!
 
@@ -1464,4 +1464,25 @@ but at this point holes should be easy to patch.
 
 More of the work that once seemed the job of a translator's tree-walk is percolating
 down to the per-scope classes. That suggests a natural dividing line.
+
+29 December 2023 - A Milestone!
+-------------------------------
+
+At long last, user-defined actors work in the VM!
+
+*Also, I spent way too many hours debugging this.*
+The most painful part came from a situation where the compiler
+generated wrong pseudo-assembler code *at the same time as*
+the VM mistreated the newest opcodes.
+
+To be clear, this is not something unit-tests would have caught.
+The problem was not ever that the code didn't match the spec.
+The problem was a bad spec in the first place,
+because I missed some subtle points in the design.
+The symptoms resulted from the *interaction* of disparate parts.
+Only the integration tests pointed out the flaws in my earlier thinking.
+
+Side note: I've dropped several of the value-type tags
+in favor of expanding the powers of the ``GC_Kind`` structure.
+I figure this will eventually help with NaN-boxing.
 

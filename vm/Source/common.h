@@ -22,6 +22,8 @@ Eventually I might enforce a consistent style. But for now, there are bigger fis
 #include <stddef.h>
 #include <stdint.h>
 
+typedef struct Value Value;
+
 typedef enum { // written to match the standard preamble's order type
 	LESS = 0,
 	SAME = 1,
@@ -58,6 +60,7 @@ __declspec(noreturn) void crashAndBurn(const char *why, ...);
 typedef void (*Verb)();
 typedef void (*Method)(void *item);
 typedef size_t (*SizeMethod)(void *item); // Return the size of the payload.
+typedef Value(*Apply)(); // Expects self at TOS.
 
 typedef struct {
 	Method display;
@@ -65,7 +68,10 @@ typedef struct {
 	Method blacken;
 	SizeMethod size;
 	Verb compare;  // ( a b -- TotalOrder )
+	Apply apply;     // Arguments on the stack.
 	Method finalize; // Must not gc_allocate; gets called mid-collection.
+	Method proceed; // Specifically for how a message runs itself.
+	char *name;
 } GC_Kind;
 
 typedef union {
@@ -113,16 +119,12 @@ typedef enum {
 	VAL_GC,      // Pointer to Garbage-Collected Heap for this and subsequent tags.
 	VAL_THUNK,   // Pointer to thunk; helps with VM to avoid indirections.
 	VAL_CLOSURE, // And why not exploit the tags to full effect?
-	VAL_NATIVE,
-	VAL_CTOR,
-	VAL_BOUND,
-	VAL_MESSAGE,
 	VAL_FN,      // Not-closed function. Found in constant tables.
 	VAL_GLOBAL,  // Global reference; used only during compiling.
 } ValueType;
 
 
-typedef struct {
+struct Value {
 	ValueType type;
 	union {
 		bool boolean;
@@ -131,7 +133,7 @@ typedef struct {
 		void *ptr;
 		GC *gc;
 	} as;
-} Value;
+};
 
 
 #define IS_NIL(value)     ((value).type == VAL_NIL)
@@ -141,10 +143,6 @@ typedef struct {
 #define IS_GC_ABLE(value) ((value).type >= VAL_GC)
 #define IS_THUNK(value)   ((value).type == VAL_THUNK)
 #define IS_CLOSURE(value) ((value).type == VAL_CLOSURE)
-#define IS_NATIVE(value)  ((value).type == VAL_NATIVE)
-#define IS_CTOR(value)    ((value).type == VAL_CTOR)
-#define IS_BOUND(value)   ((value).type == VAL_BOUND)
-#define IS_MESSAGE(value) ((value).type == VAL_MESSAGE)
 #define IS_FN(value)      ((value).type == VAL_FN)
 #define IS_GLOBAL(value)  ((value).type == VAL_GLOBAL)
 
@@ -162,15 +160,12 @@ typedef struct {
 #define GC_VAL(object)      ((Value){VAL_GC, {.ptr = object}})
 #define CLOSURE_VAL(object) ((Value){VAL_CLOSURE, {.ptr = object}})
 #define THUNK_VAL(object)   ((Value){VAL_THUNK, {.ptr = object}})
-#define NATIVE_VAL(object)  ((Value){VAL_NATIVE, {.ptr = object}})
-#define CTOR_VAL(object)    ((Value){VAL_CTOR, {.ptr = object}})
-#define BOUND_VAL(object)   ((Value){VAL_BOUND, {.ptr = object}})
-#define MESSAGE_VAL(object) ((Value){VAL_MESSAGE, {.ptr = object}})
 #define FN_VAL(object)      ((Value){VAL_FN, {.ptr = object}})
 #define GLOBAL_VAL(object)  ((Value){VAL_GLOBAL, {.ptr = object}})
 
 DEFINE_VECTOR_TYPE(ValueArray, Value)
 
+void print_simply(Value value);
 void printValue(Value value);
 void printValueDeeply(Value value);
 
@@ -288,7 +283,7 @@ String *name_of_function(Function *function);
 #define AS_FN(value) ((Function *)AS_PTR(value))
 
 
-extern GC_Kind KIND_snapped;
+extern GC_Kind KIND_Snapped;
 
 #define SNAP_RESULT(thunk_ptr) (thunk_ptr->captives[0])
 #define DID_SNAP(thunk_ptr) (SNAP_RESULT(thunk_ptr).type != VAL_NIL)
@@ -319,14 +314,12 @@ typedef struct {
 } Record;
 
 
-Record *construct_record();
+Value construct_record();
 void make_constructor(int tag, int nr_fields);  // ( field_name ... ctor_name -- ctor )
-void apply_constructor();
 
 #define AS_CTOR(value) ((Constructor*)AS_PTR(value))
 #define AS_RECORD(value) ((Record*)AS_PTR(value))
 
-extern GC_Kind KIND_Constructor;
 extern GC_Kind KIND_Record;
 
 static inline bool is_record(Value value) {
@@ -341,11 +334,11 @@ typedef struct {
 	Table field_offset;
 	Table msg_handler;
 	byte nr_fields;
-} ActorDef;
+} ActorDfn;
 
 typedef struct {
 	GC header;
-	ActorDef *actor_dfn;
+	ActorDfn *actor_dfn;
 	Value fields[];
 } ActorTemplate;
 
@@ -353,7 +346,7 @@ typedef struct {
 	// This looks very similar to a Record and/or an ActorTemplate.
 	// But those are coincidental and ephemeral similarities.
 	GC header;
-	ActorDef *actor_dfn;
+	ActorDfn *actor_dfn;
 	Value fields[];
 } Actor;
 
@@ -361,8 +354,7 @@ typedef struct {
 	GC header;
 	// It might be useful to capture the sender's source location as
 	// a clue in case an actor panics while responding to a message.
-	Actor *self;
-	Value callable;
+	Value method;
 	Value payload[];
 } Message;
 
@@ -371,14 +363,14 @@ void init_actor_model();
 void enqueue_message(Value message);
 
 void define_actor(byte nr_fields);  // ( field_names... name -- dfn )
-void make_template_from_dfn();  // ( args... dfn -- tpl )
+void install_method();  // ( ActorDfn Method Name -- ActorDfn )
+Value make_template_from_dfn();  // ( args... dfn -- ) tpl
 void make_actor_from_template();  // ( tpl -- actor )
 void bind_task_from_closure();  // ( closure -- message )
 void bind_method_by_name();  // ( actor message_name -- bound_method )
-void apply_bound_method();  // ( args... bound_method -- message )
 void drain_the_queue();
 
-#define AS_ACTOR_DFN(value) ((ActorDef*)AS_PTR(value))
+#define AS_ACTOR_DFN(value) ((ActorDfn*)AS_PTR(value))
 #define AS_ACTOR_TPL(value) ((ActorTemplate*)AS_PTR(value))
 #define AS_ACTOR(value) ((Actor*)AS_PTR(value))
 #define AS_MESSAGE(value) ((Message*)AS_PTR(value))
@@ -421,8 +413,8 @@ void vm_init();
 void vm_dispose();
 
 Value force(Value value);
-Value run(Closure *closure);
-void perform(Value action);
+Value vm_run();
+void perform();
 
 static inline void push(Value value) {
 	assert(vm.stackTop < &vm.stack[STACK_MAX]);
@@ -438,6 +430,8 @@ static inline Value pop() {
 
 #define TOP (vm.stackTop[-1])
 #define SND (vm.stackTop[-2])
+
+static inline Value apply() { return AS_GC(TOP)->kind->apply(); }
 
 static inline void merge(Value v) { pop(); TOP = v; }
 
@@ -475,8 +469,9 @@ void create_native_function(const char *name, byte arity, NativeFn function);  /
 void create_native_method(const char *name, byte arity, NativeFn function);  // ( ActorDfn -- ActorDfn )
 
 // Macro for easier list-enumeration.
-#define FOR_LIST(arg) for (;arg = force(arg),!IS_ENUM(arg);arg = AS_RECORD(arg)->fields[1])
 #define LIST_HEAD(arg) force(AS_RECORD(arg)->fields[0])
+#define LIST_TAIL(arg) (AS_RECORD(arg)->fields[1])
+#define FOR_LIST(arg) for (;arg = force(arg),!IS_ENUM(arg);arg = LIST_TAIL(arg))
 
 /* ffi.h */
 

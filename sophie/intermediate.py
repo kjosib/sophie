@@ -352,11 +352,10 @@ class VMFunctionScope(VMScope):
 	
 	def emit_assign_member(self, field: str):
 		emit("ASSIGN", self.member_number(field))
-		self._pop()
+		self._depth -= 2
 
 	def emit_read_member(self, field: str):
 		emit("MEMBER", self.member_number(field))
-		self._push()
 		
 	def member_number(self, field: str):
 		return self._outer.member_number(field)
@@ -445,6 +444,10 @@ class LazyContext(Context):
 	visit_Lookup = _force_it
 	visit_ExplicitList = _force_it
 
+def _delay(expr:syntax.ValExpr, scope: VMFunctionScope):
+	strict = expr.is_volatile  # There could be more reasons later, e.g. stricture analysis
+	(FORCE if strict else DELAY).visit(expr, scope)
+
 class EagerContext(Context):
 	"""
 	The best way to compile something can depend on context.
@@ -454,9 +457,7 @@ class EagerContext(Context):
 	(This may merit reconsideration for a pure-functional approach.)
 	"""
 	def visit_Call(self, call: syntax.Call, scope: VMFunctionScope):
-		for arg in call.args:
-			strict = arg.is_volatile  # There could be more reasons later, e.g. stricture analysis
-			(FORCE if strict else DELAY).visit(arg, scope)
+		for arg in call.args: _delay(arg, scope)
 		FORCE.visit(call.fn_exp, scope)
 		self.call(scope, len(call.args))
 	
@@ -529,7 +530,7 @@ class EagerContext(Context):
 	def visit_ExplicitList(self, el:syntax.ExplicitList, scope:VMFunctionScope):
 		scope.emit_nil()
 		for item in reversed(el.elts):
-			DELAY.visit(item, scope)
+			_delay(item, scope)
 			scope.emit_snoc()
 		self.answer(scope)
 	
@@ -650,6 +651,7 @@ class ProcContext(EagerContext):
 		scope.emit_drop(len(do.agents))
 
 	def visit_AssignField(self, af:syntax.AssignField, scope:VMFunctionScope):
+		scope.load(ontology.SELF)
 		FORCE.visit(af.expr, scope)
 		scope.emit_assign_member(af.nom.text)
 		self.semicolon(scope)
@@ -715,8 +717,7 @@ def write_one_behavior(b:syntax.Behavior, outer:VMActorScope):
 	# However, there's a special "self" object implicitly the first parameter.
 	# Also, access to self-dot-foo will use actor-specific instructions.
 	inner = VMFunctionScope(outer, b.nom.text, is_thunk=False)
-	inner.declare(ontology.SELF)
-	inner.emit_preamble(b.params, b.nom.text)
+	inner.emit_preamble([ontology.SELF] + b.params, b.nom.text)
 	LAST.visit(b.expr, inner)
 	inner.emit_epilogue()
 

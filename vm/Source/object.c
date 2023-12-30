@@ -39,6 +39,7 @@ GC_Kind KIND_String = {
 	.blacken = blacken_string,
 	.size = size_string,
 	.compare = compare_string,
+	.name = "String",
 };
 
 
@@ -90,7 +91,11 @@ void push_C_string(const char *text) {
 	push(GC_VAL(import_C_string(text, strlen(text))));
 }
 
-void printObject(GC *item) { item->kind->display(item); }
+void printObject(GC *item) {
+	Method display = item->kind->display;
+	if (display) display(item);
+	else printf("<{%s}>", item->kind->name);
+}
 void printObjectDeeply(GC *item) { item->kind->deeply(item); }
 
 bool is_string(void *item) {

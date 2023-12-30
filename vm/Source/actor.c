@@ -53,6 +53,7 @@ void init_actor_model() {
 }
 
 static void grow_the_queue() {
+	// Careful: There is a message not on the stack, so no GC allocations.
 	assert(mq.gap == mq.front);
 	size_t nr_shifting = mq.capacity - mq.front;
 	mq.front += mq.capacity;
@@ -71,23 +72,21 @@ static size_t ahead(size_t index) {
 
 static int arity_of_message(Message *msg) {
 	// Accepts a GC-able parameter but doesn't call anything and therefore can't allocate.
-	Value callable = msg->callable;
-	switch (callable.type) {
-	case VAL_CLOSURE:
-		return AS_CLOSURE(callable)->function->arity;
-	case VAL_NATIVE:
-		return AS_NATIVE(callable)->arity;
-	default:
-		vm_panic("a bogus callable (%s) in a bound method", valKind[callable.type]);
+	assert(IS_GC_ABLE(msg->method));
+	switch (msg->method.type) {
+	case VAL_CLOSURE: return AS_CLOSURE(msg->method)->function->arity;
+	case VAL_GC: return AS_NATIVE(msg->method)->arity;
+	default: crashAndBurn("Nerp!");
 	}
 }
 
-void enqueue_message(Value message) {
-	assert(IS_MESSAGE(message) || IS_BOUND(message));
+void enqueue_message(Value value) {
+	// Careful: The message here may not be on the stack.
+	Message *msg = AS_MESSAGE(value);
 #ifdef DEBUG_TRACE_QUEUE
-	printf("< Enqueue: (%d)\n", arity_of_message(AS_MESSAGE(message)));
+	printf("< Enqueue: (%d)\n", arity_of_message(msg));
 #endif // DEBUG_TRACE_QUEUE
-	mq.buffer[mq.gap] = AS_MESSAGE(message);
+	mq.buffer[mq.gap] = msg;
 	mq.gap = ahead(mq.gap);
 	if (mq.gap == mq.front) grow_the_queue();
 }
@@ -105,28 +104,30 @@ static Message *dequeue_message() {
 
 
 
-static void display_actor_dfn(ActorDef *dfn) {
+static void display_actor_dfn(ActorDfn *dfn) {
 	printf("<ActDfn: %s>", dfn->name->text);
 }
 
-static void blacken_actor_dfn(ActorDef *dfn) {
+static void blacken_actor_dfn(ActorDfn *dfn) {
 	darken_in_place(&dfn->name);
 	darkenTable(&dfn->msg_handler);
 }
 
-static size_t size_actor_dfn(ActorDef *dfn) { return sizeof(ActorDef); }
+static size_t size_actor_dfn(ActorDfn *dfn) { return sizeof(ActorDfn); }
 
-static GC_Kind KIND_ActorDef = {
+static GC_Kind KIND_ActorDfn = {
 	.display = display_actor_dfn,
 	.deeply = display_actor_dfn,
 	.blacken = blacken_actor_dfn,
 	.size = size_actor_dfn,
+	.apply = make_template_from_dfn,
+	.name = "Actor Definition",
 };
 
 void define_actor(byte nr_fields) {
 	// Pops the name of the actor definition.
 	// Returns new actor definition on the VM stack.
-	ActorDef *dfn = gc_allocate(&KIND_ActorDef, sizeof(ActorDef));
+	ActorDfn *dfn = gc_allocate(&KIND_ActorDfn, sizeof(ActorDfn));
 	dfn->nr_fields = nr_fields;
 	dfn->name = AS_STRING(pop());
 	initTable(&dfn->msg_handler);
@@ -153,18 +154,29 @@ static GC_Kind KIND_ActorTpl = {
 	.deeply = display_actor_tpl,
 	.blacken = blacken_actor_tpl,
 	.size = size_actor_tpl,
+	.name = "Actor Template",
 };
 
-void make_template_from_dfn() {
+
+static void force_stack_slots(Value *start, Value *stop) {
+	// This is somewhat a half-measure, because ideally messages should contain no thunks at any depth.
+	// But for the moment it will have to serve. And it's probably enough for making templates.
+	for (Value *p = start; p < stop; p++) *p = force(*p);
+}
+
+
+Value make_template_from_dfn() {
 	assert(is_actor_dfn(TOP));
 	size_t nr_fields = AS_ACTOR_DFN(TOP)->nr_fields;
+	Value *base = &TOP - nr_fields;
+	assert(base >= vm.stack);
+	force_stack_slots(base, &TOP);
 	size_t payload_size = nr_fields * sizeof(Value);
 	ActorTemplate *tpl = gc_allocate(&KIND_ActorTpl, sizeof(ActorTemplate) + payload_size);
-	tpl->actor_dfn = AS_ACTOR_DFN(pop());
-	memcpy(&tpl->fields, vm.stackTop - nr_fields, payload_size);
-	vm.stackTop -= nr_fields;
-	assert(vm.stackTop >= vm.stack);
-	push(GC_VAL(tpl));
+	tpl->actor_dfn = AS_ACTOR_DFN(TOP);
+	memcpy(&tpl->fields, base, payload_size);
+	vm.stackTop = base;
+	return GC_VAL(tpl);
 }
 
 
@@ -186,9 +198,10 @@ static GC_Kind KIND_Actor = {
 	.deeply = display_actor,
 	.blacken = blacken_actor,
 	.size = size_actor,
+	.name = "Actor",
 };
 
-bool is_actor_dfn(Value v) { return IS_GC_ABLE(v) && &KIND_ActorDef == AS_GC(v)->kind; }
+bool is_actor_dfn(Value v) { return IS_GC_ABLE(v) && &KIND_ActorDfn == AS_GC(v)->kind; }
 bool is_actor_tpl(Value v) { return IS_GC_ABLE(v) && &KIND_ActorTpl == AS_GC(v)->kind; }
 bool is_actor(Value v) { return IS_GC_ABLE(v) && &KIND_Actor == AS_GC(v)->kind; }
 
@@ -204,15 +217,68 @@ void make_actor_from_template() {
 
 void display_bound(Message *msg) { printf("<bound method>"); }
 
-void blacken_bound(Message *msg) { darken_in_place(&msg->self); darkenValue(&msg->callable); }
+static void blacken_bound(Message *msg) { darkenValue(&msg->method); darkenValue(&msg->payload[0]); }
+static size_t size_bound(Message *msg) { return sizeof(Message) + sizeof(Value); }
 
-size_t size_bound(Message *msg) { return sizeof(Message); }
+static void run_message(Message *msg) {
+	push(msg->method);
+	switch (msg->method.type) {
+	case VAL_CLOSURE:
+		// Must either be a do-block or a user-defined method.
+		// In either case, the corresponding code is in procedural perspective.
+		vm_run();
+		break;
+	case VAL_GC:
+		// Must be a native method.
+		// For now, rely on it to have side effects.
+		AS_GC(msg->method)->kind->apply();
+		break;
+	default:
+		crashAndBurn("Inconceivable!");
+	}
 
-static GC_Kind KIND_bound = {
+}
+
+static void blacken_message(Message *msg) {
+	darkenValue(&msg->method);
+	darkenValues(msg->payload, arity_of_message(msg));
+}
+
+static size_t size_message(Message *msg) { return sizeof(Message) + arity_of_message(msg) * sizeof(Value); }
+
+static GC_Kind KIND_Message = {
+	.blacken = blacken_message,
+	.size = size_message,
+	.proceed = run_message,
+	.name = "Message",
+};
+
+
+static Value apply_bound_method() {
+	int arity = arity_of_message(AS_MESSAGE(TOP));
+	assert(arity);
+	Value *base = vm.stackTop - arity;
+	force_stack_slots(base, &TOP);
+	Message *msg = gc_allocate(&KIND_Message, sizeof(Message) + arity * sizeof(Value));
+	Message *bound = AS_MESSAGE(TOP);
+	msg->method = bound->method;
+	msg->payload[0] = bound->payload[0];
+	memcpy(&msg->payload[1], base, (arity - 1) * sizeof(Value));
+	vm.stackTop = base;
+	return GC_VAL(msg);
+}
+
+
+static GC_Kind KIND_BoundMethod = {
+	// These things definitely have a receiver,
+	// but no other associated arguments.
 	.display = display_bound,
 	.deeply = display_bound,
 	.blacken = blacken_bound,
 	.size = size_bound,
+	.apply = apply_bound_method,
+	.proceed = run_message,
+	.name = "Bound Method",
 };
 
 void bind_method_by_name() {  // ( actor message_name -- bound_method )
@@ -220,86 +286,77 @@ void bind_method_by_name() {  // ( actor message_name -- bound_method )
 	assert(AS_GC(SND)->kind == &KIND_Actor);
 	assert(IS_GC_ABLE(TOP));
 	assert(is_string(AS_GC(TOP)));
-	Message *bound = gc_allocate(&KIND_bound, sizeof(Message));
-	Actor *self = bound->self = AS_ACTOR(SND);
-	bound->callable = tableGet(&self->actor_dfn->msg_handler, AS_STRING(TOP));
-	SND = BOUND_VAL(bound);
+	Message *bound = gc_allocate(&KIND_BoundMethod, sizeof(Message)+sizeof(Value));
+	bound->method = tableGet(&AS_ACTOR(SND)->actor_dfn->msg_handler, AS_STRING(TOP));
+	bound->payload[0] = SND;
+	SND = GC_VAL(bound);
 	pop();
 }
 
-void bind_task_from_closure() {
-	// Convert a closure to a bound method
-	assert(IS_CLOSURE(TOP));
-	Message *bound = gc_allocate(&KIND_bound, sizeof(Message));
-	bound->self = NULL;
-	bound->callable = TOP;
-	TOP = BOUND_VAL(bound);
+
+void run_task(Message *msg) {
+	// A regular function can at best evaluate to an action.
+	// So we call the function for its action-as-value,
+	// then perform the action.
+	push(msg->method);
+	push(vm_run());
+	perform();
 }
 
-void display_message(Message *msg) { printf("<message>"); }
-
-void blacken_message(Message *msg) {
-	blacken_bound(msg);
-	darkenValues(msg->payload, arity_of_message(msg));
-}
-
-size_t size_message(Message *msg) {
-	int arity = arity_of_message(msg);
-	return sizeof(Message) + arity * sizeof(Value);
-}
-
-static GC_Kind KIND_message = {
-	.display = display_message,
-	.deeply = display_message,
+static GC_Kind KIND_Task = {
 	.blacken = blacken_message,
 	.size = size_message,
+	.proceed = run_task,
+	.name = "Task",
+};
+
+static void blacken_parametric(Message *msg) { darkenValue(&msg->method); }
+static size_t size_parametric(Message *msg) { return sizeof(Message); }
+
+static Value apply_parametric() {
+	TOP = AS_MESSAGE(TOP)->method;
+	int arity = AS_CLOSURE(TOP)->function->arity;
+	Value *base = &TOP - arity;
+	force_stack_slots(base, &TOP);
+	Message *msg = gc_allocate(&KIND_Task, sizeof(Message) + arity * sizeof(Value));
+	msg->method = TOP;
+	memcpy(msg->payload, base, arity * sizeof(Value));
+	vm.stackTop = base;
+	return GC_VAL(msg);
+}
+
+static GC_Kind KIND_ParametricTask = {
+	.blacken = blacken_parametric,
+	.size = size_parametric,
+	.apply = apply_parametric,
+	.name = "Parametric Task",
 };
 
 
-static void force_stack_slots(Value *start, Value *stop) {
-	// This is somewhat a half-measure, because ideally messages should contain no thunks at any depth.
-	// But for the moment it will have to serve.
-	for (Value *p = start; p < stop; p++) *p = force(*p);
+void bind_task_from_closure() {
+	// Convert a closure to a (possibly-parametric) task.
+	// NB: In case arity == 0, then the method is a do-block, which already has procedural perspective.
+	//     Otherwise, the method is a function which returns an action.
+	// NB: In case messages desperately need to know their actor,
+	//     this will need a replacement for KIND_Message.
+	assert(IS_CLOSURE(TOP));
+	Closure *closure = AS_CLOSURE(TOP);
+	GC_Kind *kind = (closure->function->arity) ? &KIND_ParametricTask : &KIND_Message;
+	Message *task = gc_allocate(kind, sizeof(Message));
+	task->method = TOP;
+	TOP = GC_VAL(task);
 }
 
-void apply_bound_method() {
-	assert(IS_BOUND(TOP));
-	int arity = arity_of_message(AS_MESSAGE(TOP));
-	force_stack_slots(&TOP - arity, &TOP);
-	Message *msg = gc_allocate(&KIND_message, sizeof(Message) + arity * sizeof(Value));
-	Message *bound = AS_MESSAGE(pop());
-	msg->self = bound->self;
-	msg->callable = bound->callable;
-	memcpy(msg->payload, vm.stackTop - arity, arity * sizeof(Value));
-	vm.stackTop -= arity;
-	push(MESSAGE_VAL(msg));
-}
 
 static void run_one_message(Message *msg) {
 #ifdef DEBUG_TRACE_QUEUE
 	printf("> Dequeue (%d)\n", arity_of_message(msg));
 #endif // DEBUG_TRACE_QUEUE
 	Value *base = vm.stackTop;
-	if (msg->self != NULL) push(GC_VAL(msg->self));
 	int arity = arity_of_message(msg);
 	memcpy(vm.stackTop, msg->payload, arity * sizeof(Value));
 	vm.stackTop += arity;
-	switch (msg->callable.type) {
-	case VAL_CLOSURE:
-	{
-		Value action = run(AS_CLOSURE(msg->callable));
-		perform(action);
-		break;
-	}
-	case VAL_NATIVE:
-	{
-		Native *native = AS_NATIVE(msg->callable);
-		native->function(base);
-		break;
-	}
-	default:
-		crashAndBurn("Bad message callable");
-	}
+	msg->header.kind->proceed(msg);
 	vm.stackTop = base;
 #ifdef DEBUG_TRACE_QUEUE
 	printf("  <--->\n");
@@ -308,4 +365,11 @@ static void run_one_message(Message *msg) {
 
 void drain_the_queue() {
 	while (!is_queue_empty()) run_one_message(dequeue_message());
+}
+
+void install_method() {  // ( ActorDfn Method Name -- ActorDfn )
+	String *key = AS_STRING(pop());
+	ActorDfn *dfn = AS_ACTOR_DFN(SND);
+	bool was_new = tableSet(&dfn->msg_handler, key, pop());
+	if (!was_new) crashAndBurn("already installed %s into %s", key->text, dfn->name->text);
 }

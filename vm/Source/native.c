@@ -48,7 +48,7 @@ static Value val_native(Value *args) {
 	else {
 		push(NUMBER_VAL(d));
 		push(vm.maybe_this);
-		return GC_VAL(construct_record());
+		return construct_record();
 	}
 }
 
@@ -112,8 +112,7 @@ static Value console_read(Value *args) {
 	fgets(buffer, sizeof(buffer), stdin);
 	push_C_string(buffer);
 	push(args[1]);
-	apply_bound_method();
-	enqueue_message(pop());
+	enqueue_message(apply());
 	return NIL_VAL;
 }
 
@@ -136,8 +135,7 @@ static Value console_random(Value *args) {
 		chacha_make_noise(&randomness, &seed);
 	}
 	args[0] = NUMBER_VAL((double)randomness.noise_64[noise_index++] / UINT64_MAX);
-	apply_bound_method();
-	enqueue_message(pop());
+	enqueue_message(apply());
 	return NIL_VAL;
 }
 
@@ -148,37 +146,42 @@ static void display_native(Native *native) { printf("<fn %s>", native->name->tex
 static void blacken_native(Native *native) { darken_in_place(&native->name); }
 
 static size_t size_native(Native *native) { return sizeof(Native); }
+static size_t arity_native(Native *native) { return native->arity; }
+
+static Value call_native() {
+	Native *native = AS_NATIVE(pop());
+	Value *slot = vm.stackTop - native->arity;
+	Value result = native->function(slot);
+	vm.stackTop = slot;
+	return result;
+}
 
 GC_Kind KIND_Native = {
 	.display = display_native,
 	.deeply = display_native,
 	.blacken = blacken_native,
 	.size = size_native,
+	.apply = call_native,
+	.name = "Native Function",
 };
 
-static void create_native(const char *name, byte arity, NativeFn function) {  // ( -- Native )
+static void create_native(const char *name, byte arity, NativeFn function) {  // ( -- Native Name )
 	push_C_string(name);
 	Native *native = gc_allocate(&KIND_Native, sizeof(Native));
 	native->arity = arity;
 	native->function = function;
 	native->name = AS_STRING(TOP);
-	TOP = NATIVE_VAL(native);
+	dup();
+	SND = GC_VAL(native);
 }
 
 void create_native_function(const char *name, byte arity, NativeFn function) {  // ( -- )
 	create_native(name, arity, function);
-	push(GC_VAL(AS_NATIVE(TOP)->name));
 	defineGlobal();
 }
 
-static void install_method() {  // ( ActorDfn Native -- ActorDfn )
-	ActorDef *dfn = AS_ACTOR_DFN(SND);
-	String *key = AS_NATIVE(TOP)->name;
-	bool was_new = tableSet(&dfn->msg_handler, key, pop());
-	if (!was_new) crashAndBurn("already installed %s into %s", key->text, dfn->name->text);
-}
-
 void create_native_method(const char *name, byte arity, NativeFn function) {  // ( ActorDfn -- ActorDfn )
+	assert(arity);
 	create_native(name, arity, function);
 	install_method();
 }
@@ -304,15 +307,15 @@ static void install_the_console() {
 	define_actor(0);
 
 	// Next up, define some methods:
-	create_native_method("echo", 1, console_echo);
-	create_native_method("read", 1, console_read);
-	create_native_method("random", 1, console_random);
+	create_native_method("echo", 2, console_echo);
+	create_native_method("read", 2, console_read);
+	create_native_method("random", 2, console_random);
 
 	// Oh yeah about that...
 	seed_random_number_generator();
 
 	// Finally, create the actor itself.
-	make_template_from_dfn();
+	push(make_template_from_dfn());
 	make_actor_from_template();
 
 	push_C_string("console");
