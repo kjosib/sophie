@@ -70,7 +70,7 @@ static size_t ahead(size_t index) {
 	return (index + 1) & (mq.capacity - 1);
 }
 
-static int arity_of_message(Message *msg) {
+static size_t arity_of_message(Message *msg) {
 	// Accepts a GC-able parameter but doesn't call anything and therefore can't allocate.
 	assert(IS_GC_ABLE(msg->method));
 	switch (msg->method.type) {
@@ -255,7 +255,7 @@ static GC_Kind KIND_Message = {
 
 
 static Value apply_bound_method() {
-	int arity = arity_of_message(AS_MESSAGE(TOP));
+	size_t arity = arity_of_message(AS_MESSAGE(TOP));
 	assert(arity);
 	Value *base = vm.stackTop - arity;
 	force_stack_slots(base, &TOP);
@@ -353,7 +353,7 @@ static void run_one_message(Message *msg) {
 	printf("> Dequeue (%d)\n", arity_of_message(msg));
 #endif // DEBUG_TRACE_QUEUE
 	Value *base = vm.stackTop;
-	int arity = arity_of_message(msg);
+	size_t arity = arity_of_message(msg);
 	memcpy(vm.stackTop, msg->payload, arity * sizeof(Value));
 	vm.stackTop += arity;
 	msg->header.kind->proceed(msg);
