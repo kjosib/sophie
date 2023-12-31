@@ -148,12 +148,7 @@ static Display *init_display(int width, int height) {
 
 /***********************************************************************************/
 
-static void push_display_proxy(int width, int height) {
-	push(GC_VAL(init_display(width, height)));
-	push(linkage[LL_DISPLAY_PROXY]);
-	push(make_template_from_dfn());
-	make_actor_from_template();
-}
+// New rule: Sub-functions of the display-proxy will *NOT* refer to the VM stack.
 
 static void set_sdl_color(SDL_Renderer *renderer, Record *color) {
 	Uint8 red = (Uint8)(AS_NUMBER(color->fields[0]));
@@ -162,9 +157,25 @@ static void set_sdl_color(SDL_Renderer *renderer, Record *color) {
 	SDL_SetRenderDrawColor(renderer, red, green, blue, SDL_ALPHA_OPAQUE);
 }
 
-static void dp_draw_fill(SDL_Renderer *renderer) {
-	set_sdl_color(renderer, AS_RECORD(AS_RECORD(TOP)->fields[0]));
+static void dp_draw_fill(SDL_Renderer *renderer, Record *fill) {
+	set_sdl_color(renderer, AS_RECORD(fill->fields[0]));
 	SDL_RenderClear(renderer);
+}
+
+static void dp_hlin(SDL_Renderer *renderer, Record *hlin) {
+	set_sdl_color(renderer, AS_RECORD(hlin->fields[3]));
+	int x1 = (int)(AS_NUMBER(hlin->fields[0]));
+	int x2 = (int)(AS_NUMBER(hlin->fields[1]));
+	int y  = (int)(AS_NUMBER(hlin->fields[2]));
+	SDL_RenderDrawLine(renderer, x1, y, x2, y);
+}
+
+static void dp_vlin(SDL_Renderer *renderer, Record *vlin) {
+	set_sdl_color(renderer, AS_RECORD(vlin->fields[3]));
+	int x  = (int)(AS_NUMBER(vlin->fields[0]));
+	int y1 = (int)(AS_NUMBER(vlin->fields[1]));
+	int y2 = (int)(AS_NUMBER(vlin->fields[2]));
+	SDL_RenderDrawLine(renderer, x, y1, x, y2);
 }
 
 static Value dp_draw(Value *args) {
@@ -175,7 +186,11 @@ static Value dp_draw(Value *args) {
 		force_deeply();
 		switch (AS_RECORD(TOP)->constructor->tag) {
 		case PIC_FILL:
-			dp_draw_fill(DISPLAY_PTR->renderer); break;
+			dp_draw_fill(DISPLAY_PTR->renderer, AS_RECORD(TOP)); break;
+		case PIC_HLIN:
+			dp_hlin(DISPLAY_PTR->renderer, AS_RECORD(TOP)); break;
+		case PIC_VLIN:
+			dp_vlin(DISPLAY_PTR->renderer, AS_RECORD(TOP)); break;
 		default:
 			printf("Draw %d ", AS_RECORD(TOP)->constructor->tag);
 		}
@@ -192,20 +207,14 @@ static Value dp_close(Value *args) {
 	return NIL_VAL;
 }
 
-static void define_display_proxy_as_linkage() {
-	push_C_string("display");
-
-	push_C_string("DisplayProxy");
-	define_actor(NR_DP_FIELDS);
-	
-	create_native_method("draw", 2, dp_draw);
-	create_native_method("close", 1, dp_close);
-
-	// Leave on stack for linkage.
-	assert(is_actor_dfn(linkage[LL_DISPLAY_PROXY]));
-}
-
 /***********************************************************************************/
+
+static void push_display_proxy(int width, int height) {
+	push(GC_VAL(init_display(width, height)));
+	push(linkage[LL_DISPLAY_PROXY]);
+	push(make_template_from_dfn());
+	make_actor_from_template();
+}
 
 static Value game_play(Value *args) {  // ( SELF size fps -- )
 	if (is_running) {
@@ -244,7 +253,10 @@ static Value game_play(Value *args) {  // ( SELF size fps -- )
 				enqueue_message(pop());
 				return NIL_VAL;
 			case SDL_KEYDOWN:
-				printf("Key Symbol: %d\n", ev.key.keysym.sym);
+				printf("Key Down: %d\n", ev.key.keysym.sym);
+				break;
+			case SDL_KEYUP:
+				printf("Key Up: %d\n", ev.key.keysym.sym);
 				break;
 			case SDL_MOUSEMOTION:
 				if (!IS_NIL(SELF->fields[ON_MOUSE])) {
@@ -297,6 +309,19 @@ static Value game_play(Value *args) {  // ( SELF size fps -- )
 }
 
 /***********************************************************************************/
+
+static void define_display_proxy_as_linkage() {
+	push_C_string("display");
+
+	push_C_string("DisplayProxy");
+	define_actor(NR_DP_FIELDS);
+
+	create_native_method("draw", 2, dp_draw);
+	create_native_method("close", 1, dp_close);
+
+	// Leave on stack for linkage.
+	assert(is_actor_dfn(linkage[LL_DISPLAY_PROXY]));
+}
 
 static void define_event_loop_as_global() {
 	// Push field names here...

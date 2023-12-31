@@ -42,7 +42,7 @@ Here are some open problems, in no particular order:
 * [DONE] Improve how the GC treats snapped thunks.
 * [DONE] Dismiss the bytecode-translator's data (including the global symbol table) before
   starting the user program. (After picking up the special-cased constants, though...)
-* [PARTIAL] SDL bindings, at least for some simple graphics and the mouse.
+* [DONE] SDL bindings, at least for some simple graphics and the mouse.
 * Improved stack safety based on a max-depth analysis
 * [DONE] ``do``-blocks should have tail-calls eliminated. (This may be trickier than it sounds. Or not.)
 * [DONE] User-Defined Actors.
@@ -50,7 +50,8 @@ Here are some open problems, in no particular order:
 * Turtle Graphics, perhaps in terms of SDL.
 * Make SDL optional and load on demand.
 * Source line numbers. In case of a run-time panic, a cross-reference is most helpful.
-* Numeric field offsets. This could save cycles where a record-type is statically known.
+* [PARTIAL] Numeric field offsets. This could save cycles where a record-type is statically known.
+  *This is done for actor fields.*
 * Tuning the dial on eager evaluation. (This should further improve performance.)
 * NaN-boxing.
 * Short-string representation: Very short strings fit in a value (and don't benefit from interning).
@@ -1486,3 +1487,15 @@ Side note: I've dropped several of the value-type tags
 in favor of expanding the powers of the ``GC_Kind`` structure.
 I figure this will eventually help with NaN-boxing.
 
+30 December 2023
+----------------
+
+I took a little while to bring the game module closer to feature parity with the Python version.
+The VM can now run the ``mouse.sg`` demo that keeps cross-hairs on the mouse as it moves.
+But now I have all these questions about designing a suitable data type for rendering screen images.
+It turns out SDL uses a stateful model for current drawing color, but the corresponding PyGame
+adaptation (from which I started) requires you to pass the color along with each drawing primitive.
+
+I also get the sense I'll soon want to attack threading.
+SDL helpfully provides a cross-platform thread subsystem.
+I wonder if it will be up to the task.
