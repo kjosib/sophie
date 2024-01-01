@@ -469,9 +469,9 @@ void create_native_function(const char *name, byte arity, NativeFn function);  /
 void create_native_method(const char *name, byte arity, NativeFn function);  // ( ActorDfn -- ActorDfn )
 
 // Macro for easier list-enumeration.
-#define LIST_HEAD(arg) force(AS_RECORD(arg)->fields[0])
+#define LIST_HEAD(arg) (AS_RECORD(arg)->fields[0])
 #define LIST_TAIL(arg) (AS_RECORD(arg)->fields[1])
-#define FOR_LIST(arg) for (;arg = force(arg),!IS_ENUM(arg);arg = LIST_TAIL(arg))
+#define FOR_LIST(arg) for (;!IS_ENUM(arg);arg = LIST_TAIL(arg))
 
 /* ffi.h */
 

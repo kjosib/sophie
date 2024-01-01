@@ -183,7 +183,6 @@ static Value dp_draw(Value *args) {
 	FOR_LIST(args[1]) {
 		push(LIST_HEAD(args[1]));  // Becomes args[2]
 		assert(VAL_GC == TOP.type);
-		force_deeply();
 		switch (AS_RECORD(TOP)->constructor->tag) {
 		case PIC_FILL:
 			dp_draw_fill(DISPLAY_PTR->renderer, AS_RECORD(TOP)); break;

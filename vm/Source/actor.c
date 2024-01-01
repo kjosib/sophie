@@ -159,9 +159,15 @@ static GC_Kind KIND_ActorTpl = {
 
 
 static void force_stack_slots(Value *start, Value *stop) {
-	// This is somewhat a half-measure, because ideally messages should contain no thunks at any depth.
-	// But for the moment it will have to serve. And it's probably enough for making templates.
-	for (Value *p = start; p < stop; p++) *p = force(*p);
+	// This forces deeply: The affected slots reach no thunks.
+	// Some desirable features result:
+	// 1. The actor that *specifies* a computation is the actor that *completes* it. The U/I thread won't accidentally do hard computations.
+	// 2. Threads will not contend to snap a thunk as thunks can't escape thread boundaries.
+	for (Value *p = start; p < stop; p++) {
+		push(*p);
+		force_deeply();
+		*p = pop();
+	}
 }
 
 
