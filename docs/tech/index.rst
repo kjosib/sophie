@@ -22,6 +22,7 @@ I'll add notes as they seem necessary while the overall system fills out.
     strict
     vm
     gc
+    generational
     lazy
     actor
     ast
