@@ -1499,3 +1499,26 @@ adaptation (from which I started) requires you to pass the color along with each
 I also get the sense I'll soon want to attack threading.
 SDL helpfully provides a cross-platform thread subsystem.
 I wonder if it will be up to the task.
+
+31 December 2023
+----------------
+
+Just a small change before the New Year:
+Constructing a message now forces all the arguments deeply.
+This means:
+
+* Built-in actors (e.g. the game layer) don't need to worry about thunks.
+* The heaps get a bigger in the short run.
+* There's more incentive to do something about generational GC and threading.
+
+1 January 2024
+--------------
+
+I have run into a practical problem.
+This new "force-deeply" thing can easily overflow the C stack, which runs counter to my goals.
+The short-term solution is to revert the change, which I have done.
+Eventually I must find a something better.
+It may well turn out to interact with the garbage collector.
+More about that in a separate document.
+
+
