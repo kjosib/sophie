@@ -6,7 +6,7 @@ DESIGN NOTE
 The hash table is principally a vector of Entry structures.
 An entry consists of a String pointer and a Value.
 
-Code currently represents virgin entries as those with key=NULL and value NIL.
+Code currently represents virgin entries as those with key=NULL and value FALSE.
 Tombstones are as key=NULL and value TRUE.
 
 */
@@ -36,13 +36,13 @@ static Entry *findEntry(Entry *entries, size_t capacity, String *key) {
 	for (;;) {
 		Entry *entry = &entries[index];
 		if (entry->key == NULL) {
-			if (IS_NIL(entry->value)) {
-				// Empty entry.
-				return tombstone != NULL ? tombstone : entry;
+			if (AS_BOOL(entry->value)) {
+				// We found a tombstone.
+				if (tombstone == NULL) tombstone = entry;
 			}
 			else {
-			 // We found a tombstone.
-				if (tombstone == NULL) tombstone = entry;
+				// Empty entry.
+				return tombstone != NULL ? tombstone : entry;
 			}
 		}
 		else if (entry->key == key) {
@@ -59,7 +59,7 @@ static void adjustCapacity(Table *table, size_t capacity) {
 	table->cnt = 0;
 	for (size_t i = 0; i < capacity; i++) {
 		entries[i].key = NULL;
-		entries[i].value = NIL_VAL;
+		entries[i].value = FALSE_VAL;
 	}
 
 	for (size_t i = 0; i < table->cap; i++) {
@@ -78,9 +78,14 @@ static void adjustCapacity(Table *table, size_t capacity) {
 }
 
 Value tableGet(Table *table, String *key) {
-	if (table->cnt == 0) return NIL_VAL;
+#ifdef _DEBUG
+	if (table->cnt == 0) crashAndBurn("tableGet tried to find \"%s\" in an empty table", key->text);
+#endif // _DEBUG
 	Entry *entry = findEntry(table->at, table->cap, key);
-	return (entry->key == NULL) ? NIL_VAL : entry->value;
+#ifdef _DEBUG
+	if (entry->key == NULL) crashAndBurn("tableGet did not find key \"%s\"", key->text);
+#endif // _DEBUG
+	return entry->value;
 }
 
 bool tableSet(Table *table, String *key, Value value) {
@@ -101,7 +106,7 @@ bool tableSet(Table *table, String *key, Value value) {
 
 	Entry *entry = findEntry(table->at, table->cap, key);
 	bool isNewKey = entry->key == NULL;
-	if (isNewKey && IS_NIL(entry->value)) table->cnt++;
+	if (isNewKey && ! AS_BOOL(entry->value)) table->cnt++;
 
 	entry->key = key;
 	entry->value = value;
@@ -137,7 +142,7 @@ Entry *tableFindString(Table *table, const char *chars, size_t length, uint32_t 
 		Entry *entry = &table->at[index];
 		if (entry->key == NULL) {
 			// Stop if we find an empty non-tombstone entry.
-			if (IS_NIL(entry->value)) return NULL;
+			if (! AS_BOOL(entry->value)) return NULL;
 		}
 		else if (entry->key->length == length &&
 			entry->key->hash == hash &&

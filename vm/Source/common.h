@@ -111,15 +111,12 @@ void *reallocate(void *pointer, size_t newSize);
 #define NUMBER_FORMAT "%.17g"
 
 typedef enum {
-	VAL_NIL,     // Not the same as Sophie's nil.
-	VAL_BOOL,    // Don't really need, as ENUM serves.
 	VAL_NUMBER,  // Meaning "double-precision"
-	VAL_ENUM,    // Overload for runes
+	VAL_ENUM,    // Overload for runes, booleans, etc.
 	VAL_PTR,     // Non-collectable opaque pointer.
 	VAL_GC,      // Pointer to Garbage-Collected Heap for this and subsequent tags.
 	VAL_THUNK,   // Pointer to thunk; helps with VM to avoid indirections.
 	VAL_CLOSURE, // And why not exploit the tags to full effect?
-	VAL_FN,      // Not-closed function. Found in constant tables.
 	VAL_GLOBAL,  // Global reference; used only during compiling.
 } ValueType;
 
@@ -129,38 +126,34 @@ struct Value {
 	union {
 		bool boolean;
 		double number;
-		int tag;
+		int enum_tag;
 		void *ptr;
 		GC *gc;
 	} as;
 };
 
 
-#define IS_NIL(value)     ((value).type == VAL_NIL)
-#define IS_BOOL(value)    ((value).type == VAL_BOOL)
 #define IS_NUMBER(value)  ((value).type == VAL_NUMBER)
 #define IS_ENUM(value)    ((value).type == VAL_ENUM)
 #define IS_GC_ABLE(value) ((value).type >= VAL_GC)
 #define IS_THUNK(value)   ((value).type == VAL_THUNK)
 #define IS_CLOSURE(value) ((value).type == VAL_CLOSURE)
-#define IS_FN(value)      ((value).type == VAL_FN)
 #define IS_GLOBAL(value)  ((value).type == VAL_GLOBAL)
 
 #define AS_BOOL(value)    ((value).as.boolean)
 #define AS_NUMBER(value)  ((value).as.number)
-#define AS_ENUM(value)    ((value).as.tag)
+#define AS_ENUM(value)    ((value).as.enum_tag)
 #define AS_PTR(value)     ((value).as.ptr)
 #define AS_GC(value)      ((value).as.gc)
 
-#define NIL_VAL	            ((Value){VAL_NIL, {.number = 0}})
-#define BOOL_VAL(value)     ((Value){VAL_BOOL, {.boolean = value}})
+#define FALSE_VAL	            BOOL_VAL(false)
+#define BOOL_VAL(value)     ((Value){VAL_ENUM, {.boolean = value}})
 #define NUMBER_VAL(value)   ((Value){VAL_NUMBER, {.number = value}})
-#define ENUM_VAL(value)     ((Value){VAL_ENUM, {.tag = value}})
+#define ENUM_VAL(value)     ((Value){VAL_ENUM, {.enum_tag = value}})
 #define PTR_VAL(object)     ((Value){VAL_PTR, {.ptr = object}})
 #define GC_VAL(object)      ((Value){VAL_GC, {.ptr = object}})
 #define CLOSURE_VAL(object) ((Value){VAL_CLOSURE, {.ptr = object}})
 #define THUNK_VAL(object)   ((Value){VAL_THUNK, {.ptr = object}})
-#define FN_VAL(object)      ((Value){VAL_FN, {.ptr = object}})
 #define GLOBAL_VAL(object)  ((Value){VAL_GLOBAL, {.ptr = object}})
 
 DEFINE_VECTOR_TYPE(ValueArray, Value)
@@ -282,14 +275,15 @@ String *name_of_function(Function *function);
 #define AS_CLOSURE(value) ((Closure *)AS_PTR(value))
 #define AS_FN(value) ((Function *)AS_PTR(value))
 
+bool is_function(Value value);
 
 extern GC_Kind KIND_Snapped;
 
 #define SNAP_RESULT(thunk_ptr) (thunk_ptr->captives[0])
-#define DID_SNAP(thunk_ptr) (SNAP_RESULT(thunk_ptr).type != VAL_NIL)
+#define DID_SNAP(thunk_ptr) (&KIND_Snapped == AS_GC(thunk_ptr)->kind)
 
 static inline void darkenValue(Value *value) {
-	if (IS_THUNK(*value) && DID_SNAP(AS_CLOSURE(*value))) {
+	if (IS_THUNK(*value) && DID_SNAP(*value)) {
 		*value = SNAP_RESULT(AS_CLOSURE(*value));
 	}
 	if (IS_GC_ABLE(*value)) {

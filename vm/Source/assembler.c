@@ -118,12 +118,12 @@ static void pop_scope() {
 
 static void perform_word(Value value) {
 	if (value.type == VAL_ENUM) {
-		int index = value.as.tag;
+		int index = AS_ENUM(value);
 		emit(index);
 		instruction[index].operand->assemble(&current->chunk);
 	}
 	else if (value.type == VAL_PTR) {
-		Verb verb = value.as.ptr;
+		Verb verb = AS_PTR(value);
 		verb();
 	}
 	else crashAndBurn("Bogosity in the lexicon");
@@ -176,7 +176,7 @@ static Value parse_rest_of_function(byte arity) {
 #ifdef DEBUG_PRINT_CODE
 	disassembleChunk(&function->chunk, name_of_function(function)->text);
 #endif
-	return FN_VAL(function);
+	return GC_VAL(function);
 }
 
 static void parse_thunk() {
@@ -270,7 +270,6 @@ static void parse_ffi_init() {
 	// Read the name of the module to initialize.
 	String *module_name = parseString();
 	NativeFn init_function = ffi_find_module(module_name);
-	if (init_function == NULL) crashAndBurn("there is no module called \"%s\"", module_name->text);
 	// Note the current stack pointer for later...
 	Value *args = vm.stackTop;
 	// Read symbols, and push their definitions, until encoutering a semicolon.
@@ -341,12 +340,10 @@ static void snap_global_pointers(Function *fn) {
 		Value *item = &fn->chunk.constants.at[index];
 		if (IS_GLOBAL(*item)) {
 			String *key = AS_STRING(*item);
-			Value found = tableGet(&globals, key);
-			if (IS_NIL(found)) crashAndBurn("global not found: %s", AS_STRING(*item)->text);
-			else *item = found;
+			*item = tableGet(&globals, key);
 		}
 		if (IS_CLOSURE(*item) || IS_THUNK(*item)) snap_global_pointers(AS_CLOSURE(*item)->function);
-		else if (IS_FN(*item)) snap_global_pointers(AS_FN(*item));
+		else if (is_function(*item)) snap_global_pointers(AS_FN(*item));
 		else if (is_actor_dfn(*item)) {
 			Table *table = &AS_ACTOR_DFN(*item)->msg_handler;
 			for (size_t index = 0; index < table->cap; index++) {
@@ -370,7 +367,7 @@ void assemble(const char *source) {
 	push_new_scope();
 	parseScript();
 	consume(TOKEN_EOF, "expected end of file.");
-	push(FN_VAL(newFunction(TYPE_SCRIPT, &current->chunk, 0, 0)));
+	push(GC_VAL(newFunction(TYPE_SCRIPT, &current->chunk, 0, 0)));
 	pop_scope();
 	close_function(&TOP);
 	snap_global_pointers(AS_CLOSURE(TOP)->function);

@@ -1521,4 +1521,46 @@ Eventually I must find a something better.
 It may well turn out to interact with the garbage collector.
 More about that in a separate document.
 
+2 January 2024
+--------------
+
+I have decided to implement NaN-boxing and see how it affects things.
+There's a plan in a :doc:`neighboring document <nanbox>`.
+
+3 January 2024
+--------------
+
+NaN-boxing begins.
+
+* ``VAL_FN`` is gone, replaced with a test on the GC kind field.
+* ``VAL_NIL`` and ``VAL_BOOL`` are gone, with ``VAL_ENUM`` moving into slot zero in the enumeration.
+* ``NIL_VAL`` becomes ``FALSE_VAL``, defined as ``BOOL_VAL(false)``.
+
+The change hit a snag:
+The table implementation relied on being able to return ``NIL_VAL`` to communicate the absence of a key,
+but now I've taken that away. Usages include:
+
+* assembler.c in ``parse_ffi_init``: This usage relies on the front-end to provide only valid keys.
+* assembler.c in ``snap_global_pointers``: This does the same, but explicitly checks for absence.
+* ffi.c in ``ffi_find_module``: This delegates upward, but the one caller clearly expects the key.
+* vm.c in the ``OP_FIELD`` case of ``run``: This is using the look-up to find a field offset.
+* actor.c in ``bind_method_by_name`` looks up a message -- presumably the type checker's done its job?
+  There is definitely code in the type checker to check that only valid messages are passed,
+  so if that code works then this look-up is bound to succeed.
+* table.c in ``table_get_from_C`` delegates up:
+  * All usages are in vm.c in ``vm_capture_preamble_specials`` looking up things in the preamble.
+
+Therefore, as of right now, a failed table look-up is always grounds for unceremonious termination.
+I'll just move that fact into the ``tableGet`` function.
+
+Also, since ``VAL_NIL`` has gone away, the test for a snapped thunk now checks the thunk's kind.
+(Snapping it, changes the kind.) This may improve GC slightly but it slows the thunk-ful Fibonacci benchmark about 10%.
+I saw a similar slow-down the last time I tried that, but for the moment there's no way around it.
+I attribute this to memory bandwidth, as previously it was possible to tell a snapped thunk
+by looking at the maybe-result. I may change this back eventually.
+
+| Thunkless: 5.7 seconds
+| Thunk-ful: 13.8 seconds
+
+I'll go ahead and commit this before continuing...
 

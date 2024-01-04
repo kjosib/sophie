@@ -47,12 +47,12 @@ static Value *linkage;
 
 static Value game_on_mouse(Value *args) {
 	SELF->fields[ON_MOUSE] = args[1];
-	return NIL_VAL;
+	return FALSE_VAL;
 }
 
 static Value game_on_tick(Value *args) {
 	SELF->fields[ON_TICK] = args[1];
-	return NIL_VAL;
+	return FALSE_VAL;
 }
 
 static void compose(LINKAGE what) {
@@ -199,12 +199,12 @@ static Value dp_draw(Value *args) {
 	}
 	
 	SDL_RenderPresent(DISPLAY_PTR->renderer);
-	return NIL_VAL;
+	return FALSE_VAL;
 }
 
 static Value dp_close(Value *args) {
 	finalize_display(DISPLAY_PTR);
-	return NIL_VAL;
+	return FALSE_VAL;
 }
 
 /***********************************************************************************/
@@ -237,7 +237,7 @@ static Value game_play(Value *args) {  // ( SELF size fps -- )
 	int wobble = 0;
 
 	for (;;) {
-		if (!IS_NIL(SELF->fields[ON_TICK])) {
+		if (!IS_ENUM(SELF->fields[ON_TICK])) {
 			push(args[3]);
 			push(SELF->fields[ON_TICK]);
 			enqueue_message(apply());
@@ -251,7 +251,7 @@ static Value game_play(Value *args) {  // ( SELF size fps -- )
 				push_C_string("close");
 				bind_method_by_name();
 				enqueue_message(pop());
-				return NIL_VAL;
+				return FALSE_VAL;
 			case SDL_KEYDOWN:
 				printf("Key Down: %d\n", ev.key.keysym.sym);
 				break;
@@ -259,21 +259,21 @@ static Value game_play(Value *args) {  // ( SELF size fps -- )
 				printf("Key Up: %d\n", ev.key.keysym.sym);
 				break;
 			case SDL_MOUSEMOTION:
-				if (!IS_NIL(SELF->fields[ON_MOUSE])) {
+				if (!IS_ENUM(SELF->fields[ON_MOUSE])) {
 					push_motion_event(&ev.motion);
 					push(SELF->fields[ON_MOUSE]);
 					enqueue_message(apply());
 				}
 				break;
 			case SDL_MOUSEBUTTONDOWN:
-				if (!IS_NIL(SELF->fields[ON_BUTTON_DOWN])) {
+				if (!IS_ENUM(SELF->fields[ON_BUTTON_DOWN])) {
 					push_button_event(&ev.button);
 					push(SELF->fields[ON_BUTTON_DOWN]);
 					enqueue_message(apply());
 				}
 				break;
 			case SDL_MOUSEBUTTONUP:
-				if (!IS_NIL(SELF->fields[ON_BUTTON_UP])) {
+				if (!IS_ENUM(SELF->fields[ON_BUTTON_UP])) {
 					push_button_event(&ev.button);
 					push(SELF->fields[ON_BUTTON_UP]);
 					enqueue_message(apply());
@@ -344,7 +344,7 @@ static void define_event_loop_as_global() {
 	create_native_method("play", 3, game_play);
 
 	Value dfn = pop();
-	for (int i = 0; i < NR_GAME_FIELDS; i++) push(NIL_VAL);
+	for (int i = 0; i < NR_GAME_FIELDS; i++) push(FALSE_VAL);
 	push(dfn);
 	push(make_template_from_dfn());
 	make_actor_from_template();

@@ -97,3 +97,6 @@ void close_function(Value *stack_slot) {
 	*stack_slot = (closure->function->fn_type == TYPE_MEMOIZED) ? THUNK_VAL(closure) : CLOSURE_VAL(closure);
 }
 
+bool is_function(Value value) {
+	return IS_GC_ABLE(value) && &KIND_Function == AS_GC(value)->kind;
+}
