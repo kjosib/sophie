@@ -21,6 +21,7 @@ I'll add notes as they seem necessary while the overall system fills out.
     run_actor
     strict
     vm
+    nanbox
     gc
     generational
     lazy

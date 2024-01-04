@@ -35,7 +35,7 @@ static void resetStack() {
 void vm_init() {
 	resetStack();
 	initTable(&vm.strings);
-	vm.cons = vm.nil = vm.maybe_this = vm.maybe_nope = NIL_VAL;
+	vm.cons = vm.nil = vm.maybe_this = vm.maybe_nope = FALSE_VAL;
 	gc_install_roots(grey_the_vm_roots);
 }
 
@@ -99,7 +99,7 @@ static void capture_closure(Closure *closure, Value *base) {
 	// Precondition: *closure points to a fresh Closure object with no captures.
 	Function *fn = closure->function;
 	int index = 0;
-	if (fn->fn_type == TYPE_MEMOIZED) closure->captives[index++] = NIL_VAL;
+	if (fn->fn_type == TYPE_MEMOIZED) closure->captives[index++] = FALSE_VAL;
 	for (; index < fn->nr_captures; index++) {
 		Capture capture = fn->captures[index];
 		Value *capture_base = capture.is_local ? base : CLOSURE->captives;
@@ -131,7 +131,7 @@ void perform() {
 	// Where all the action happens, so to speak.
 	switch (TOP.type)
 	{
-	case VAL_NIL:  // The empty action
+	case VAL_ENUM:  // Overloaded here to mean the empty action
 		break;
 	case VAL_CLOSURE:
 		vm_run();
@@ -216,7 +216,7 @@ dispatch:
 		case OP_FALSE: push(BOOL_VAL(false)); NEXT;
 		case OP_EQUAL:
 			if (IS_NUMBER(SND)) merge(BOOL_VAL(AS_NUMBER(SND) == num(TOP)));
-			else if (IS_BOOL(SND)) merge(BOOL_VAL(AS_BOOL(SND) == AS_BOOL(TOP)));
+			else if (IS_ENUM(SND)) merge(BOOL_VAL(AS_ENUM(SND) == AS_ENUM(TOP)));  // Should handle booleans assuming bool overlaps int...
 			else {
 				// For now, this must be a string.
 				assert(IS_GC_ABLE(SND));
@@ -266,8 +266,10 @@ dispatch:
 			}
 		case OP_EXEC:
 			switch (TOP.type) {
-			case VAL_CLOSURE:
 			case VAL_THUNK:
+				if (DID_SNAP(TOP)) YIELD(SNAP_RESULT(AS_CLOSURE(TOP)));
+				// Fall through to VAL_CLOSURE:
+			case VAL_CLOSURE:
 			{
 				closure = AS_CLOSURE(pop());
 				int arity = closure->function->arity;
@@ -283,12 +285,12 @@ dispatch:
 		case OP_FORCE_RETURN:
 		{
 			if (IS_THUNK(TOP)) {
-				closure = AS_CLOSURE(pop());
-				if (DID_SNAP(closure)) {
-					YIELD(SNAP_RESULT(closure));
+				if (DID_SNAP(TOP)) {
+					YIELD(SNAP_RESULT(AS_CLOSURE(TOP)));
 				}
 				else {
 					// Treat this like an exec / tail-call, but easier since arity is zero by definition.
+					closure = AS_CLOSURE(pop());
 					vm.stackTop = base;
 					goto enter;
 				}
@@ -306,7 +308,6 @@ dispatch:
 			NEXT;
 		case OP_DISPLAY:
 			switch (TOP.type) {
-			case VAL_NIL: NEXT;  // The empty action
 			case VAL_GC:
 			{
 				GC *item = AS_GC(TOP);
@@ -349,7 +350,7 @@ dispatch:
 			int tag;
 			switch (TOP.type) {
 			case VAL_ENUM:
-				tag = TOP.as.tag;
+				tag = AS_ENUM(TOP);
 				break;
 			case VAL_GC: {
 				tag = AS_RECORD(TOP)->constructor->tag;
@@ -367,7 +368,7 @@ dispatch:
 			assert(is_record(TOP));
 			Record *record = AS_RECORD(TOP);
 			Table *field_offset = &record->constructor->field_offset;
-			int offset = tableGet(field_offset, AS_STRING(constants[READ_BYTE()])).as.tag;
+			int offset = AS_ENUM(tableGet(field_offset, AS_STRING(constants[READ_BYTE()])));
 			TOP = record->fields[offset];
 			NEXT;
 		}
@@ -396,7 +397,7 @@ dispatch:
 			NEXT;
 		case OP_PERFORM_EXEC:
 			switch (TOP.type) {
-			case VAL_NIL: YIELD(NIL_VAL);
+			case VAL_ENUM: YIELD(FALSE_VAL);
 			case VAL_CLOSURE:
 			{
 				closure = AS_CLOSURE(pop());
@@ -406,12 +407,12 @@ dispatch:
 			}
 			case VAL_GC:
 				enqueue_message(TOP);
-				YIELD(NIL_VAL);
+				YIELD(FALSE_VAL);
 			default:
 				crashAndBurn("Can't yet handle a %s action.", valKind[TOP.type]);
 			}
 		case OP_SKIP:
-			push(NIL_VAL);  // Something that will get treated as an empty action.
+			push(FALSE_VAL);  // Something that will get treated as an empty action.
 			NEXT;
 		case OP_CAST:
 			make_actor_from_template();
@@ -443,16 +444,15 @@ dispatch:
 
 Value force(Value value) {
 	if (IS_THUNK(value)) {
-		Closure *thunk_ptr = AS_CLOSURE(value);
-		if DID_SNAP(thunk_ptr) {
-			return SNAP_RESULT(thunk_ptr);
+		if DID_SNAP(value) {
+			return SNAP_RESULT(AS_CLOSURE(value));
 		}
 		else {
 			// Thunk has yet to be snapped.
 			push(value);
 			push(value);
 			Value result = vm_run();
-			thunk_ptr = AS_CLOSURE(pop());
+			Closure *thunk_ptr = AS_CLOSURE(pop());
 			SNAP_RESULT(thunk_ptr) = result;
 			thunk_ptr->header.kind = &KIND_Snapped;  // Help with debug until GC clears these out.
 			return result;

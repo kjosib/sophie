@@ -96,7 +96,7 @@ static Value console_echo(Value *args) {
 		fputs(AS_STRING(LIST_HEAD(args[1]))->text, stdout);
 	}
 
-	return NIL_VAL;
+	return FALSE_VAL;
 }
 
 static Value console_read(Value *args) {
@@ -113,7 +113,7 @@ static Value console_read(Value *args) {
 	push_C_string(buffer);
 	push(args[1]);
 	enqueue_message(apply());
-	return NIL_VAL;
+	return FALSE_VAL;
 }
 
 static ChaCha_Seed seed;
@@ -136,7 +136,7 @@ static Value console_random(Value *args) {
 	}
 	args[0] = NUMBER_VAL((double)randomness.noise_64[noise_index++] / UINT64_MAX);
 	enqueue_message(apply());
-	return NIL_VAL;
+	return FALSE_VAL;
 }
 
 /***********************************************************************************/
