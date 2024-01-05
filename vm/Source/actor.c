@@ -73,9 +73,9 @@ static size_t ahead(size_t index) {
 static size_t arity_of_message(Message *msg) {
 	// Accepts a GC-able parameter but doesn't call anything and therefore can't allocate.
 	assert(IS_GC_ABLE(msg->method));
-	switch (msg->method.type) {
-	case VAL_CLOSURE: return AS_CLOSURE(msg->method)->function->arity;
-	case VAL_GC: return AS_NATIVE(msg->method)->arity;
+	switch (INDICATOR(msg->method)) {
+	case IND_CLOSURE: return AS_CLOSURE(msg->method)->function->arity;
+	case IND_GC: return AS_NATIVE(msg->method)->arity;
 	default: crashAndBurn("Nerp!");
 	}
 }
@@ -84,7 +84,7 @@ void enqueue_message(Value value) {
 	// Careful: The message here may not be on the stack.
 	Message *msg = AS_MESSAGE(value);
 #ifdef DEBUG_TRACE_QUEUE
-	printf("< Enqueue: (%d)\n", arity_of_message(msg));
+	printf("< Enqueue: (%d)\n", (int)arity_of_message(msg));
 #endif // DEBUG_TRACE_QUEUE
 	mq.buffer[mq.gap] = msg;
 	mq.gap = ahead(mq.gap);
@@ -222,13 +222,13 @@ static size_t size_bound(Message *msg) { return sizeof(Message) + sizeof(Value);
 
 static void run_message(Message *msg) {
 	push(msg->method);
-	switch (msg->method.type) {
-	case VAL_CLOSURE:
+	switch (INDICATOR(msg->method)) {
+	case IND_CLOSURE:
 		// Must either be a do-block or a user-defined method.
 		// In either case, the corresponding code is in procedural perspective.
 		vm_run();
 		break;
-	case VAL_GC:
+	case IND_GC:
 		// Must be a native method.
 		// For now, rely on it to have side effects.
 		AS_GC(msg->method)->kind->apply();
@@ -350,7 +350,7 @@ void bind_task_from_closure() {
 
 static void run_one_message(Message *msg) {
 #ifdef DEBUG_TRACE_QUEUE
-	printf("> Dequeue (%d)\n", arity_of_message(msg));
+	printf("> Dequeue (%d)\n", (int)arity_of_message(msg));
 #endif // DEBUG_TRACE_QUEUE
 	Value *base = vm.stackTop;
 	size_t arity = arity_of_message(msg);
