@@ -28,15 +28,16 @@ If I'm reading this right, then:
 The Plan
 =========
 
-Thus::
+The plan was to use a plain union-type between a pointer and an unsigned integer, both 64 bits wide.
+I figured on bashing bits with definitions approximately like this::
 
     #define BOX_BITS 0x7ff4000000000000
     #define TAG_BITS 0x800b000000000000
     #define SIGN_BIT 0x8000000000000000
     #define GC_MASK (BOX_BITS|SIGN_BIT)
-    #define IS_NUMBER(v) ((v.as_bits & BOX_BITS) != BOX_BITS)
-    #define TAG(v) (v.as_bits & TAG_BITS)
-    #define IS_GC_ABLE(V) ((v.as_bits & GC_MASK) == GC_MASK)
+    #define IS_NUMBER(v) ((v.bits & BOX_BITS) != BOX_BITS)
+    #define TAG(v) (v.bits & TAG_BITS)
+    #define IS_GC_ABLE(V) ((v.bits & GC_MASK) == GC_MASK)
     
 This reserves bits 48, 49, 51, and 63 for the tag.
 This allows sixteen non-contiguous categories of thing (besides numbers).
@@ -65,4 +66,13 @@ These, I can do without:
 That potentially leaves room in the representation for short strings.
 However, that opens questions of hashing. I suspect these are hard.
 So in the short run I won't mess with a short-string optimization.
+
+Results
+========
+
+The NaN-box transformation made everything run about 20% faster than the old tagged-union representation.
+And of course the memory usage is also down significantly.
+
+Theory was basically fine, but in practice I ended up analyzing the tags slightly
+differently to diminish the amount of bit-bashing.
 

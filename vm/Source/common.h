@@ -22,7 +22,7 @@ Eventually I might enforce a consistent style. But for now, there are bigger fis
 #include <stddef.h>
 #include <stdint.h>
 
-typedef struct Value Value;
+typedef union Value Value;
 
 typedef enum { // written to match the standard preamble's order type
 	LESS = 0,
@@ -84,8 +84,11 @@ void gc_install_roots(Verb verb);
 void gc_forget_roots(Verb verb);
 
 void *gc_allocate(GC_Kind *kind, size_t size);
-void *darken(void *gc);
-static inline void darken_in_place(void **gc) { *gc = darken(*gc); }
+GC *darken(GC *gc);
+static inline void darken_in_place(void **gc) {
+	// Suitable specifically for undecorated pointers, not packed values.
+	*gc = darken((GC*)(*gc));
+}
 void gc_must_finalize(GC *item);
 
 /* memory.h */
@@ -110,51 +113,54 @@ void *reallocate(void *pointer, size_t newSize);
 
 #define NUMBER_FORMAT "%.17g"
 
-typedef enum {
-	VAL_NUMBER,  // Meaning "double-precision"
-	VAL_ENUM,    // Overload for runes, booleans, etc.
-	VAL_PTR,     // Non-collectable opaque pointer.
-	VAL_GC,      // Pointer to Garbage-Collected Heap for this and subsequent tags.
-	VAL_THUNK,   // Pointer to thunk; helps with VM to avoid indirections.
-	VAL_CLOSURE, // And why not exploit the tags to full effect?
-	VAL_GLOBAL,  // Global reference; used only during compiling.
-} ValueType;
-
-
-struct Value {
-	ValueType type;
-	union {
-		bool boolean;
-		double number;
-		int enum_tag;
-		void *ptr;
-		GC *gc;
-	} as;
+union Value {
+	uint64_t bits;
+	double number;
+	void *hex;  // This case only exists to make the debugger provide a hexadecimal read-out.
 };
 
+#define SHIFT(x) x ## 000000000000
 
-#define IS_NUMBER(value)  ((value).type == VAL_NUMBER)
-#define IS_ENUM(value)    ((value).type == VAL_ENUM)
-#define IS_GC_ABLE(value) ((value).type >= VAL_GC)
-#define IS_THUNK(value)   ((value).type == VAL_THUNK)
-#define IS_CLOSURE(value) ((value).type == VAL_CLOSURE)
-#define IS_GLOBAL(value)  ((value).type == VAL_GLOBAL)
+#define BOX_BITS SHIFT(0x7ff4)
+#define TAG_BITS SHIFT(0x800b)
+#define SIGN_BIT SHIFT(0x8000)
+#define PAYLOAD_BITS (SHIFT(0x1)-1)
+#define IS_NUMBER(v) (((v).bits & BOX_BITS) != BOX_BITS)  // Meaning "double-precision"
+#define INDICATOR(v) ((v).bits & SHIFT(0xffff))
+#define IND_NIL BOX_BITS            // Not the same as Sophie's nil.
+#define IND_ENUM SHIFT(0x7ff5)      // Overload for runes, booleans, etc.
+#define IND_PTR SHIFT(0x7ff6)       // Non-collectable opaque pointer.
+#define IND_GC SHIFT(0xfff4)        // Pointer to Garbage-Collected Heap for this and subsequent tags.
+#define IND_CLOSURE SHIFT(0xfff5)   // Pointer to callable; helps with VM to avoid indirections.
+#define IND_THUNK SHIFT(0xfff6)     // As long as the VM is recursive, it must check for these.
+#define IND_GLOBAL SHIFT(0xfff7)    // Global reference; used only during compiling.
 
-#define AS_BOOL(value)    ((value).as.boolean)
-#define AS_NUMBER(value)  ((value).as.number)
-#define AS_ENUM(value)    ((value).as.enum_tag)
-#define AS_PTR(value)     ((value).as.ptr)
-#define AS_GC(value)      ((value).as.gc)
+#define IS_NIL(value)     ((value).bits == IND_NIL)
+#define IS_ENUM(value)    (INDICATOR(value) == IND_ENUM)
+#define IS_PTR(value)     (INDICATOR(value) == IND_PTR)
+#define IS_GC_ABLE(value) (((value).bits & IND_GC) == IND_GC)
+#define IS_CLOSURE(value) (INDICATOR(value) == IND_CLOSURE)
+#define IS_THUNK(value)   (INDICATOR(value) == IND_THUNK)
+#define IS_GLOBAL(value)  (INDICATOR(value) == IND_GLOBAL)
 
-#define FALSE_VAL	            BOOL_VAL(false)
-#define BOOL_VAL(value)     ((Value){VAL_ENUM, {.boolean = value}})
-#define NUMBER_VAL(value)   ((Value){VAL_NUMBER, {.number = value}})
-#define ENUM_VAL(value)     ((Value){VAL_ENUM, {.enum_tag = value}})
-#define PTR_VAL(object)     ((Value){VAL_PTR, {.ptr = object}})
-#define GC_VAL(object)      ((Value){VAL_GC, {.ptr = object}})
-#define CLOSURE_VAL(object) ((Value){VAL_CLOSURE, {.ptr = object}})
-#define THUNK_VAL(object)   ((Value){VAL_THUNK, {.ptr = object}})
-#define GLOBAL_VAL(object)  ((Value){VAL_GLOBAL, {.ptr = object}})
+#define PACK(indic, datum) ((Value){.bits = indic | ((uint64_t)(datum))})
+
+#define AS_BOOL(value)    ((bool)PAYLOAD(value))
+#define AS_NUMBER(value)  ((value).number)
+#define PAYLOAD(value)    ((value).bits & PAYLOAD_BITS)
+#define AS_ENUM(value)    ((int)PAYLOAD(value))
+#define AS_PTR(value)     ((void *)PAYLOAD(value))
+#define AS_GC(value)      ((GC *)PAYLOAD(value))
+
+#define NIL_VAL	            PACK(IND_NIL, 0)
+#define BOOL_VAL(value)     PACK(IND_ENUM, ((bool)(value)))
+#define NUMBER_VAL(value)   ((Value){.number=value})
+#define ENUM_VAL(value)     PACK(IND_ENUM, value)
+#define PTR_VAL(object)     PACK(IND_PTR, object)
+#define GC_VAL(object)      PACK(IND_GC, object)
+#define CLOSURE_VAL(object) PACK(IND_CLOSURE, object)
+#define THUNK_VAL(object)   PACK(IND_THUNK, object)
+#define GLOBAL_VAL(object)  PACK(IND_GLOBAL, object)
 
 DEFINE_VECTOR_TYPE(ValueArray, Value)
 
@@ -165,7 +171,7 @@ void printValueDeeply(Value value);
 void darkenValues(Value *at, size_t count);
 void darkenValueArray(ValueArray *vec);
 
-extern char *valKind[];
+char *valKind(Value value);
 
 /* chunk.h */
 
@@ -212,7 +218,7 @@ void push_C_string(const char *name);
 void printObject(GC *item);
 void printObjectDeeply(GC *item);
 
-#define AS_STRING(it) ((String *)AS_PTR(it))
+#define AS_STRING(it) ((String *)PAYLOAD(it))
 bool is_string(void *item);
 
 /* table.h */
@@ -272,22 +278,24 @@ Function *newFunction(FunctionType fn_type, Chunk *chunk, byte arity, byte nr_ca
 
 String *name_of_function(Function *function);
 
-#define AS_CLOSURE(value) ((Closure *)AS_PTR(value))
-#define AS_FN(value) ((Function *)AS_PTR(value))
+#define AS_CLOSURE(value) ((Closure *)PAYLOAD(value))
+#define AS_FN(value) ((Function *)PAYLOAD(value))
 
 bool is_function(Value value);
 
 extern GC_Kind KIND_Snapped;
 
 #define SNAP_RESULT(thunk_ptr) (thunk_ptr->captives[0])
-#define DID_SNAP(thunk_ptr) (&KIND_Snapped == AS_GC(thunk_ptr)->kind)
+#define DID_SNAP(value) (&KIND_Snapped == AS_GC(value)->kind)
 
 static inline void darkenValue(Value *value) {
 	if (IS_THUNK(*value) && DID_SNAP(*value)) {
 		*value = SNAP_RESULT(AS_CLOSURE(*value));
 	}
 	if (IS_GC_ABLE(*value)) {
-		darken_in_place(&value->as.ptr);
+		GC *grey = AS_GC(*value);
+		GC *black = darken(grey);
+		value->bits = INDICATOR(*value) | (uint64_t)black;
 	}
 }
 
@@ -311,13 +319,13 @@ typedef struct {
 Value construct_record();
 void make_constructor(int tag, int nr_fields);  // ( field_name ... ctor_name -- ctor )
 
-#define AS_CTOR(value) ((Constructor*)AS_PTR(value))
-#define AS_RECORD(value) ((Record*)AS_PTR(value))
+#define AS_CTOR(value) ((Constructor*)PAYLOAD(value))
+#define AS_RECORD(value) ((Record*)PAYLOAD(value))
 
 extern GC_Kind KIND_Record;
 
 static inline bool is_record(Value value) {
-	return (value.type == VAL_GC) && (&KIND_Record == AS_GC(value)->kind);
+	return (INDICATOR(value) == IND_GC) && (&KIND_Record == AS_GC(value)->kind);
 }
 
 /* actor.h */
@@ -364,10 +372,10 @@ void bind_task_from_closure();  // ( closure -- message )
 void bind_method_by_name();  // ( actor message_name -- bound_method )
 void drain_the_queue();
 
-#define AS_ACTOR_DFN(value) ((ActorDfn*)AS_PTR(value))
-#define AS_ACTOR_TPL(value) ((ActorTemplate*)AS_PTR(value))
-#define AS_ACTOR(value) ((Actor*)AS_PTR(value))
-#define AS_MESSAGE(value) ((Message*)AS_PTR(value))
+#define AS_ACTOR_DFN(value) ((ActorDfn*)PAYLOAD(value))
+#define AS_ACTOR_TPL(value) ((ActorTemplate*)PAYLOAD(value))
+#define AS_ACTOR(value) ((Actor*)PAYLOAD(value))
+#define AS_MESSAGE(value) ((Message*)PAYLOAD(value))
 
 bool is_actor_dfn(Value v);
 bool is_actor_tpl(Value v);
@@ -456,7 +464,7 @@ typedef struct {
 	String *name;
 } Native;
 
-#define AS_NATIVE(value) ((Native *)AS_PTR(value))
+#define AS_NATIVE(value) ((Native *)PAYLOAD(value))
 
 void install_native_functions();
 void create_native_function(const char *name, byte arity, NativeFn function);  // ( -- )

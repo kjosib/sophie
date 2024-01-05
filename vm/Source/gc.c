@@ -146,8 +146,7 @@ static void darken_lob(GC *gc) {
     }
 }
 
-void *darken(void *gc) {
-    if (gc == NULL) return NULL;
+GC *darken(GC *gc) {
     if (ptr_in_arena(gc, to_space)) return gc;
     else if (ptr_in_arena(gc, from_space)) {
         if (is_broken_heart(gc)) return follow_heart(gc);

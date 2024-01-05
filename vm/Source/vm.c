@@ -35,7 +35,7 @@ static void resetStack() {
 void vm_init() {
 	resetStack();
 	initTable(&vm.strings);
-	vm.cons = vm.nil = vm.maybe_this = vm.maybe_nope = FALSE_VAL;
+	vm.cons = vm.nil = vm.maybe_this = vm.maybe_nope = NIL_VAL;
 	gc_install_roots(grey_the_vm_roots);
 }
 
@@ -99,7 +99,7 @@ static void capture_closure(Closure *closure, Value *base) {
 	// Precondition: *closure points to a fresh Closure object with no captures.
 	Function *fn = closure->function;
 	int index = 0;
-	if (fn->fn_type == TYPE_MEMOIZED) closure->captives[index++] = FALSE_VAL;
+	if (fn->fn_type == TYPE_MEMOIZED) index++;
 	for (; index < fn->nr_captures; index++) {
 		Capture capture = fn->captures[index];
 		Value *capture_base = capture.is_local ? base : CLOSURE->captives;
@@ -118,7 +118,7 @@ static double knuth_mod(double numerator, double denominator) {
 static double x_num(byte *vpc, Value *base, Value it) {
 	if (!IS_NUMBER(it)) {
 		char *ins = instruction[vpc[-1]].name;
-		runtimeError(vpc, base, "Needed number for %s; got %s", ins, valKind[it.type]);
+		runtimeError(vpc, base, "Needed number for %s; got %s", ins, valKind(it));
 	}
 	return AS_NUMBER(it);
 }
@@ -129,21 +129,15 @@ static double x_num(byte *vpc, Value *base, Value it) {
 
 void perform() {
 	// Where all the action happens, so to speak.
-	switch (TOP.type)
-	{
-	case VAL_ENUM:  // Overloaded here to mean the empty action
-		break;
-	case VAL_CLOSURE:
-		vm_run();
-		break;
-	case VAL_GC:
+	if (IS_CLOSURE(TOP)) vm_run();
+	else if(IS_GC_ABLE(TOP)) {
 		// By definition this must be either a message or a bound-method.
 		// Either way, the proper response is to enqueue the thing.
 		enqueue_message(pop());
-		break;
-	default:
-		crashAndBurn("Can't perform a %s action.", valKind[TOP.type]);
 	}
+	else if (IS_NIL(TOP)) {
+		// Overloaded here to mean the empty action
+	} else crashAndBurn("Can't perform a %s action.", valKind(TOP));
 }
 
 #define NEXT goto dispatch
@@ -255,21 +249,21 @@ dispatch:
 		case OP_NOT: TOP = BOOL_VAL(!AS_BOOL(TOP)); NEXT;
 		case OP_NEGATE: TOP = NUMBER_VAL(-num(TOP)); NEXT;
 		case OP_CALL:
-			switch (TOP.type) {
-			case VAL_CLOSURE:
-			case VAL_GC:
+			switch (INDICATOR(TOP)) {
+			case IND_CLOSURE:
+			case IND_GC:
 				push(AS_GC(TOP)->kind->apply());
 				NEXT;
 			default:
 				printValue(TOP);
-				runtimeError(vpc, base, "CALL needs a callable object; got %s.", valKind[TOP.type]);
+				runtimeError(vpc, base, "CALL needs a callable object; got %s.", valKind(TOP));
 			}
 		case OP_EXEC:
-			switch (TOP.type) {
-			case VAL_THUNK:
+			switch (INDICATOR(TOP)) {
+			case IND_THUNK:
 				if (DID_SNAP(TOP)) YIELD(SNAP_RESULT(AS_CLOSURE(TOP)));
 				// Fall through to VAL_CLOSURE:
-			case VAL_CLOSURE:
+			case IND_CLOSURE:
 			{
 				closure = AS_CLOSURE(pop());
 				int arity = closure->function->arity;
@@ -277,10 +271,10 @@ dispatch:
 				vm.stackTop = base + arity;
 				goto enter;
 			}
-			case VAL_GC:
+			case IND_GC:
 				YIELD(AS_GC(TOP)->kind->apply());
 			default:
-				runtimeError(vpc, base, "EXEC needs a callable object; got val %s.", valKind[TOP.type]);
+				runtimeError(vpc, base, "EXEC needs a callable object; got val %s.", valKind(TOP));
 			}
 		case OP_FORCE_RETURN:
 		{
@@ -307,8 +301,8 @@ dispatch:
 			assert(!IS_THUNK(TOP));
 			NEXT;
 		case OP_DISPLAY:
-			switch (TOP.type) {
-			case VAL_GC:
+			switch (INDICATOR(TOP)) {
+			case IND_GC:
 			{
 				GC *item = AS_GC(TOP);
 				if (item->kind->proceed) {
@@ -322,7 +316,7 @@ dispatch:
 				}
 				NEXT;
 			}
-			case VAL_CLOSURE:
+			case IND_CLOSURE:
 				if (AS_CLOSURE(TOP)->function->arity == 0) {
 					vm_run();
 					drain_the_queue();
@@ -348,16 +342,16 @@ dispatch:
 		case OP_CASE:
 		{
 			int tag;
-			switch (TOP.type) {
-			case VAL_ENUM:
+			switch (INDICATOR(TOP)) {
+			case IND_ENUM:
 				tag = AS_ENUM(TOP);
 				break;
-			case VAL_GC: {
+			case IND_GC: {
 				tag = AS_RECORD(TOP)->constructor->tag;
 				break;
 			}
 			default:
-				runtimeError(vpc, base, "Need a case-able object; got val %s.", valKind[TOP.type]);
+				runtimeError(vpc, base, "Need a case-able object; got %s.", valKind(TOP));
 			}
 			vpc += 2 * tag;
 			LEAP();
@@ -396,23 +390,23 @@ dispatch:
 			perform();
 			NEXT;
 		case OP_PERFORM_EXEC:
-			switch (TOP.type) {
-			case VAL_ENUM: YIELD(FALSE_VAL);
-			case VAL_CLOSURE:
+			switch (INDICATOR(TOP)) {
+			case IND_NIL: YIELD(NIL_VAL);
+			case IND_CLOSURE:
 			{
 				closure = AS_CLOSURE(pop());
 				assert(0 == closure->function->arity);
 				vm.stackTop = base;
 				goto enter;
 			}
-			case VAL_GC:
+			case IND_GC:
 				enqueue_message(TOP);
-				YIELD(FALSE_VAL);
+				YIELD(NIL_VAL);
 			default:
-				crashAndBurn("Can't yet handle a %s action.", valKind[TOP.type]);
+				crashAndBurn("Can't yet handle a %s action.", valKind(TOP));
 			}
 		case OP_SKIP:
-			push(FALSE_VAL);  // Something that will get treated as an empty action.
+			push(NIL_VAL);  // Something that will get treated as an empty action.
 			NEXT;
 		case OP_CAST:
 			make_actor_from_template();

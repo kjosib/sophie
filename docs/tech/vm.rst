@@ -1553,7 +1553,7 @@ but now I've taken that away. Usages include:
 Therefore, as of right now, a failed table look-up is always grounds for unceremonious termination.
 I'll just move that fact into the ``tableGet`` function.
 
-Also, since ``VAL_NIL`` has gone away, the test for a snapped thunk now checks the thunk's kind.
+Also, since ``NIL_VAL`` has gone away, the test for a snapped thunk now checks the thunk's kind.
 (Snapping it, changes the kind.) This may improve GC slightly but it slows the thunk-ful Fibonacci benchmark about 10%.
 I saw a similar slow-down the last time I tried that, but for the moment there's no way around it.
 I attribute this to memory bandwidth, as previously it was possible to tell a snapped thunk
@@ -1563,4 +1563,17 @@ by looking at the maybe-result. I may change this back eventually.
 | Thunk-ful: 13.8 seconds
 
 I'll go ahead and commit this before continuing...
+
+4 January 2024
+--------------
+
+NaN-Boxing is complete. Fibonacci benchmark:
+
+| Thunkless: 4.7 seconds
+| Thunk-ful: 10.0 seconds
+
+These are by far the fastest times to date.
+
+I brought ``NIL_VAL`` back in part to experiment with the ``DID_SNAP`` test on thunks.
+With NaN-boxing it's about equally fast either way.
 

@@ -69,7 +69,7 @@ String *intern_String(String *string) {
 	Entry *interned = tableFindString(&vm.strings, string->text, string->length, string->hash);
 	if (interned) return interned->key;
 	else {
-		tableSet(&vm.strings, string, FALSE_VAL);
+		tableSet(&vm.strings, string, NIL_VAL);
 		return string;
 	}
 }
@@ -82,7 +82,7 @@ String *import_C_string(const char *text, size_t length) {
 		String *string = new_String(length);
 		memcpy(string->text, text, length);
 		string->hash = hash;
-		tableSet(&vm.strings, string, FALSE_VAL);
+		tableSet(&vm.strings, string, NIL_VAL);
 		return string;
 	}
 }

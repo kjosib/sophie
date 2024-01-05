@@ -4,11 +4,11 @@ DEFINE_VECTOR_CODE(ValueArray, Value)
 DEFINE_VECTOR_APPEND(ValueArray, Value)
 
 void print_simply(Value value) {
-switch (value.type) {
-	case VAL_NUMBER: printf(NUMBER_FORMAT, AS_NUMBER(value)); break;
-	case VAL_ENUM: printf("<enum: %d>", AS_ENUM(value)); break;
-	case VAL_PTR: printf("<ptr: %p>", AS_PTR(value)); break;
-	default:
+	if (IS_NUMBER(value)) printf(NUMBER_FORMAT, AS_NUMBER(value));
+	else if (IS_NIL(value)) printf("nil");
+	else if (IS_ENUM(value)) printf("<enum: %d>", AS_ENUM(value));
+	else if (IS_PTR(value)) printf("<ptr: %p>", AS_PTR(value));
+	else {
 		assert(IS_GC_ABLE(value));
 		printf("<<%s>>", AS_GC(value)->kind->name);
 	}
@@ -34,12 +34,15 @@ void darkenValueArray(ValueArray *vec) {
 	darkenValues(vec->at, vec->cnt);
 }
 
-char *valKind[] = {
-	[VAL_NUMBER] = "number",
-	[VAL_ENUM] = "enumerated constant",
-	[VAL_PTR] = "opaque pointer",
-	[VAL_GC] = "heap denizen",
-	[VAL_THUNK] = "thunk",
-	[VAL_CLOSURE] = "closure",
-	[VAL_GLOBAL] = "global reference",
-};
+char *valKind(Value value) {
+	if (IS_NUMBER(value)) return "number";
+	if (IS_NIL(value)) return "the formless void";
+	if (IS_ENUM(value)) return "enumerated constant";
+	if (IS_PTR(value)) return "opaque pointer";
+	if (IS_CLOSURE(value)) return "closure";
+	if (IS_THUNK(value)) return "thunk";
+	if (IS_GLOBAL(value)) return "global reference";
+	if (IS_GC_ABLE(value)) return "heap denizen";
+	return "something terribly wrong";
+}
+

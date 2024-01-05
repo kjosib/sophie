@@ -80,6 +80,6 @@ Value parseConstant() {
 	}
 	else {
 		errorAtCurrent("Expected a literal constant.");
-		return FALSE_VAL;
+		return NIL_VAL;
 	}
 }

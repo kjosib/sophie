@@ -117,12 +117,12 @@ static void pop_scope() {
 
 
 static void perform_word(Value value) {
-	if (value.type == VAL_ENUM) {
+	if (IS_ENUM(value)) {
 		int index = AS_ENUM(value);
 		emit(index);
 		instruction[index].operand->assemble(&current->chunk);
 	}
-	else if (value.type == VAL_PTR) {
+	else if (IS_PTR(value)) {
 		Verb verb = AS_PTR(value);
 		verb();
 	}

@@ -59,7 +59,7 @@ static void adjustCapacity(Table *table, size_t capacity) {
 	table->cnt = 0;
 	for (size_t i = 0; i < capacity; i++) {
 		entries[i].key = NULL;
-		entries[i].value = FALSE_VAL;
+		entries[i].value = NIL_VAL;
 	}
 
 	for (size_t i = 0; i < table->cap; i++) {
