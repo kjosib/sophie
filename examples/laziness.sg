@@ -1,0 +1,10 @@
+# Simple demo of lazy evaluation:
+# This program prints "11111" to the console,
+# finishing normally despite working in various
+# ways on "infinite" data structures.
+
+define:
+	infinite_ones = cons(1, infinite_ones);
+
+begin:
+	console ! echo ( take(5, map(str, infinite_ones ) ) );
