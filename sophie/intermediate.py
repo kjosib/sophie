@@ -437,11 +437,16 @@ class LazyContext(Context):
 	visit_BindMethod = _thunk_it
 	
 	@staticmethod
+	def visit_Lookup(expr:syntax.Lookup, scope:VMFunctionScope):
+		# This often turns out to be a thunk that must not be forced right away.
+		sym = expr.ref.dfn
+		scope.load(sym)
+
+	@staticmethod
 	def _force_it(expr:syntax.ValExpr, scope: VMFunctionScope):
 		FORCE.visit(expr, scope)
 	
 	visit_Literal = _force_it
-	visit_Lookup = _force_it
 	visit_ExplicitList = _force_it
 
 def _delay(expr:syntax.ValExpr, scope: VMFunctionScope):
