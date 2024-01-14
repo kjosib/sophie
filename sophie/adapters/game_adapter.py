@@ -22,56 +22,30 @@ Right now PyGame appears to hold the GIL more than it might, but this is far fro
 """
 import os
 os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
-import sys, pygame
+import pygame
 from typing import Optional
-from pygame import gfxdraw
+from pygame import draw, gfxdraw
 
 from ..runtime import iterate_list, force, Message, Action
-from ..scheduler import NativeObjectProxy, MAIN_QUEUE
+from ..scheduler import NativeObjectProxy
 
 linkage = {}
 
-def sophie_init(rect, mouse_event, button_event, key_event):
-	linkage['rect'] = rect
+def sophie_init(xy, mouse_event, button_event, key_event):
+	linkage['xy'] = xy
 	linkage['mouse_event'] = mouse_event
 	linkage['button_event'] = button_event
 	linkage['key_event'] = key_event
-	return { 'screen': run_game, }
 
-def run_game(env, screen):
-	pygame.init()
-	_size = force(screen['size'])
-	size = width, height = force(_size['x']), force(_size['y'])
-	display = pygame.display.set_mode(size)
-	
-	clock = pygame.time.Clock()
-	while True:
-		for event in pygame.event.get():
-			# Give Sophie code a chance to update the model based on an event.
-			if event.type == pygame.QUIT:
-				sys.exit()
-		
-		clock.tick(40)  # frames per second, I think.
-		# Send Sophie code a clock event; update the model.
-		
-		# Use updated model to compute a new view
-		
-		# Display the view
-		bg = force(screen['background'])
-		r,g,b = force(bg['red']), force(bg['green']), force(bg['blue'])
-		display.fill((r,g,b))
-		
-		pygame.display.flip()
-
-def rect(x,y):
-	return linkage['rect'].apply([x,y], None)
+def xy(x, y):
+	return linkage['xy'].apply([x,y], None)
 
 def mouse_event(e):
-	args = [rect(*e.pos), rect(*e.rel), e.buttons[0], e.buttons[1], e.buttons[2], e.touch, ]
+	args = [xy(*e.pos), xy(*e.rel), e.buttons[0], e.buttons[1], e.buttons[2], e.touch, ]
 	return linkage['mouse_event'].apply(args, None)
 
 def button_event(e):
-	args = [rect(*e.pos), e.button, e.touch]
+	args = [xy(*e.pos), e.button, e.touch]
 	return linkage['button_event'].apply(args, None)
 
 def key_event(e):
@@ -134,6 +108,12 @@ class GameLoop:
 				self._on_tick.dispatch_with(display_actor)
 		pass
 		
+def _force_rgb(color):
+	f = lambda field: int(force(color[field])) & 255
+	return f("red"), f("green"), f("blue")
+
+def _force_xy(xy):
+	return force(xy["x"]), force(xy["y"])
 
 class DisplayProxy:
 	
@@ -147,16 +127,41 @@ class DisplayProxy:
 		pygame.display.flip()
 	
 	def _fill(self, color):
-		r,g,b = force(color["red"]), force(color["green"]), force(color["blue"])
-		self._display.fill((r,g,b))
+		self._display.fill(_force_rgb(color))
 	
-	def _hlin(self, x1, x2, y, color):
-		r, g, b = force(color["red"]), force(color["green"]), force(color["blue"])
-		gfxdraw.hline(self._display, force(x1), force(x2), force(y), (r,g,b))
+	def _stroke(self, color, strokes):
+		rgb = _force_rgb(color)
+		for stroke in iterate_list(strokes):
+			tag = stroke.pop("")
+			getattr(self, "_stroke_"+tag)(rgb, *map(force, stroke.values()))
+	
+	def _stroke_line(self, color, start, stop):
+		draw.line(self._display, color, _force_xy(start), _force_xy(stop))
+	
+	def _stroke_polyline(self, color, xys):
+		draw.lines(self._display, color, False, *map(_force_xy, iterate_list(xys)))
+	
+	def _stroke_box(self, color, corner, measure):
+		draw.rect(self._display, color, pygame.Rect(_force_xy(corner), _force_xy(measure)), width=1)
+	
+	def _stroke_fill_box(self, color, corner, measure):
+		self._display.fill(color, pygame.Rect(_force_xy(corner), _force_xy(measure)))
+	
+	def _stroke_circle(self, color, center, radius):
+		draw.ellipse(self._display, color, _force_xy(center), radius)
+	
+	def _stroke_ellipse(self, color, corner, measure):
+		draw.ellipse(self._display, color, pygame.Rect(_force_xy(corner), _force_xy(measure)))
+	
+	def _stroke_arc(self, color, corner, measure, start_angle, stop_angle):
+		rect = pygame.Rect(_force_xy(corner), _force_xy(measure))
+		draw.arc(self._display, color, rect, start_angle, stop_angle)
+	
+	def _stroke_hlin(self, color, x1, x2, y):
+		gfxdraw.hline(self._display, force(x1), force(x2), force(y), color)
 		
-	def _vlin(self, x, y1, y2, color):
-		r, g, b = force(color["red"]), force(color["green"]), force(color["blue"])
-		gfxdraw.vline(self._display, force(x), force(y1), force(y2), (r,g,b))
+	def _stroke_vlin(self, color, x, y1, y2):
+		gfxdraw.vline(self._display, force(x), force(y1), force(y2), color)
 		
 
 events = NativeObjectProxy(GameLoop(), pin=True)

@@ -449,10 +449,6 @@ void defineGlobal();  // ( value name -- )
 void vm_capture_preamble_specials(Table *globals);
 __declspec(noreturn) void vm_panic(const char *format, ...);
 
-// Force whatever object is at top-of-stack recursively until it reaches no thunks.
-// Handy for FFI things, but beware of limited stack depth.
-void force_deeply();
-
 /* native.h */
 
 typedef Value(*NativeFn)(Value *args);
@@ -471,8 +467,9 @@ void create_native_function(const char *name, byte arity, NativeFn function);  /
 void create_native_method(const char *name, byte arity, NativeFn function);  // ( ActorDfn -- ActorDfn )
 
 // Macro for easier list-enumeration.
-#define LIST_HEAD(arg) force(AS_RECORD(arg)->fields[0])
-#define LIST_TAIL(arg) (AS_RECORD(arg)->fields[1])
+#define FIELD(arg, nr) (AS_RECORD(arg)->fields[nr])
+#define LIST_HEAD(arg) force(FIELD(arg, 0))
+#define LIST_TAIL(arg) FIELD(arg, 1)
 #define FOR_LIST(arg) for (;arg = force(arg),!IS_ENUM(arg);arg = LIST_TAIL(arg))
 
 /* ffi.h */
