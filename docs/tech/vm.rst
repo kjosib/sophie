@@ -1577,3 +1577,20 @@ These are by far the fastest times to date.
 I brought ``NIL_VAL`` back in part to experiment with the ``DID_SNAP`` test on thunks.
 With NaN-boxing it's about equally fast either way.
 
+13 January 2024
+---------------
+
+Lots of contemplation has happened.
+
+I've decided to continue with SDL as the foundation for Sophie's cross-platform game subsystem.
+To make it mesh better with the SDL drawing API,
+I changed the structure of the ``draw`` message,
+and Sophie's ``game`` module got a few new primitive shapes.
+
+I got those new shapes working first in the tree-walker, and then started working on the VM side.
+In that process, I changed the graphics code to get rid of the ``force_deeply()`` function.
+(That thing just sounded wrong, anyway.) Instead, the code just deals with thunks as needed.
+This is at least consistent enough with everything else.
+I also factored out a few macros for consuming lists.
+
+
