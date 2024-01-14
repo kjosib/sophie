@@ -1,36 +1,55 @@
 # The motivating example is to portray crossed lines that intersect at the mouse cursor.
 # That means carrying state from the mouse-move event through to the clock-tick event.
 
-# Because the fields on an agent/actor are mutable, it places constraints on laziness.
-# We see this sharply in the `to tick` behavior.
+# Sophie must evaluate things like `self.pos` eagerly instead of lazily.
+# Otherwise, the result (when finally computed) could reflect future changes,
+# which would be confusing, unpredictable, and undesirable.
+
 
 import:
-sys."game" as game (events, rect, color, fill, white, hlin, vlin);
+sys."game" as game (events, xy, rgb, fill, stroke, black, white, hlin, vlin, box);
+
 
 define:
-    agent mouse_chaser( pos:rect ) as
-    
-        # Defined thus, presumably `mouse_chaser` is best understood as a concrete class.
-        # The constructor arguments are just a `rect` called `pos` locally.
+
+### The main attraction:
+
+    agent mouse_chaser( pos:xy ) as
     
         to mouse(event) is do
-            console ! echo ["mouse ", str(event.pos.x), ",", str(event.pos.y), EOL];
             my pos := event.pos;  # Assignment should not look like equality.
         end;
         
         to tick(display) is display ! draw [
-            fill(color(0,$99,0)),   # Apple ][ style hexadecimal with dollar-sign.
-            
-            hlin(0, 799, self.pos.y, white),  # The `pos` must be evaluated strictly,
-            vlin(self.pos.x, 0, 599, white),  # along with parent expressions,
-                                              # since it and they are volatile.
+            fill(rgb(0,$99,0)),   # Apple ][ style hexadecimal with dollar-sign.
+            stroke(black, reticle(self.pos)),
+            stroke(white, cat(cross_hairs(self.pos), lines_from_each_corner_to(self.pos))),
         ];
         
     end mouse_chaser;
+
+
+
+### A few composite graphical elements:
     
-    initial_state = mouse_chaser(rect(-1,-1));
+    cross_hairs(pos) = [ hlin(0, 799, pos.y), vlin(pos.x, 0, 599) ];
     
-    # This makes `initial_state` a more-specific template, not an actor in itself.
+    lines_from_each_corner_to(pos) = map(one_such_line, corners_of_the_window) where
+        one_such_line(a_corner) = line@game(a_corner, pos);
+    end lines_from_each_corner_to;
+    
+    reticle(pos) = [ box(xy(pos.x-10, pos.y-10), xy(20, 20)) ];
+
+
+
+### Some general configuration:
+    
+    window_size = xy(800, 600);
+    corners_of_the_window = [ xy(0,0), xy(799,0), xy(799, 599), xy(0,599) ];
+    
+    initial_state = mouse_chaser(xy(100, 100));
+
+
 
 begin:
     cast  # in order of appearance:
@@ -39,5 +58,5 @@ begin:
         events ! on_mouse(mc ! mouse);
         events ! on_tick(mc ! tick);
     end;
-    events ! play( rect(800, 600), 60);
+    events ! play(window_size, 60);
 end.

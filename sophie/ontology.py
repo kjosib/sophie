@@ -3,7 +3,10 @@ from boozetools.support.symtab import NameSpace
 class Nom:
 	""" Representing the occurrence of a name anywhere. """
 	_slice: slice  # Empty-slice means pre-defined term.
-	def __init__(self, text, a_slice): self.text, self._slice = text, a_slice or slice(0,0)
+	def __init__(self, text, a_slice):
+		assert isinstance(text, str)
+		assert isinstance(a_slice, slice) or a_slice is None, type(a_slice)
+		self.text, self._slice = text, a_slice or slice(0,0)
 	def head(self) -> slice: return self._slice
 	def __repr__(self): return "<Name %r>" % self.text
 	def key(self): return self.text

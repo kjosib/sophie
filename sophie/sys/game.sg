@@ -2,24 +2,28 @@
 #
 # Eventually.
 #
-# For now, it's just a spike.
 
 import:
     foreign "sophie.adapters.game_adapter" (
-        rect, mouse_event, button_event, key_event
+        xy, mouse_event, button_event, key_event
     ) where
         events : GameLoop;
     end;
 
 type:
-    screen is (size:rect, background:color);
-    color is (red:number, green:number, blue:number);
-    rect is (x:number, y:number);               # Cartesian / Rectangular Coordinates
+
+# Let's represent color for games as an RGB triple of values in the range 0..255.
+# (Things outside this range will be taken modulo 256.)
+
+    rgb is (red:number, green:number, blue:number);
+
+
+    xy is (x:number, y:number);               # Cartesian / Rectangular Coordinates
     polar is (magnitude:number, theta:number);  # Theta is expressed in radians.
     area is (left:number, top:number, width:number, height:number);
 
     GameLoop is agent:
-        play(rect, number);
+        play(xy, number);
         on_quit(!);
         on_mouse(!(mouse_event));
         on_button_down(!(button_event));
@@ -30,53 +34,60 @@ type:
     end;
     
     mouse_event is (
-        pos : rect, rel : rect,
+        pos : xy, rel : xy,
         left : flag, middle : flag, right : flag,
         is_touch : flag,
     );
 
-    button_event is (pos:rect, button:number, is_touch:flag);
+    button_event is (pos:xy, button:number, is_touch:flag);
     key_event is (unicode:string, key:number, mods:number, scancode:number);
     
     display is agent:
-        draw(list[pic]);
+        draw(list[image_element]);
         # Maybe eventually some messages for setting screen mode, or grabs, or whatnot.
     end;
     
-    pic is case:
-        fill(color:color);
-        hlin(x1:number, x2:number, y:number, color:color);
-        vlin(x:number, y1:number, y2:number, color:color);
-        # Soon more things you can draw on a surface.
-        # Eventually add (native) functions to create intermediate surfaces.
-        # Ideally, memoization takes care of not reloading images too frequently.
+    image_element is case:
+        fill(rgb:rgb);
+        stroke(rgb:rgb, strokes:list[stroke_element]);
+        # eventually, other kinds of image elements like bitmaps
+    esac;
+    
+    stroke_element is case:
+        hlin(x1:number, x2:number, y:number); 
+        vlin(x:number, y1:number, y2:number); 
+        line(start:xy, stop:xy);
+        polyline(points: list[xy]);
+        box(corner:xy, measure:xy);
+        fill_box(corner:xy, measure:xy);
+        circle(center:xy, radius:number);
+        ellipse(corner:xy, measure:xy);
+        arc(corner:xy, measure:xy, start_angle:number, stop_angle:number);
     esac;
 
 assume:
-    r : rect;
+    r : xy;
     scalar, theta: number;
     p, p1, p2 : polar;
 
 define:
 
-    # A color is apparently an RGB triple of values in the range 0..255.
-    # Things outside this range are prone to toss an exception.
-    black = color(0,0,0);
-    white = color(255,255,255);
+    black = rgb(0,0,0);
+    white = rgb(255,255,255);
 
     # Simple 2-D vector math and trigonometry:
     
-    operator + (a:rect, b:rect) = rect(a.x+b.x, a.y+b.y);
-    operator - (a:rect, b:rect) = rect(a.x-b.x, a.y-b.y);
-    operator * (scalar:number, c:rect) = rect(scalar*c.x, scalar*c.y);
-    operator * (c:rect, scalar:number) = rect(scalar*c.x, scalar*c.y);
-    operator / (a:rect, scalar:number) = rect(c.x/scalar, c.y/scalar);
+    operator + (a:xy, b:xy) = xy(a.x+b.x, a.y+b.y);
+    operator - (a:xy, b:xy) = xy(a.x-b.x, a.y-b.y);
+    operator * (scalar:number, c:xy) = xy(scalar*c.x, scalar*c.y);
+    operator * (c:xy, scalar:number) = xy(scalar*c.x, scalar*c.y);
+    operator / (a:xy, scalar:number) = xy(c.x/scalar, c.y/scalar);
     
-    unit_vector(theta) = rect(cos(theta), sin(theta));
+    unit_vector(theta) = xy(cos(theta), sin(theta));
     as_cartesian(p) = p.magnitude * unit_vector(p.theta);
     as_polar(r) = polar(magnitude_of(r), angle_of(r));
     magnitude_of(r) = sqrt(r.x*r.x + r.y*r.y);
     angle_of(r) = atan2(r.y, r.x);
     norm(r) = r/magnitude_of(r);
-    dot(a:rect, b:rect) = a.x*b.x + a.y*b.y;
+    dot(a:xy, b:xy) = a.x*b.x + a.y*b.y;
     

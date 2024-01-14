@@ -47,8 +47,7 @@ class ValExpr(Expr):
 	pass
 
 class PlainReference(Reference):
-	def head(self) -> slice:
-		return self.nom.head()
+	def head(self) -> slice: return self.nom.head()
 	def __str__(self): return "<ref:%s>"%self.nom.text
 
 class QualifiedReference(Reference):
@@ -58,9 +57,6 @@ class QualifiedReference(Reference):
 		self.space = space
 	def head(self) -> slice:
 		return slice(self.nom.head().start, self.space.head().stop)
-
-def SelfReference(aSlice):
-	return PlainReference(Nom("SELF", aSlice))
 
 ARGUMENT_TYPE = Union[SimpleType, "ImplicitTypeVariable", "ExplicitTypeVariable"]
 

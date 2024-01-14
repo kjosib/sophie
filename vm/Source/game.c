@@ -24,10 +24,21 @@ typedef enum {
 } DISPLAY_PROXY_FIELD;
 
 typedef enum {
-	PIC_FILL,
-	PIC_HLIN,
-	PIC_VLIN,
-} TAG_PIC;
+	TIE_FILL,
+	TIE_STROKE,
+} TAG_IMAGE_ELEMENT;
+
+typedef enum {
+	STROKE_HLIN,
+	STROKE_VLIN,
+	STROKE_LINE,
+	STROKE_POLYLINE,
+	STROKE_BOX,
+	STROKE_FILL_BOX,
+	STROKE_CIRCLE,
+	STROKE_ELLIPSE,
+	STROKE_ARC,
+} TAG_STROKE_ELEMENT;
 
 typedef enum {
 	L_CARTESIAN,
@@ -148,34 +159,103 @@ static Display *init_display(int width, int height) {
 
 /***********************************************************************************/
 
-// New rule: Sub-functions of the display-proxy will *NOT* refer to the VM stack.
+// Sub-functions of the display-proxy *MUST* refer to the VM stack because I'm not forcing anything just yet.
+// Some day perhaps I'll solve the pre-forcing problem but for now it's online.
 
-static void set_sdl_color(SDL_Renderer *renderer, Record *color) {
-	Uint8 red = (Uint8)(AS_NUMBER(color->fields[0]));
-	Uint8 green = (Uint8)(AS_NUMBER(color->fields[1]));
-	Uint8 blue = (Uint8)(AS_NUMBER(color->fields[2]));
+static void set_sdl_color(SDL_Renderer *renderer) { // COLOR --
+	TOP = force(TOP);
+	Uint8 red = (Uint8)(AS_NUMBER(force(FIELD(TOP, 0))));
+	Uint8 green = (Uint8)(AS_NUMBER(force(FIELD(TOP, 1))));
+	Uint8 blue = (Uint8)(AS_NUMBER(force(FIELD(TOP, 2))));
+	pop();
 	SDL_SetRenderDrawColor(renderer, red, green, blue, SDL_ALPHA_OPAQUE);
 }
 
-static void dp_draw_fill(SDL_Renderer *renderer, Record *fill) {
-	set_sdl_color(renderer, AS_RECORD(fill->fields[0]));
-	SDL_RenderClear(renderer);
-}
 
-static void dp_hlin(SDL_Renderer *renderer, Record *hlin) {
-	set_sdl_color(renderer, AS_RECORD(hlin->fields[3]));
-	int x1 = (int)(AS_NUMBER(hlin->fields[0]));
-	int x2 = (int)(AS_NUMBER(hlin->fields[1]));
-	int y  = (int)(AS_NUMBER(hlin->fields[2]));
+static void stroke_hlin(SDL_Renderer *renderer) {
+	int x1 = (int)(AS_NUMBER(force(FIELD(TOP, 0))));
+	int x2 = (int)(AS_NUMBER(force(FIELD(TOP, 1))));
+	int y  = (int)(AS_NUMBER(force(FIELD(TOP, 2))));
 	SDL_RenderDrawLine(renderer, x1, y, x2, y);
 }
 
-static void dp_vlin(SDL_Renderer *renderer, Record *vlin) {
-	set_sdl_color(renderer, AS_RECORD(vlin->fields[3]));
-	int x  = (int)(AS_NUMBER(vlin->fields[0]));
-	int y1 = (int)(AS_NUMBER(vlin->fields[1]));
-	int y2 = (int)(AS_NUMBER(vlin->fields[2]));
+static void stroke_vlin(SDL_Renderer *renderer) {
+	int x  = (int)(AS_NUMBER(force(FIELD(TOP, 0))));
+	int y1 = (int)(AS_NUMBER(force(FIELD(TOP, 1))));
+	int y2 = (int)(AS_NUMBER(force(FIELD(TOP, 2))));
 	SDL_RenderDrawLine(renderer, x, y1, x, y2);
+}
+
+static SDL_Point force_xy() {
+	SDL_Point it = {
+		.x = (int)(AS_NUMBER(force(FIELD(TOP, 0)))),
+		.y = (int)(AS_NUMBER(force(FIELD(TOP, 1)))),
+	};
+	pop();
+	return it;
+}
+
+static void stroke_line(SDL_Renderer *renderer) {
+	push(force(FIELD(TOP, 0)));
+	SDL_Point start = force_xy();
+	push(force(FIELD(TOP, 1)));
+	SDL_Point stop = force_xy();
+	SDL_RenderDrawLine(renderer, start.x, start.y, stop.x, stop.y);
+}
+
+static void stroke_polyline(SDL_Renderer *renderer) {
+	push(force(FIELD(TOP, 0)));
+	if (!IS_ENUM(TOP)) {
+		push(LIST_HEAD(TOP));
+		SDL_Point start = force_xy();
+		TOP = LIST_TAIL(TOP);
+		FOR_LIST(TOP) {
+			push(LIST_HEAD(TOP));
+			SDL_Point stop = force_xy();
+			SDL_RenderDrawLine(renderer, start.x, start.y, stop.x, stop.y);
+			start = stop;
+		}
+	}
+	pop();
+}
+
+static void stroke_box(SDL_Renderer *renderer) {
+	push(force(FIELD(TOP, 0)));
+	SDL_Point corner = force_xy();
+	push(force(FIELD(TOP, 1)));
+	SDL_Point measure = force_xy();
+	SDL_Rect rect = { corner.x, corner.y, measure.x, measure.y };
+	SDL_RenderDrawRect(renderer, &rect );
+}
+
+static void stroke_fill_box(SDL_Renderer *renderer) {
+	push(force(FIELD(TOP, 0)));
+	SDL_Point corner = force_xy();
+	push(force(FIELD(TOP, 1)));
+	SDL_Point measure = force_xy();
+	SDL_Rect rect = { corner.x, corner.y, measure.x, measure.y };
+	SDL_RenderDrawRect(renderer, &rect );
+}
+
+static void dp_stroke(SDL_Renderer *renderer) { // list of stroke elements --
+	FOR_LIST(TOP) {
+		push(LIST_HEAD(TOP));
+		assert(INDICATOR(TOP) == IND_GC);
+		switch (AS_RECORD(TOP)->constructor->tag) {
+		case STROKE_HLIN: stroke_hlin(renderer); break;
+		case STROKE_VLIN: stroke_vlin(renderer); break;
+		case STROKE_LINE: stroke_line(renderer); break;
+		case STROKE_POLYLINE: stroke_polyline(renderer); break;
+		case STROKE_BOX: stroke_box(renderer); break;
+		case STROKE_FILL_BOX: stroke_fill_box(renderer); break;
+		case STROKE_CIRCLE:
+		case STROKE_ELLIPSE:
+		case STROKE_ARC:
+			break;
+		}
+		pop();
+	}
+	pop();
 }
 
 static Value dp_draw(Value *args) {
@@ -183,14 +263,18 @@ static Value dp_draw(Value *args) {
 	FOR_LIST(args[1]) {
 		push(LIST_HEAD(args[1]));  // Becomes args[2]
 		assert(INDICATOR(TOP) == IND_GC);
-		force_deeply();
 		switch (AS_RECORD(TOP)->constructor->tag) {
-		case PIC_FILL:
-			dp_draw_fill(DISPLAY_PTR->renderer, AS_RECORD(TOP)); break;
-		case PIC_HLIN:
-			dp_hlin(DISPLAY_PTR->renderer, AS_RECORD(TOP)); break;
-		case PIC_VLIN:
-			dp_vlin(DISPLAY_PTR->renderer, AS_RECORD(TOP)); break;
+		case TIE_FILL:
+			push(FIELD(TOP,0));  // The fill color
+			set_sdl_color(DISPLAY_PTR->renderer);  // consume/set it
+			SDL_RenderClear(DISPLAY_PTR->renderer);
+			break;
+		case TIE_STROKE:
+			push(FIELD(TOP, 0));  // The fill color
+			set_sdl_color(DISPLAY_PTR->renderer);  // consume/set it
+			push(FIELD(TOP, 1));  // The fill color
+			dp_stroke(DISPLAY_PTR->renderer);
+			break;
 		default:
 			printf("Draw %d ", AS_RECORD(TOP)->constructor->tag);
 		}

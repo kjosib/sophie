@@ -26,7 +26,7 @@ def run_program(roadmap:RoadMap):
 			if d.linkage is not None:
 				py_module = sys.modules[d.source.value]
 				linkage = [env.fetch(ref.dfn) for ref in d.linkage]
-				drivers.update(py_module.sophie_init(*linkage))
+				drivers.update(py_module.sophie_init(*linkage) or ())
 		for expr in module.main:
 			env.pc = expr
 			result = _strict(expr, env)

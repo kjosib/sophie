@@ -12,7 +12,7 @@ It is up to date by definition.
 
 Quick primer on reading the grammar:
 
-* All-upper-case represents a KEYWORD, which by the way has no semantic value.
+* All-upper-case represents a reserved KEYWORD. Keywords in Sophie are not case-sensitive.
 * Punctuation in `'` quotes `'` are terminals which also have no semantic value.
 * Things like `:foo` (words beginning with a colon) refer to parse actions, defined elsewhere. You can ignore them.
 * The vertical-bar character `|` sits between equally-valid alternatives.
@@ -44,7 +44,7 @@ import_symbol ->  name alias  :ImportSymbol
 alias -> AS name | :nothing
 
 reference -> name     :PlainReference
-  | .SELF              :SelfReference
+  | .SELF             :PlainReference
   | name '@' name     :QualifiedReference
 ```
 
