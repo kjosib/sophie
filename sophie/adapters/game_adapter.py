@@ -148,7 +148,7 @@ class DisplayProxy:
 		self._display.fill(color, pygame.Rect(_force_xy(corner), _force_xy(measure)))
 	
 	def _stroke_circle(self, color, center, radius):
-		draw.ellipse(self._display, color, _force_xy(center), radius)
+		draw.circle(self._display, color, _force_xy(center), radius, width=1)
 	
 	def _stroke_ellipse(self, color, corner, measure):
 		draw.ellipse(self._display, color, pygame.Rect(_force_xy(corner), _force_xy(measure)))
