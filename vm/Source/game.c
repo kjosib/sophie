@@ -52,6 +52,9 @@ typedef enum {
 
 static Value *linkage;
 
+#define NR_SCRATCH 256   // Must be a multiple of 8. Ought to be plenty to overcome alleged API-call overhead.
+static SDL_Point scratch_points[NR_SCRATCH];
+
 #define SELF AS_ACTOR(args[0])
 
 #define DISPLAY_PTR ((Display*)AS_PTR(SELF->fields[DP_DISPLAY]))
@@ -237,6 +240,45 @@ static void stroke_fill_box(SDL_Renderer *renderer) {
 	SDL_RenderDrawRect(renderer, &rect );
 }
 
+static void stroke_circle(SDL_Renderer *renderer) {
+	// See the description in the docs at tech/graphics.
+	// I'm doing this clean-room from my own understanding of the math.
+
+	push(force(FIELD(TOP, 0)));
+	SDL_Point center = force_xy();
+	int radius = AS_NUMBER(force(FIELD(TOP, 1)));
+
+	int x = radius, y = 0, err = -(radius / 2);
+
+	int cp = 0;  // count of points
+	while (x >= y) {
+		// Plot points with eightfold symmetry:
+		scratch_points[cp++] = (SDL_Point){ center.x + x, center.y + y };
+		scratch_points[cp++] = (SDL_Point){ center.x - x, center.y + y };
+		scratch_points[cp++] = (SDL_Point){ center.x + x, center.y - y };
+		scratch_points[cp++] = (SDL_Point){ center.x - x, center.y - y };
+		scratch_points[cp++] = (SDL_Point){ center.x + y, center.y + x };
+		scratch_points[cp++] = (SDL_Point){ center.x - y, center.y + x };
+		scratch_points[cp++] = (SDL_Point){ center.x + y, center.y - x };
+		scratch_points[cp++] = (SDL_Point){ center.x - y, center.y - x };
+		// Must we flush?
+		if (cp == NR_SCRATCH) {
+			SDL_RenderDrawPoints(renderer, scratch_points, cp);
+			cp = 0;
+		}
+		// Increment the fast axis (and bump the error term accordingly).
+		y++;
+		err += y + y - 1;
+		// If outside the circle, go left one (and update the error term).
+		if (err >= 0) {
+			x--;
+			err -= x + x + 1;
+		}
+	}
+	// Likely need to flush some points:
+	if (cp) SDL_RenderDrawPoints(renderer, scratch_points, cp);
+}
+
 static void dp_stroke(SDL_Renderer *renderer) { // list of stroke elements --
 	FOR_LIST(TOP) {
 		push(LIST_HEAD(TOP));
@@ -248,7 +290,7 @@ static void dp_stroke(SDL_Renderer *renderer) { // list of stroke elements --
 		case STROKE_POLYLINE: stroke_polyline(renderer); break;
 		case STROKE_BOX: stroke_box(renderer); break;
 		case STROKE_FILL_BOX: stroke_fill_box(renderer); break;
-		case STROKE_CIRCLE:
+		case STROKE_CIRCLE: stroke_circle(renderer); break;
 		case STROKE_ELLIPSE:
 		case STROKE_ARC:
 			break;

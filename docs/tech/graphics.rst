@@ -48,11 +48,16 @@ This plots 1/8th of a circle, but you get the rest with rotations and reflection
 Refinements
 ------------
 
+Performance
+............
 To know very quickly if *<x,y>* is outside the circle,
 keep track of ``x^2`` and ``y^2``. This can be done quite efficiently,
 as squares are also sums of successive odd numbers.
 It should be easy to work out how to add and subtract from an error term.
 
+
+Cosmetics
+..........
 The algorithm as described so far has a stark cosmetic flaw:
 It always draws four lonely single points at the extreme cardinal directions.
 
@@ -66,6 +71,23 @@ Applying FOIL, the square terms cancel and the spare 1/4 unit we can just ignore
 We're left with ``-r`` as the initial error term.
 Personally, I think this sometimes leaves warts on the 45-degree points,
 so I might try a 1/4 pixel bias of ``-r/2``.
+
+There is another small caveat.
+As described so far, this algorithm ends up producing odd-sized circles.
+It draws a one-pixel thick circle centered on *the pixel* at the center point.
+For instance, a radius-five circle plots the pixels ``(-5, 0)`` and ``(+5, 0)`` both,
+*which makes 11 pixels wide.*
+
+There is an alternative philosophy:
+That a radius-five circle should fit in a square ten pixels by ten.
+In this arrangement, the coordinate points occur between the pixels.
+This is what PyGame does, for instance.
+
+Honestly, I'm inclined to adjust Sophie's semantics to take an upper-left corner and a diameter.
+This way, the circle's exact bounding box is easily understandable,
+and you can have both even- and odd-sized circles.
+The trick is to reframe the problem as asking whether the point ``(x+0.5, y+0.5)`` is inside or outside the circle.
+Then the plotting symmetries and error bias must account for the half-pixel offset.
 
 Ellipses
 =========

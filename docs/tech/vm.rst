@@ -1593,4 +1593,28 @@ In that process, I changed the graphics code to get rid of the ``force_deeply()`
 This is at least consistent enough with everything else.
 I also factored out a few macros for consuming lists.
 
+14 January 2024
+---------------
+
+I got circles working in the VM -- sort of The experience taught me some weird things about computer graphics.
+What I have right now looks OK on its own, but if you compare very closely with PyGame you can see a slight difference.
+The difference is visible in a magnified view.
+I'm drawing circles centered on the middle of the pixel, with a one-pixel-wide brush.
+while PyGame centers everything at the upper left corner.
+As such, my circles end up one pixel taller and wider in diameter.
+
+The fact that pixels have width means there is perpetually an off-by-one error somewhere in any graphics API.
+
+In any case, I see the logic of the PyGame way: A circle of radius R fits exactly in a square of 2R pixels.
+I think I'll change Sophie to specify a corner-point and a bounding diameter.
+*Yay for fun with algebra!*
+
+I suppose discs (filled circles) are next.
+That would make a game of pong possible. Although at that point,
+I'd probably want to bring in *SDL_ttf* for drawing the score.
+
+Another interesting question is whether to embed a sprite concept into Sophie's 2-D game-graphics API.
+By that I mean the ability to define a shape once and then conveniently reuse it at various offsets,
+rather than make the application calculate and emit drawing primitives at their final coordinates.
+I do suspect a translation vector in the works could be a good thing.
 

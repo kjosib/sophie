@@ -7,7 +7,7 @@
 
 
 import:
-sys."game" as game (events, xy, rgb, fill, stroke, black, white, hlin, vlin, box);
+sys."game" as game (events, xy, rgb, fill, stroke, black, white, hlin, vlin, box, circle);
 
 
 define:
@@ -22,8 +22,8 @@ define:
         
         to tick(display) is display ! draw [
             fill(rgb(0,$99,0)),   # Apple ][ style hexadecimal with dollar-sign.
-            stroke(black, reticle(self.pos)),
             stroke(white, cat(cross_hairs(self.pos), lines_from_each_corner_to(self.pos))),
+            stroke(black, reticle(self.pos)),
         ];
         
     end mouse_chaser;
@@ -38,7 +38,10 @@ define:
         one_such_line(a_corner) = line@game(a_corner, pos);
     end lines_from_each_corner_to;
     
-    reticle(pos) = [ box(xy(pos.x-10, pos.y-10), xy(20, 20)) ];
+    reticle(pos) = [
+        box(xy(pos.x-10, pos.y-10), xy(20, 20)),
+        circle(pos, 30),
+    ];
 
 
 
