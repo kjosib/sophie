@@ -1,5 +1,5 @@
 import sys, random
-from typing import Sequence, Optional, NamedTuple, Union, Any
+from typing import Sequence, Optional, Union, Any
 from traceback import TracebackException
 from pathlib import Path
 from boozetools.support.failureprone import SourceText, Issue, Evidence, Severity, illustration
@@ -183,7 +183,7 @@ class Report:
 	
 	# Methods the Alias-checker calls
 	def these_are_not_types(self, non_types:Sequence[syntax.TypeCall]):
-		intro = "Words that get used like types, but refer to something else."
+		intro = "Words that get used like types, but refer to something else (e.g. variants or functions)."
 		problem = [Annotation(self._path, tc) for tc in non_types]
 		self.issue(Pic(intro, problem))
 	

@@ -1,0 +1,82 @@
+# Mandelbrot set as graphics.
+# Most of the same concept as the text-mode version, but draw many small rectangles.
+# Maybe one row per tick.
+
+import:
+sys."game" as game (events, xy, rgb, stroke, fill_box, black);
+
+type:
+
+complex is (re:number, im:number);
+range is (start:number, stop:number);
+
+define:
+
+res = xy(640, 480);
+box_scale = xy(2, 2);
+window_size = xy(res.x * box_scale.x, res.y * box_scale.y);
+
+horizontal = range(-2, 0.6);
+vertical = range(1.3, -1.3);
+max_steps = palette_length * 4;
+
+interpolate(r:range, t:number) = r.start * (1-t) + r.stop * t;
+
+c_add(a,b) = complex(a.re+b.re, a.im+b.im);
+c_mul(a,b) = complex(a.re*b.re - a.im*b.im, a.im*b.re + b.im*a.re);
+
+escaped(c) = c.re*c.re + c.im*c.im > 4;
+
+color(n) = index(n mod palette_length, palette, black);
+palette = [
+	rgb($00, $00, $00), rgb($99, $00, $00), rgb($99, $99, $00),
+	rgb($00, $99, $00), rgb($00, $99, $99), rgb($00, $00, $99),
+	rgb($99, $00, $99), rgb($99, $99, $99), rgb($ff, $00, $00),
+	rgb($ff, $ff, $00), rgb($00, $ff, $00), rgb($00, $ff, $ff),
+	rgb($00, $00, $ff), rgb($ff, $00, $ff), rgb($ff, $ff, $ff),
+];
+palette_length = length(palette);
+
+cell(corner:xy, z:complex) : image_element@game
+= stroke(color(iterate(z_naught, z, max_steps)), [ fill_box(corner, box_scale) ] );
+
+row_for(y_scaled, im) : list[stroke_element@game] = map(brick, horizontal_steps) where
+	brick(x) = cell(corner, z) where
+		corner = xy(x*box_scale.x, y_scaled);
+		z = complex(re, im);
+		re = interpolate(horizontal, (x+0.5)/res.x);
+	end brick;
+end row_for;
+
+horizontal_steps = iota(0, res.x);
+
+z_naught = complex(0,0);
+
+iterate(z, c, n) : number = case
+    when escaped(z) then max_steps - n;
+    when n <= 0 then 0;
+    else iterate(advance(z,c), c, n-1);
+esac;
+
+advance(z,c) = c_add(c, c_mul(z,z));
+
+
+agent painter(y:number) as
+	to tick(display) is case
+		when self.y < res.y then do
+			display ! draw(row_for(self.y*box_scale.y, interpolate(vertical, (self.y+0.5) / res.y)));
+			my y := self.y + 1;
+		end;
+		else skip;
+	esac;
+end painter;
+
+begin:
+    cast  # in order of appearance:
+        p is painter(0);
+    do
+        events ! on_tick(p ! tick);
+    end;
+    events ! play(window_size, 60);
+end.
+

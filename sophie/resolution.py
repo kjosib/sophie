@@ -265,6 +265,7 @@ class _WordDefiner(_ResolutionPass):
 		message_space = uda.message_space = NS(place=uda)
 		for behavior in uda.behaviors:
 			assert isinstance(behavior, syntax.Behavior)
+			behavior.source_path = self.module.source_path
 			self._install(message_space, behavior)
 			inner = behavior.namespace = env.new_child(behavior)
 			inner['SELF'] = SELF

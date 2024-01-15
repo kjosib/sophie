@@ -53,6 +53,7 @@ class RootFrame(Frame):
 
 class Activation(Frame):
 	def __init__(self, static_link: Frame[T], dynamic_link: Frame[T], breadcrumb:CRUMB):
+		assert hasattr(breadcrumb, 'source_path'), type(breadcrumb)
 		self._bindings = {}
 		self._static_link = static_link
 		self._dynamic_link = dynamic_link

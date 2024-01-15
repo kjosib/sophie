@@ -237,7 +237,7 @@ static void stroke_fill_box(SDL_Renderer *renderer) {
 	push(force(FIELD(TOP, 1)));
 	SDL_Point measure = force_xy();
 	SDL_Rect rect = { corner.x, corner.y, measure.x, measure.y };
-	SDL_RenderDrawRect(renderer, &rect );
+	SDL_RenderFillRect(renderer, &rect );
 }
 
 static void stroke_circle(SDL_Renderer *renderer) {

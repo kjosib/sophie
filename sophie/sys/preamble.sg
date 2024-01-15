@@ -152,5 +152,18 @@ define:
 	EOL = chr(10);
 	
 	log_base(n, base) = log(n) / log(base);
+	
+	length(xs) = reduce(fn, 0, xs) where fn(a,_) = a+1; end length;
+	
+	index(n, xs, otherwise) = case drop(n, xs) as e of
+		nil -> otherwise;
+		cons -> e.head;
+	esac;
+	
+	iota(start, stop) : list[number]
+		# Count off a half-open range, stepping by one.
+		# For example, iota(3, 7) = [3,4,5,6]
+		# You can also start from an offset: iota(2.5, 4) = [2.5, 3.5]
+	= nil if start >= stop else cons(start, iota(start+1, stop));
 
 end.
