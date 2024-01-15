@@ -20,6 +20,7 @@ The design goals, *in priority order,* are:
 9. Foreign Function Interface.
 10. Asynchronous message-passing concurrency. Erlang is the inspiration here, but Sophie's messages are type-safe.
 11. Multimethods. Better yet, related packages of multimethods. Possibly with default generic implementations.
+12. Various optimizations typical of this style of language: strictness analysis, thunk elevation, and constant folding.
 12. High-performance tensor math a'la numpy.
 13. Other nice things to have.
 

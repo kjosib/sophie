@@ -661,6 +661,9 @@ class ProcContext(EagerContext):
 		scope.emit_assign_member(af.nom.text)
 		self.semicolon(scope)
 	
+	def visit_Skip(self, _:syntax.Skip, scope:VMFunctionScope):
+		self.semicolon(scope)
+	
 class StepContext(ProcContext):
 	def perform(self, scope: VMFunctionScope):
 		scope.emit_perform()
@@ -676,6 +679,14 @@ class LastContext(ProcContext):
 		
 	def semicolon(self, scope: VMFunctionScope):
 		scope.emit_return()
+
+	@staticmethod
+	def visit_Cond(cond:syntax.Cond, scope:VMFunctionScope):
+		FORCE.visit(cond.if_part, scope)
+		label_else = scope.jump_if(False)
+		LAST.visit(cond.then_part, scope)
+		scope.come_from(label_else)
+		LAST.visit(cond.else_part, scope)
 
 
 DELAY = LazyContext()
