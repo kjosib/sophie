@@ -248,7 +248,7 @@ static void stroke_circle(SDL_Renderer *renderer) {
 	SDL_Point center = force_xy();
 	int radius = AS_NUMBER(force(FIELD(TOP, 1)));
 
-	int x = radius, y = 0, err = -(radius / 2);
+	int x = radius, y = 0, err = -(radius);
 
 	int cp = 0;  // count of points
 	while (x >= y) {
@@ -267,10 +267,10 @@ static void stroke_circle(SDL_Renderer *renderer) {
 			cp = 0;
 		}
 		// Increment the fast axis (and bump the error term accordingly).
+		err += y + y + 1;
 		y++;
-		err += y + y - 1;
 		// If outside the circle, go left one (and update the error term).
-		if (err >= 0) {
+		if (err > 0) {
 			x--;
 			err -= x + x + 1;
 		}
