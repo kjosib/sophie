@@ -2,11 +2,23 @@ Graphics in Sophie's VM
 ########################
 
 The Simple DirectMedia Layer (SDL) is the foundation for Sophie's cross-platform game subsystem.
-
+It gives you a basic set of tools, but its primitive drawing operations are not too sophisticated.
+This article contains brief design notes on reinvented wheels.
 
 .. contents::
     :local:
     :depth: 3
+
+
+.. admonition:: Raster graphics and off-by-one errors
+
+    Many an irritating graphical glitch grows from
+    forgetting that pixels are not points.
+    Pixels have height and width!
+
+    Furthermore, pixels are not universally square,
+    although modern PC displays are usually close enough.
+
 
 Circles
 ========
@@ -30,64 +42,83 @@ In any case, it looks like I'll get an introduction to the "Midpoint Circle Algo
 The Basic Algorithm
 --------------------
 
-Observe that the boundary of a circle is given by ``x^2 + y^2 == r^2``.
+Observe that the boundary of a circle is given by ``x^2 + y^2 == r^2``, where ``r`` is half the diameter.
 But let's write that differently: ``x^2 + y^2 - r^2 == [error_term]``.
 The sign of the error term tells you if you're inside (negative) or outside (positive) the circle.
 
-So now we have a simple algorithm for following a curve:
-It goes like this::
+The goal is to draw those pixels that best fit the margin of a disc ``r`` units in radius.
+This yields a simple algorithm for following the inside of a circle:
+It goes something like this::
 
-    Start at the point (x, y) = (r, 0)
-    While y < x:
+    Let r equal floor(diameter/2)
+    Start with (x,y) at the point (0, r)
+    While y <= x:
         Plot the pixel you're at.
-        Go one pixel up (or down, as the case may be: ``y++;``
-        If you're now outside the circle go one pixel left: ``x--;``
+        Go one pixel up (or down, as the case may be): ``y++;``
+        If (x, y) is now outside the circle, go one pixel left: ``x--;``
 
 This plots 1/8th of a circle, but you get the rest with rotations and reflections.
 
-Refinements
-------------
-
 Performance
-............
+-----------------
 To know very quickly if *<x,y>* is outside the circle,
-keep track of ``x^2`` and ``y^2``. This can be done quite efficiently,
-as squares are also sums of successive odd numbers.
-It should be easy to work out how to add and subtract from an error term.
+keep an explicit ``error_term`` and maintain the invariant that ``x^2 + y^2 - r^2 == error_term``.
+This can be done quite efficiently based on the following observation::
 
+    error_term(x,y+1) - error_term(x,y)
+    = (y+1)*(y+1) - y^2
+    = y^2 + 2*y + 1 - y^2
+    = 2*y + 1
 
-Cosmetics
-..........
-The algorithm as described so far has a stark cosmetic flaw:
-It always draws four lonely single points at the extreme cardinal directions.
+The logic works identically for ``x`` and ``y``.
 
-If we start the error term with a somewhat negative bias,
-then it's equivalent to drawing a slightly bigger circle,
-which will yield pleasingly-straight segments in the cardinal directions.
-But how big of a correction is proper?
-I suspect most sources are using about 1/2 pixel,
-which gives an initial error term of ``r^2 - (r+0.5)^2``.
-Applying FOIL, the square terms cancel and the spare 1/4 unit we can just ignore.
-We're left with ``-r`` as the initial error term.
-Personally, I think this sometimes leaves warts on the 45-degree points,
-so I might try a 1/4 pixel bias of ``-r/2``.
+Devilish Details
+-----------------
 
-There is another small caveat.
-As described so far, this algorithm ends up producing odd-sized circles.
-It draws a one-pixel thick circle centered on *the pixel* at the center point.
-For instance, a radius-five circle plots the pixels ``(-5, 0)`` and ``(+5, 0)`` both,
-*which makes 11 pixels wide.*
+The algorithm needs an initial error term, which works out as follows::
 
-There is an alternative philosophy:
-That a radius-five circle should fit in a square ten pixels by ten.
-In this arrangement, the coordinate points occur between the pixels.
-This is what PyGame does, for instance.
+    = (r - .5)^2 - r^2
+    = r^2 - r - 1/4 - r^2
+    = - r - 1/4
 
-Honestly, I'm inclined to adjust Sophie's semantics to take an upper-left corner and a diameter.
-This way, the circle's exact bounding box is easily understandable,
-and you can have both even- and odd-sized circles.
-The trick is to reframe the problem as asking whether the point ``(x+0.5, y+0.5)`` is inside or outside the circle.
-Then the plotting symmetries and error bias must account for the half-pixel offset.
+It's convenient to start with ``error_term = 0-floor(radius)``
+and then interpret the ``error_term`` variable such that zero is considered inside the reference circle.
+
+Also, it turns out there is a slight difference between plotting odd- and even-diameter circles.
+
+Odd-Diameter Circles
+....................
+
+Consider for example a circle that fits a square 11 pixels on a side.
+To make the math easy, label the axes from ``-5`` to ``+5``,
+with the origin in the exact middle of pixel ``(0, 0)``.
+
+The program variables ``x`` and ``y`` thus represent exact integer coordinates,
+and so the math upon them (and the error term) is exactly as laid out above.
+
+We get initial ``error_term = -floor(diameter/2)`` here
+because ``(x + 1/2)^2 = x^2 + x + 1/4`` and we can account for the ``1/4`` by treating zero as "inside".
+
+Even-Diameter Circles
+.....................
+
+Consider for example a circle that fits a square 10 pixels on a side.
+Again to make the math easy, label the axes from ``-5`` to ``+5``,
+but this time, the coordinate points fall at the corners of the pixels.
+
+In this case, the *center of the pen* must follow a circle of radius 4.5
+so that the pen's outer edge has radius 5.
+
+This means the program variables can still be integers,
+but ``x`` and ``y`` *actually represent* the real-valued coordinate 1/2 higher than what's in the variable.
+
+That changes the ``error_term`` increment and decrement slightly:
+The *mathematical* expression *2y+1* turns into the *program code* ``2*y + 2``.
+The extra 1 comes from doubling the implied 1/2 in the value that ``y`` really represents.
+
+The initial ``error_term`` in this case is still the same ``-floor(diameter/2)``.
+If you work through the math, you end up with 3/4 residual instead of 1/4,
+but that doesn't make any difference to the algorithm.
 
 Ellipses
 =========
@@ -159,3 +190,14 @@ And yet a third would be to find the point where the ellipse is normal to that a
 Both of those last ideas seem hard, so chances are the first one is the most popular.
 But I think it makes the least sense.
 
+See Also
+=========
+
+* Naturally I'm not the first to think up this particular strategy for ellipses:
+  `A Fast Bresenham Type Algorithm For Drawing Ellipses <https://dai.fmph.uniba.sk/upload/0/01/Ellipse.pdf>`_
+
+* This recent approach does ellipses parametrically, using some fixed-point arithmetic:
+  `A Fast Parametric Ellipse Algorithm <https://arxiv.org/pdf/2009.03434.pdf>`_
+
+* This Master's thesis/project from 1989 probably holds merit:
+  `Raster Algorithms for 2D Primitives <https://cs.brown.edu/research/pubs/theses/masters/1989/dasilva.pdf>`_
