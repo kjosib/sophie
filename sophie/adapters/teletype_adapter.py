@@ -3,8 +3,6 @@ import random
 from ..runtime import iterate_list, Message
 from ..scheduler import NativeObjectProxy
 
-NIL : dict
-
 class Console:
 	@staticmethod
 	def echo(text):
