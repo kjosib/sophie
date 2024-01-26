@@ -176,7 +176,8 @@ _hint("name formals : name ● ???", "It seems to cut off after perhaps a type-a
 _hint("name type_parameters IS ( name : name ● ???", "Anticipated a comma or perhaps open-square-bracket here.")
 _hint("WHEN expr ● ->", "WHEN goes with THEN. The arrow is for type matches.")
 _hint("TYPE : ??? round_list(simple_type) ● ;", "Might be a record missing field types, or the first part of a function-type (expecting '->' and a result-type ).")
-_hint("AGENT ??? semicolon_list(behavior) END ● ;", "End agents by name, similar to where-clauses: AGENT foo ... END foo;")
+_hint("AGENT ??? semicolon_list(behavior) END ● ;", "End agents by name: AGENT foo ... END foo;")
+_hint("name formals annotation = expr WHERE semicolon_list(function) END ● ;", "End enclosing functions by name: foo(x) = ... WHERE ... END foo;")
 
 assert _best_hint("export_section import_section TYPE : name square_list(name) IS".split(), 'OPAQUE')
 
