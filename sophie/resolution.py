@@ -324,7 +324,7 @@ class _WordDefiner(_ResolutionPass):
 		for alias in im.vocab:
 			yonder, hither = alias.yonder, alias.hither or alias.yonder
 			try: subject = source_namespace[yonder.key()]
-			except KeyError: self.report.undefined_name(yonder.head())
+			except KeyError: self.report.undefined_name(yonder)
 			else:
 				try: self.globals[hither.key()] = subject
 				except SymbolAlreadyExists:
