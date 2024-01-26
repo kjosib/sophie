@@ -167,6 +167,7 @@ class Report:
 		self._redefined[earlier].note(later)
 
 	def undefined_name(self, guilty:Nom):
+		assert isinstance(guilty, Nom), type(guilty)
 		if self._undefined is None:
 			self._undefined = Undefined(_fetch(self._path))
 			self.issue(self._undefined)
