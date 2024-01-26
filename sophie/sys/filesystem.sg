@@ -1,0 +1,12 @@
+
+import:
+
+foreign "sophie.adapters.fs_adapter" where
+    filesystem : FileSystem;
+end;
+
+type:
+
+FileSystem is agent:
+    read_lines(string, !(list[string]));
+end;

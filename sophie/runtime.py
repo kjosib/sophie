@@ -1,9 +1,9 @@
-import operator, traceback
-from typing import Any, Union, Sequence, Optional
-from . import syntax, primitive
+import operator
+from typing import Any, Union, Sequence, Optional, Reversible
+from . import syntax
 from .ontology import SELF
 from .stacking import Frame, Activation, RootFrame
-from .scheduler import MAIN_QUEUE, Task, Actor
+from .scheduler import Task, Actor
 
 BINARY_IMPL = {
 	"^"   : operator.pow,
@@ -188,13 +188,7 @@ def evaluate(expr:EVALUABLE, dynamic_env:ENV) -> LAZY_VALUE:
 	assert isinstance(dynamic_env, Frame), type(dynamic_env)
 	try: fn = EVALUATE[type(expr)]
 	except KeyError: raise NotImplementedError(type(expr), expr)
-	try: return fn(expr, dynamic_env)
-	except:
-		traceback.print_exc()
-		# Something along these lines might be nice:
-		# for frame in THE_STACK:
-		# 	frame.trace(tracer)
-		exit(1)
+	return fn(expr, dynamic_env)
 
 _NO_DELAY = {syntax.Literal, syntax.Lookup, syntax.DoBlock}
 
@@ -407,6 +401,12 @@ def iterate_list(lst:LAZY_VALUE):
 		yield force(lst['head'])
 		lst = force(lst['tail'])
 	assert lst[""] == "nil"
+
+def as_sophie_list(items:Reversible):
+	lst = NIL
+	for head in reversed(items):
+		lst = {"":"cons", "head":head, "tail":lst}
+	return lst
 
 ###############################################################################
 

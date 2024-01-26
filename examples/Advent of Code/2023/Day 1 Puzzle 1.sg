@@ -1,0 +1,37 @@
+# See https://adventofcode.com/2023/day/1 for an explanation.
+
+# This is the first time I have Sophie reading files from the file system.
+# I decided to start with a convenient high-level "read_lines" message.
+# (I can always add more features later.)
+# It was easy to add to the interpreter, but the VM lags behind.
+
+# This works fine for the sample data that explains the problem,
+# but overflows the stack on the real file which has 1,000 lines.
+# To fix it, Sophie will need a concept of "strict arguments".
+# That's presumably the next design question.
+
+import:
+
+    sys."filesystem" (filesystem);
+
+define:
+    
+    solve_puzzle(lines) = console ! echo [str(sum(map(value_for, lines)))];
+    
+    value_for(line) = case map(digit_value, filter(is_digit, each_chr(line))) as dvs of
+        cons -> 10 * dvs.head + last(dvs.head, dvs.tail);
+        nil -> 0;
+    esac;
+    
+    last(head, tail) = case tail of
+        nil -> head;
+        cons -> last(tail.head, tail.tail);
+    esac;
+    
+    digit_value(digit) = ord(digit) - ord("0");
+    
+    is_digit(chr) = ord("0") <= ord(chr) and ord(chr) < ord("9");
+    
+begin:
+
+    filesystem ! read_lines("/playground/advent of code/d1p1", !solve_puzzle);
