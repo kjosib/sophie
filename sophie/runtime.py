@@ -43,32 +43,28 @@ THREADED_ROOT = RootFrame()
 ABSENT = object()
 class Thunk:
 	""" A kind of not-yet-value which can be forced. """
-	def __init__(self, dynamic_env:ENV, expr: syntax.ValExpr):
+	def __init__(self, expr: syntax.ValExpr, dynamic_env: ENV):
 		assert isinstance(expr, syntax.ValExpr), type(expr)
-		self._dynamic_env = dynamic_env
-		self._expr = expr
-		self._value = ABSENT
+		self.dynamic_env = dynamic_env
+		self.expr = expr
+		self.value = ABSENT
 		
-	def force(self) -> STRICT_VALUE:
-		if self._value is ABSENT:
-			self._value = _strict(self._expr, self._dynamic_env)
-			assert not isinstance(self._value, syntax.ValExpr), type(self._expr)
-			del self._dynamic_env, self._expr
-		return self._value
-	
 	def __str__(self):
-		if self._value is ABSENT:
-			return "<Thunk: %s>"%self._expr
+		if self.value is ABSENT:
+			return "<Thunk: %s>"%self.expr
 		else:
-			return str(self._value)
+			return str(self.value)
 
 def force(it:LAZY_VALUE) -> STRICT_VALUE:
 	"""
-	While this will not return a thunk as such,
-	it may return a structure which contains thunks.
+	Force repeatedly until the result is no longer a thunk, then return that result.
+	This simulates tail-call elimination, now that closures promptly return thunks.
 	"""
-	if isinstance(it, Thunk):
-		it = it.force()
+	while isinstance(it, Thunk):
+		if it.value is ABSENT:
+			it.value = evaluate(it.expr, it.dynamic_env)
+			del it.expr, it.dynamic_env
+		it = it.value
 	return it
 
 def _strict(expr:syntax.ValExpr, dynamic_env:ENV):
@@ -89,7 +85,7 @@ def _eval_lookup(expr:syntax.Lookup, dynamic_env:ENV):
 				value = Closure(static_env, sym)
 			else:
 				inner = Activation.for_function(static_env, dynamic_env, sym, ())
-				value = delay(inner, sym.expr)
+				value = delay(sym.expr, inner)
 		elif isinstance(sym, syntax.TypeAlias):
 			value = _snap_type_alias(sym, static_env)
 		else:
@@ -110,7 +106,7 @@ def _eval_shortcut_exp(expr:syntax.ShortCutExp, dynamic_env:ENV):
 
 def _eval_call(expr:syntax.Call, dynamic_env:ENV):
 	procedure = _strict(expr.fn_exp, dynamic_env)
-	thunks = tuple(delay(dynamic_env, a) for a in expr.args)
+	thunks = tuple(delay(a, dynamic_env) for a in expr.args)
 	return procedure.apply(thunks, dynamic_env)
 
 def _eval_cond(expr:syntax.Cond, dynamic_env:ENV):
@@ -131,7 +127,7 @@ def _eval_field_ref(expr:syntax.FieldReference, dynamic_env:ENV):
 def _eval_explicit_list(expr:syntax.ExplicitList, dynamic_env:ENV):
 	tail = NIL
 	for sx in reversed(expr.elts):
-		head = delay(dynamic_env, sx)
+		head = delay(sx, dynamic_env)
 		tail = CONS.apply((head, tail), dynamic_env)
 	return tail
 
@@ -192,13 +188,13 @@ def evaluate(expr:EVALUABLE, dynamic_env:ENV) -> LAZY_VALUE:
 
 _NO_DELAY = {syntax.Literal, syntax.Lookup, syntax.DoBlock}
 
-def delay(dynamic_env:ENV, expr:syntax.ValExpr) -> LAZY_VALUE:
+def delay(expr: syntax.ValExpr, dynamic_env: ENV) -> LAZY_VALUE:
 	# For certain kinds of expression, there is no profit to delay:
 	if type(expr) in _NO_DELAY: return evaluate(expr, dynamic_env)
 	# Volatile expressions (that depend on a field of SELF) must not delay:
 	if expr.is_volatile: return _strict(expr, dynamic_env)
 	# In less trivial cases, make a thunk and pass that instead.
-	return Thunk(dynamic_env, expr)
+	return Thunk(expr, dynamic_env)
 
 EVALUATE = {}
 for _k, _v in list(globals().items()):
@@ -232,7 +228,7 @@ class Closure(Function):
 
 	def apply(self, args: Sequence[LAZY_VALUE], dynamic_env:ENV) -> LAZY_VALUE:
 		inner_env = Activation.for_function(self._static_link, dynamic_env, self._udf, args)
-		return evaluate(self._udf.expr, inner_env)
+		return delay(self._udf.expr, inner_env)
 
 class Primitive(Function):
 	""" All parameters to primitive procedures are strict. Also a kind of value, like a closure. """
