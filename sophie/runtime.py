@@ -227,6 +227,8 @@ class Closure(Function):
 	def _name(self): return self._udf.nom.text
 
 	def apply(self, args: Sequence[LAZY_VALUE], dynamic_env:ENV) -> LAZY_VALUE:
+		for i in self._udf.strictures:
+			force(args[i])
 		inner_env = Activation.for_function(self._static_link, dynamic_env, self._udf, args)
 		return delay(self._udf.expr, inner_env)
 
