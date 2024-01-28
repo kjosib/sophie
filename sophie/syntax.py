@@ -104,12 +104,16 @@ class ExplicitTypeVariable(Reference):
 
 class FormalParameter(Symbol):
 	def has_value_domain(self): return True
-	def __init__(self, nom:Nom, type_expr: Optional[ARGUMENT_TYPE]):
+	def __init__(self, stricture, nom:Nom, type_expr: Optional[ARGUMENT_TYPE]):
 		super().__init__(nom)
+		self.is_strict = stricture is not None
 		self.type_expr = type_expr
 	def head(self) -> slice: return self.nom.head()
 	def key(self): return self.nom.key()
 	def __repr__(self): return "<:%s:%s>"%(self.nom.text, self.type_expr)
+
+def FieldDefinition(nom:Nom, type_expr: Optional[ARGUMENT_TYPE]):
+	return FormalParameter(None, nom, type_expr)
 
 class RecordSpec:
 	field_space: NS  # WordDefiner pass fills this in.
@@ -191,10 +195,7 @@ class Function(Term):
 	namespace: NS
 	params: Sequence[FormalParameter]
 	where: Sequence["UserFunction"]
-	def head(self) -> slice: return self.nom.head()
-	def __repr__(self):
-		p = ", ".join(map(str, self.params))
-		return "{fn|%s(%s)}" % (self.nom.text, p)
+	
 	def __init__(
 			self,
 			nom: Nom,
@@ -205,6 +206,7 @@ class Function(Term):
 	):
 		super().__init__(nom)
 		self.params = params or ()
+		self.strictures = tuple(i for i, p in enumerate(self.params) if p.is_strict)
 		self.result_type_expr = expr_type
 		self.expr = expr
 		if where:
@@ -212,8 +214,16 @@ class Function(Term):
 			self.where = where.sub_fns
 		else:
 			self.where = ()
+			
 	def has_volatility(self):
 		return self.expr.is_volatile or any(f.has_volatility() for f in self.where)
+	
+	def head(self) -> slice:
+		return self.nom.head()
+	
+	def __repr__(self):
+		p = ", ".join(map(str, self.params))
+		return "{fn|%s(%s)}" % (self.nom.text, p)
 
 class UserFunction(Function):
 	pass

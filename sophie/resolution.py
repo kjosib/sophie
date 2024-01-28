@@ -240,7 +240,7 @@ class _WordDefiner(_ResolutionPass):
 	def visit_Assumption(self, a:syntax.Assumption):
 		""" Update the self.assume namespace accordingly. """
 		for nom in a.names:
-			fp = syntax.FormalParameter(nom, a.type_expr)
+			fp = syntax.FieldDefinition(nom, a.type_expr)
 			self._install(self.assume, fp)
 
 	def visit_UserFunction(self, udf:syntax.UserFunction, env:NS):

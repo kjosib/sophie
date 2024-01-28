@@ -65,7 +65,7 @@ record_spec  -> round_list(field_dfn)                    :RecordSpec
 
 variant_spec -> CASE ':' semicolon_list(subtype) ESAC    :VariantSpec
 
-field_dfn -> name ':' simple_type   :FormalParameter
+field_dfn -> name ':' simple_type   :FieldDefinition
 
 subtype  -> name record_spec    :SubTypeSpec
           | name simple_type    :SubTypeSpec
@@ -114,7 +114,8 @@ or use a question-mark anywhere a type-name would normally go,
 and Sophie will deal with it sensibly.
 ```
 formals -> optional(round_list(parameter))
-parameter  ->   name annotation   :FormalParameter
+parameter  ->  stricture name annotation   :FormalParameter
+stricture  ->  :nothing | .STRICT
 annotation ->  :nothing | ':' arg_type
 
 arg_type -> generic(arg_type) | arrow_of(arg_type)
