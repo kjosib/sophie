@@ -1,0 +1,39 @@
+# See https://adventofcode.com/2015/day/1
+
+import:
+sys."filesystem" (filesystem);
+
+define:
+
+running_sum(xs) = _running_sum(0, xs);
+
+_running_sum(strict a, xs) = case xs of
+	nil -> nil;
+	cons -> cons(so_far, _running_sum(so_far, xs.tail)) where
+		so_far = a + xs.head;
+	end cons;
+esac;
+
+index_where(predicate, xs) = check(xs, 0) where
+	check(xs, strict idx) = case xs of
+		nil -> -1;
+		cons -> idx if predicate(xs.head) else check(xs.tail, idx+1);
+	esac;
+end index_where;
+
+parenval(ch) = case
+	when ch == '(' then 1;
+	when ch == ')' then -1;
+	else 0;
+esac;
+
+solve(input) = console ! echo[str(solution)] where
+	solution = 1+index_where(ltz, path);
+	path = running_sum(map(parenval, each_chr(input)));
+	ltz(x) = x < 0;
+end solve;
+
+begin:
+
+filesystem ! read_file("/playground/advent of code/2015-d1-p1", !solve);
+
