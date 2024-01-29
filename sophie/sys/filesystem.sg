@@ -8,5 +8,6 @@ end;
 type:
 
 FileSystem is agent:
+    read_file(string, !(string));
     read_lines(string, !(list[string]));
 end;

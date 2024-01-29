@@ -1,0 +1,21 @@
+# See https://adventofcode.com/2015/day/1
+
+
+import:
+sys."filesystem" (filesystem);
+
+define:
+parenval(ch) = case
+	when ch == '(' then 1;
+	when ch == ')' then -1;
+	else 0;
+esac;
+
+solution(input) = sum(map(parenval, each_chr(input)));
+
+solve(input) = console ! echo[str(solution(input))];
+
+begin:
+
+filesystem ! read_file("/playground/advent of code/2015-d1-p1", !solve);
+
