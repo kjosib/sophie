@@ -164,10 +164,10 @@ class Report:
 			issue = Redefined(_fetch(self._path), earlier.nom.head())
 			self.issue(issue)
 			self._redefined[earlier] = issue
-		self._redefined[earlier].note(later)
+		self._redefined[earlier].note(later.head())
 
-	def undefined_name(self, guilty:Nom):
-		assert isinstance(guilty, Nom), type(guilty)
+	def undefined_name(self, guilty:slice):
+		assert isinstance(guilty, slice)
 		if self._undefined is None:
 			self._undefined = Undefined(_fetch(self._path))
 			self.issue(self._undefined)
@@ -208,7 +208,7 @@ class Report:
 	def not_a_case_of(self, nom:Nom, variant:syntax.Variant):
 		# pattern = "This case is not a member of the variant-type <%s>."
 		# intro = pattern%variant.nom.text
-		self.undefined_name(nom)
+		self.undefined_name(nom.head())
 		pass
 	
 	def not_a_case(self, nom:Nom):
@@ -328,10 +328,10 @@ class Annotation:
 		self.caption = caption
 		assert isinstance(self.slice, slice), type(node)
 
-def illustrate(source, the_slice, caption):
-	row, col = source.find_row_col(the_slice.start)
+def illustrate(source, span:slice, caption):
+	row, col = source.find_row_col(span.start)
 	single_line = source.line_of_text(row)
-	width = the_slice.stop - the_slice.start
+	width = span.stop - span.start
 	return illustration(single_line, col, width, prefix='% 6d |' % row, caption=caption)
 
 class Tracer:
@@ -385,8 +385,8 @@ class Redefined:
 			"This symbol is defined more than once in the same scope.",
 			illustrate(source, earliest, "Earliest definition"),
 		]
-	def note(self, later:Nom):
-		self._lines.append(illustrate(self._source, later.head(), ""))
+	def note(self, span:slice):
+		self._lines.append(illustrate(self._source, span, ""))
 	def as_text(self, fetch):
 		return '\n'.join(self._lines)
 
@@ -394,8 +394,8 @@ class Undefined:
 	def __init__(self, source:SourceText):
 		self._source = source
 		self._lines = ["In file: "+str(source.filename), "I don't see what this refers to."]
-	def note(self, later:Nom):
-		self._lines.append(illustrate(self._source, later.head(), ""))
+	def note(self, span:slice):
+		self._lines.append(illustrate(self._source, span, ""))
 	def as_text(self, fetch):
 		return '\n'.join(self._lines)
 
