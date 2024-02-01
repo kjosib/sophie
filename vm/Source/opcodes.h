@@ -34,6 +34,7 @@ typedef enum {
 
 	OP_FORCE,
 	OP_FORCE_RETURN,
+	OP_STRICT,
 	OP_JF,
 	OP_JT,
 	OP_JMP,

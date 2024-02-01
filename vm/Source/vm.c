@@ -300,6 +300,12 @@ dispatch:
 			TOP = force(TOP);
 			assert(!IS_THUNK(TOP));
 			NEXT;
+		case OP_STRICT:
+		{
+			int index = READ_BYTE();
+			base[index] = force(base[index]);
+			NEXT;
+		}
 		case OP_DISPLAY:
 			switch (INDICATOR(TOP)) {
 			case IND_GC:

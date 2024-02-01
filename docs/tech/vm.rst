@@ -1618,3 +1618,50 @@ By that I mean the ability to define a shape once and then conveniently reuse it
 rather than make the application calculate and emit drawing primitives at their final coordinates.
 I do suspect a translation vector in the works could be a good thing.
 
+31 January 2024
+---------------
+
+Development over the last couple of weeks mainly focused on language semantics.
+Specifically, I wanted to do some Advent-of-Code puzzles.
+Solving them required opt-in strictness in at least one place,
+to avoid smashing the stack. I started by implementing it in the tree-walker.
+Now it's time to add that feature to the VM pipeline.
+
+The tree-walker looks at the (opt-in) strictness flag on the formal parameters
+to a UDF before composing the arguments to that function.
+For strict parameters, it forces the corresponding expressions before creating
+an activation record for that function. However, it was also necessary to make
+the tree-walker generate thunks for function body expressions to avoid stack
+overflow just from tail-recursion. The VM has a different solution for that.
+
+I believe it will be sufficient to make one change, and desirable to make another.
+
+First, a function with a ``strict`` formal parameter must *force* that parameter
+on entry to the function's code. I'd like to force it in-place on the stack,
+just to eliminate a bit of indirection later on. That would mean a new instruction.
+
+Second, most function calls are direct, so you know in advance which parameters
+are strict. The compiler may as well generate the actual parameters in
+forcing context. This would mean less time wrangling thunks in the first place.
+
+The third step would be strictness-inference: If a function's body *always*
+demands the value of some parameter, then one may as well mark that parameter
+strict as far as the intermediate-code generator is concerned. This turns
+into a dataflow problem.
+
+If the compiler distinguishes direct from indirect calls,
+then only the indirect calls might need to force their parameters.
+
+1 February 2024
+---------------
+
+The VM and compiler now both support the ``strict`` keyword for user-defined functions.
+As an experiment, I declared the Fibonacci micro-benchmark to have a strict parameter.
+The compiler then generated almost identical code to before it had laziness.
+The only difference is a ``STRICT 0`` instruction at the start of the function body.
+The CPU time difference was lost in the noise, accounting for perhaps of 1% of runtime.
+Both took just about exactly five seconds for the 39th Fibonacci number.
+
+A half-decent demand analysis would automatically infer that the parameter must be strict.
+That should yield a significant speed boost for the language overall.
+Maybe that will be a project for later this month.

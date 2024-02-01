@@ -272,6 +272,7 @@ class Behavior(Term):
 	):
 		super().__init__(nom)
 		self.params = params or ()
+		for p in self.params: p.is_strict = True
 		self.expr = expr
 
 class Literal(ValExpr):
@@ -494,6 +495,9 @@ class FFI_Alias(Term):
 		super().__init__(nom)
 		self.nom = nom
 		self.alias = alias
+	
+	def span_of_native_name(self):
+		return (self.alias or self.nom).head()
 
 def FFI_Symbol(nom:Nom):
 	return FFI_Alias(nom, None)
