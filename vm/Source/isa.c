@@ -125,6 +125,7 @@ Instruction instruction[] = {
 	
 	[OP_FORCE] = {"FORCE", &modeSimple},
 	[OP_FORCE_RETURN] = {"FORCE_RETURN", &modeSimple},
+	[OP_STRICT] = {"STRICT", &modeImmediate},
 	[OP_JF] = {"JF", &modeJump},
 	[OP_JT] = {"JT", &modeJump},
 	[OP_JMP] = {"JMP", &modeJump},

@@ -250,6 +250,9 @@ class VMFunctionScope(VMScope):
 		for param in params:
 			self.declare(param)
 
+	def make_strict(self, param):
+		emit("STRICT", self._local[param])
+	
 	def emit_epilogue(self):
 		# Consists of right brace, maximum number of locally-used stack slots,
 		# number of captures, and information about each capture.
@@ -381,7 +384,7 @@ def close_structure(symbol:ontology.Symbol, tag:int):
 	print()
 
 def symbol_harbors_thunks(sym:ontology.Symbol):
-	if isinstance(sym, syntax.FormalParameter): return True
+	if isinstance(sym, syntax.FormalParameter): return not sym.is_strict
 	if isinstance(sym, syntax.UserFunction) and not sym.params: return True
 
 def handles_tails(expr: syntax.Expr):
@@ -453,6 +456,27 @@ def _delay(expr:syntax.ValExpr, scope: VMFunctionScope):
 	strict = expr.is_volatile  # There could be more reasons later, e.g. stricture analysis
 	(FORCE if strict else DELAY).visit(expr, scope)
 
+def _prepare_arguments_for_call(call: syntax.Call, scope: VMFunctionScope):
+	# If the thing we're calling is syntactically:
+	#     a function by name, then find and respect its strictness declarations.
+	#     a bound method, then evaluate all arguments eagerly.
+	#     anything else, then delay everything and rely on the calling convention.
+	# There's probably a way to break this out into a pass of its own, but meh.
+	
+	if isinstance(call.fn_exp, syntax.Lookup):
+		sym = call.fn_exp.ref.dfn
+		if isinstance(sym, syntax.UserFunction):
+			for param, arg in zip(sym.params, call.args):
+				if param.is_strict:
+					FORCE.visit(arg, scope)
+				else:
+					_delay(arg, scope)
+			return
+	if isinstance(call.fn_exp, syntax.BindMethod):
+		for arg in call.args: FORCE.visit(arg, scope)
+		return
+	for arg in call.args: _delay(arg, scope)
+
 class EagerContext(Context):
 	"""
 	The best way to compile something can depend on context.
@@ -462,7 +486,7 @@ class EagerContext(Context):
 	(This may merit reconsideration for a pure-functional approach.)
 	"""
 	def visit_Call(self, call: syntax.Call, scope: VMFunctionScope):
-		for arg in call.args: _delay(arg, scope)
+		_prepare_arguments_for_call(call, scope)
 		FORCE.visit(call.fn_exp, scope)
 		self.call(scope, len(call.args))
 	
@@ -725,6 +749,9 @@ def write_one_function(fn: syntax.UserFunction, outer: VMScope):
 	inner = VMFunctionScope(outer, fn.nom.text, is_thunk=not fn.params)
 	inner.emit_preamble(fn.params, MANGLED[fn])
 	write_functions(fn.where, inner)
+	for param in fn.params:
+		if param.is_strict:
+			inner.make_strict(param)
 	TAIL.visit(fn.expr, inner)
 	inner.emit_epilogue()
 	
