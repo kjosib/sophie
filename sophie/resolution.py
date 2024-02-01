@@ -324,7 +324,7 @@ class _WordDefiner(_ResolutionPass):
 		for alias in im.vocab:
 			yonder, hither = alias.yonder, alias.hither or alias.yonder
 			try: subject = source_namespace[yonder.key()]
-			except KeyError: self.report.undefined_name(yonder)
+			except KeyError: self.report.undefined_name(yonder.head())
 			else:
 				try: self.globals[hither.key()] = subject
 				except SymbolAlreadyExists:
@@ -358,7 +358,7 @@ class _WordDefiner(_ResolutionPass):
 		key = sym.nom.key() if sym.alias is None else sym.alias.value
 		try: sym.val = getattr(py_module, key)
 		except AttributeError:
-			self.report.undefined_name(sym.alias or sym.nom)
+			self.report.undefined_name(sym.span_of_native_name())
 		else: self._install(self.globals, sym)
 
 class _WordResolver(_ResolutionPass):
@@ -418,7 +418,7 @@ class _WordResolver(_ResolutionPass):
 	def _lookup(self, nom:syntax.Nom, env:NS):
 		try: return env[nom.key()]
 		except NoSuchSymbol:
-			self.report.undefined_name(nom)
+			self.report.undefined_name(nom.head())
 			return Bogon(nom)
 
 	def visit_PlainReference(self, ref:syntax.PlainReference, env:NS):
@@ -657,7 +657,7 @@ def _check_one_match_expression(mx: syntax.MatchExpr, module_scope: NS, report: 
 		first = mx.alternatives[0].nom
 		try: case = module_scope[first.key()]
 		except NoSuchSymbol:
-			report.undefined_name(first)
+			report.undefined_name(first.head())
 			return
 		if not isinstance(case, syntax.SubTypeSpec):
 			report.not_a_case(first)
