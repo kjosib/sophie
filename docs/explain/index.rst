@@ -16,6 +16,7 @@ help you understand what **Sophie** is *specified* to do with your code.
     actor
     foreign
     details
+    string
     goals
     reasons
     future

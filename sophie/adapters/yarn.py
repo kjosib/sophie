@@ -22,3 +22,6 @@ def identity(x):
 
 def join(xs):
 	return "".join(iterate_list(xs))
+
+def is_match_at(offset, needle, haystack):
+	return offset >= 0 and needle == haystack[offset:offset+len(needle)]

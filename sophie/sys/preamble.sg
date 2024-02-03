@@ -33,6 +33,7 @@ foreign "sophie.adapters.yarn" where
 	mid : (string, number, number) -> string;
 	val : (string) -> maybe[number];
 	join: (list[string]) -> string;
+	is_match_at: (number, string, string) -> flag;
 end;
 
 foreign "operator" where
@@ -88,7 +89,7 @@ assume:
     xss: list[list[?]];
     predicate: (?)->flag;
     n: number;
-    s: string;
+    s, needle, haystack: string;
 
 define:
 
@@ -106,6 +107,11 @@ define:
 		cons -> cons(xs.head, rest) if predicate(xs.head) else rest where
 			rest = filter(predicate, xs.tail);
 		end cons;
+	esac;
+
+    first(predicate, xs) = case xs of
+		nil -> nope;
+		cons -> this(xs.head) if predicate(xs.head) else first(predicate, xs.tail);
 	esac;
 
 	reduce(fn, strict a, xs) = case xs of
@@ -133,12 +139,15 @@ define:
 		cons -> drop(n-1, xs.tail);
 	esac;
 
+    max(a,b) = a if a >= b else b;
+    min(a,b) = a if a <= b else b;
+
 	sum(xs) = reduce(add, 0, xs) where add(a,b) = a+b; end sum;
 	product(xs) = reduce(mul, 1, xs) where mul(a,b) = a*b; end product;
 	hypot(xs) = sqrt(sum(map(square, xs))) where square(x) = x*x; end hypot;
 
-	left(s, n) = mid(s, 0, n);
-	right(s, n) = mid(s, len(s)-n, len(s));
+	left(s, size) = mid(s, 0, size);
+	right(s, size) = mid(s, len(s)-size, size);
 
 	interleave(x, ys) = drop(1, flat(map(prefix, ys))) where prefix(y)=cons(x, cons(y, nil)); end interleave;
 
@@ -162,5 +171,28 @@ define:
 		# For example, iota(3, 7) = [3,4,5,6]
 		# You can also start from an offset: iota(2.5, 4) = [2.5, 3.5]
 	= nil if start >= stop else cons(start, iota(start+1, stop));
+
+    find_string(needle, haystack):maybe[number] = find_string_at(0, needle, haystack);
+    
+    find_string_at(offset, needle, haystack) = first(is_match, candidates) where
+        candidates = iota(offset, 1+len(haystack)-len(needle));
+        is_match(at) = is_match_at(at, needle, haystack);
+    end find_string_at;
+    
+    replace_first(needle, haystack, with) = case find_string(needle, haystack) as found of
+        nope -> haystack;
+        this -> join [prefix, with, suffix] where
+            prefix = left(haystack, found.item);
+            suffix = mid(haystack, found.item+len(needle), len(haystack));
+        end this;
+    esac;
+    
+    replace_all(needle, haystack, with) = join(from(0)) where
+        from(i):list[string] = case find_string_at(i, needle, haystack) as found of
+            nope -> [mid(haystack, i, len(haystack))];
+            this -> cons(mid(haystack, i, found.item-i), cons(with, from(found.item+needle_size)));
+        esac;
+        needle_size = max(1, len(needle));
+    end replace_all;
 
 end.
