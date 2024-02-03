@@ -246,7 +246,7 @@ static void stroke_circle(SDL_Renderer *renderer) {
 
 	push(force(FIELD(TOP, 0)));
 	SDL_Point center = force_xy();
-	int radius = AS_NUMBER(force(FIELD(TOP, 1)));
+	int radius = (int)AS_NUMBER(force(FIELD(TOP, 1)));
 
 	int x = radius, y = 0, err = -(radius);
 
