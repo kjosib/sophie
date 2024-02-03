@@ -453,6 +453,10 @@ class _WordResolver(_ResolutionPass):
 		for p in tc.arguments:
 			self.visit(p, env)
 
+	def visit_ExplicitTypeVariable(self, gt:syntax.ExplicitTypeVariable, env:NS):
+		assert gt.nom.key() in env
+		gt.dfn = self._lookup(gt.nom, env)
+
 	def visit_UserFunction(self, sym:syntax.UserFunction):
 		for param in sym.params:
 			if param.type_expr is not None:
