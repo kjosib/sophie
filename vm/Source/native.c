@@ -80,6 +80,31 @@ static Value mid_native(Value *args) {
 	return GC_VAL(intern_String(dst));
 }
 
+static Value join_native(Value *args) {
+	// Determine the total necessary size, which can be done by duplicating, then iterating across, the list.
+	size_t size = 0;
+	dup();
+	FOR_LIST(args[1]) {
+		Value head = LIST_HEAD(args[1]);
+		size += AS_STRING(head)->length;
+	}
+
+	// Allocate the resulting string.
+	String *dst = new_String(size);
+
+	// Iterate through the list once again, copying substrings into place.
+	// This time, all the allocation is surely already done.
+	char *text = &dst->text[0];
+	FOR_LIST(args[0]) {
+		String *head = AS_STRING(LIST_HEAD(args[0]));
+		memcpy(text, head->text, head->length);
+		text += head->length;
+	}
+
+	// Return the result.
+	return GC_VAL(intern_String(dst));
+}
+
 static Value str_native(Value *args) {
 	double value = AS_NUMBER(force(args[0]));
 	size_t len = snprintf(NULL, 0, NUMBER_FORMAT, value);
@@ -297,6 +322,7 @@ static void install_strings() {
 	create_native_function("str", 1, str_native);
 	create_native_function("len", 1, len_native);
 	create_native_function("mid", 3, mid_native);
+	create_native_function("join", 1, join_native);
 }
 
 static void install_the_console() {
