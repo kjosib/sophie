@@ -1,0 +1,58 @@
+# See https://adventofcode.com/2023/day/1 for an explanation.
+
+# I tried several different approaches to solving this.
+# What's here works, but a slightly more efficient solution
+# would have both a forward and reverse scan.
+
+# I'm leaving the type annotations in place because they did
+# help narrow down a problem with ill-typed code.
+
+import:
+
+    sys."filesystem" (filesystem);
+
+define:
+
+solve_puzzle(lines) = console ! echo [str(sum(map(value_for, lines)))];
+
+value_for(line) = case filter_maybe(scan(line)) as d1 of
+    nil -> 0;
+    cons -> 10*d1.head.snd + last(d1.head, d1.tail).snd;
+esac;
+
+filter_maybe(xs:list[maybe[?x]]):list[?x] = case xs of
+    nil -> nil;
+    cons -> case xs.head as head of
+        nope -> rest;
+        this -> cons(head.item, rest);
+    esac where
+        rest = filter_maybe(xs.tail);
+    end cons;
+esac;
+
+scan(line) = map(hit, iota(0, len(line))) where
+    hit(at):maybe[pair] = first(check, digits) where
+        check(dp) = is_match_at(at, dp.fst, line);
+    end hit;
+end scan;
+
+last(head, tail) = case tail of
+    nil -> head;
+    cons -> last(tail.head, tail.tail);
+esac;
+
+digits : list[pair] = [
+    # One bug that I wrote was to accidentally
+    # associate the word "five" with the value 6.
+    # What formal method would have caught that?
+    pair("one", 1), pair("two", 2), pair("three", 3),
+    pair("four", 4), pair("five", 5), pair("six", 6),
+    pair("seven", 7), pair("eight", 8), pair("nine", 9),
+    pair("0", 0), pair("1", 1), pair("2", 2), pair("3", 3),
+    pair("4", 4), pair("5", 5), pair("6", 6), pair("7", 7),
+    pair("8", 8), pair("9", 9),
+];
+    
+begin:
+    filesystem ! read_lines("/playground/advent of code/d1p2", !solve_puzzle);
+EOL;
