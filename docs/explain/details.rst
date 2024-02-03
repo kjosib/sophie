@@ -71,3 +71,14 @@ For Linux, reading from ``/dev/urandom`` is the obvious choice.
 And apparently unix-based Macs also support that mechanism.
 
 I suppose platform considerations happen eventually.
+
+Strings
+--------
+
+The Python run-time treats strings as a sequence of Unicode code-points.
+The VM treats them as a sequence of uninterpreted bytes.
+By convention, these bytes are meant to be in UTF-8.
+But the VM will not choke on arbitrary binary data.
+
+At some point, I may go through and convert the tree-walker to use bytes everywhere.
+(No rush.)

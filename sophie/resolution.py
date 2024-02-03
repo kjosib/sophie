@@ -536,6 +536,7 @@ class _AliasChecker(Visitor):
 		
 		self._tour(module.types)
 		self._tour(module.foreign)
+		self._tour(module.assumptions)
 		self._tour(module.agent_definitions)
 		self._tour(module.all_functions)
 		if self.non_types:
@@ -604,8 +605,12 @@ class _AliasChecker(Visitor):
 	def visit_RecordSpec(self, expr: syntax.RecordSpec):
 		self._tour(expr.fields, False)
 	
+	def visit_Assumption(self, a:syntax.Assumption):
+		self.visit(a.type_expr, True)
+	
 	def visit_FormalParameter(self, param: syntax.FormalParameter, allow_elide:bool):
-		if param.type_expr is not None:
+		if param.type_expr is not None and param.type_expr not in self.graph:
+			# The expr could already be there if it's from an "assume" clause applying to a UDF.
 			self.visit(param.type_expr, allow_elide)
 	
 	def visit_ArrowSpec(self, expr:syntax.ArrowSpec, allow_elide:bool):

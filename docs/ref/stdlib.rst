@@ -7,30 +7,6 @@ Standard Library
     :local:
     :depth: 2
 
-Intrinsic Types
-===================
-
-Predefined type names include ``flag``, ``number``, ``string``, and ``list``.
-
-``flag``:
-    The Boolean truth values are called ``yes`` and ``no``.
-
-``number``:
-    In the Python-hosted implementation, ``number`` is anything Python treats as a number,
-    even including complex numbers. The future bytecoded implementation will probably go with
-    all double-precision floating point until there's a demonstrated need for the semantics
-    associated with binary integers.
-
-``string``:
-    These are unicode. Or perhaps UTF8-encoded on the VM. We'll see.
-    At some point I'll end up distinguishing text from binary data.
-    That day is not today.
-
-``list``:
-    That last has the pre-defined constructor ``cons``, which takes fields ``head`` and ``tail``.
-    The implementation of explicit lists like ``[this, that, the, other]`` is in terms of ``cons``.
-
-
 Intrinsic Functions
 ======================
 
@@ -44,45 +20,13 @@ Mathematical Functions
 * ``id(x)``: Return ``x`` as-is.
 * ``int(a:number) : number``: Convert floating-point value to integer.
 * ``sum(xs)``: add all the numbers in the given list and return their sum, or a if the list is empty.
-* product(xs): The product of a list of numbers, or 1 if that list is empty.
-
+* ``product(xs)``: The product of a list of numbers, or 1 if that list is empty.
+* ``max(a,b)``: Return the larger of ``a`` and ``b``.
+* ``min(a,b)``: Return the smaller of ``a`` and ``b``.
 
 * Python's math library of functions and constants are also installed, with two caveats:
   * ``log`` becomes two functions: ``log(x)`` and ``log_base(x, b)`` because Sophie does not deal in optional arguments.
   * ``hypot`` is re-implemented in Sophie because the python version takes a variable number of arguments. The Sophie version takes a list of numbers.
-
-
-List Functions
-----------------
-
-* ``any(xs)``: True when at least one member of an input list evaluates to true. (Otherwise false.)
-* ``all(xs)``: False when at least one member of an input list evaluates to false. (Otherwise true.)
-* ``map(fn, xs)``: Produce a list by applying ``fn`` to all members of ``xs``.
-* ``filter(predicate, xs)``: Returns a list composed of those elements from ``fn`` such that ``predicate(fn)``.
-* ``reduce(fn, a, xs)``: Produce a single element by applying ``fn`` repeatedly to rolling pairs of arguments:
-  first ``a`` and the head of ``xs``, then that result with the next entry in ``xs``, and so forth.
-  If ``xs`` is empty, it returns ``a`` without ever calling ``fn``.
-* ``expand`` is not currently a thing. When it becomes a thing, this page will update.
-* ``cat(xs, ys)``: Return a list composed of the elements of ``xs`` followed by those of ``ys``.
-* ``flat(xss)``: Given a list of lists, return a single list composed of the elements of each input list in sequence.
-* ``take(n, xs)``: return a list composed of the first ``n`` elements of ``xs``.
-* ``drop(n, xs)``: return the remainder of list ``xs`` after skipping the first ``n`` elements.
-
-
-Text-String Functions
------------------------
-
-* ``chr(a:number) -> string``: Produce the given numbered unicode code-point as a string.
-* ``str(a:number) -> string``: Format a number as a string in the most typical way.
-* ``len``:
-* ``ord``:
-* ``mid : (a:string, offset, length) : string;``: Extract a substring 
-* ``val : (a:string) : maybe[number];``: parse a string into a number - maybe.
-* ``strcat : (a:string, b:string) : string;``: Concatenate a pair of strings.
-* ``join(ss : list[string]) : string``: Concatenate an entire list of strings.
-* ``interleave(x:string, ys:list[string])``: Construct the string of ``ys`` concatenated but with ``x`` between them.
-* ``each_chr(s:string) : list[string]``: The list of characters drawn from a string. Characters are, for now, just short strings.
-* ``EOL``: Equivalent to ``chr(10)`` because it's handy to have a nice name for this.
 
 
 The Console
