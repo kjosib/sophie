@@ -158,7 +158,15 @@ define:
 	left(s, size) = mid(s, 0, size);
 	right(s, size) = mid(s, len(s)-size, size);
 
-	interleave(x, ys) = drop(1, flat(map(prefix, ys))) where prefix(y)=cons(x, cons(y, nil)); end interleave;
+	interleave(x, ys) = case ys of
+	    nil -> nil;
+	    cons -> cons(ys.head, prefix(ys.tail));
+	esac where
+	    prefix(lst) = case lst of
+	        nil -> nil;
+	        cons -> cons(x, cons(lst.head, prefix(lst.tail)));
+	    esac;
+	end interleave;
 
 	each_chr(s) = from(0) where
 		from(n) = nil if n >= len(s) else cons(mid(s,n,1), from(n+1));
