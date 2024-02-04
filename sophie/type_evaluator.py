@@ -568,6 +568,13 @@ class Checker(Visitor):
 		if fp.type_expr:
 			self.bind(fp.type_expr, actual)
 	
+	def visit_ExplicitTypeVariable(self, etv:syntax.ExplicitTypeVariable, actual:SophieType):
+		sym = etv.dfn
+		if sym in self._gamma:
+			self._need(self._gamma[sym] == actual)
+		else:
+			self._gamma[sym] = actual
+	
 	def visit_TypeCall(self, tc:syntax.TypeCall, actual:SophieType):
 		formal = tc.ref.dfn
 		if isinstance(formal, syntax.Opaque):
