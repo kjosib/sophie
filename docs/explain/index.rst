@@ -17,6 +17,7 @@ help you understand what **Sophie** is *specified* to do with your code.
     foreign
     details
     string
+    demand
     goals
     reasons
     future
