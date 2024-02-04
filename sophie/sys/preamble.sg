@@ -58,6 +58,10 @@ foreign "sophie.adapters.teletype_adapter"
 	where console : Console;
 end;
 
+foreign "sophie.adapters.fs_adapter" where
+    filesystem : FileSystem;
+end;
+
 type:
 
 	order is case:
@@ -83,6 +87,11 @@ type:
 		read(!(string));
 		random(!(number));
 	end;
+
+    FileSystem is agent:
+        read_file(string, !(string));
+        read_lines(string, !(list[string]));
+    end;
 
 assume:
     xs, ys: list[?];
