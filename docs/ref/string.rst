@@ -13,20 +13,20 @@ Predefined Constant Strings
 Conversion Functions
 =====================
 
-* ``chr(a:number) -> string``: Produce the given numbered unicode code-point as a string.
-* ``str(a:number) -> string``: Format a number as a string in the most typical way.
+* ``chr(a:number) : string``: Produce the given numbered unicode code-point as a string.
+* ``str(a:number) : string``: Format a number as a string in the most typical way.
 * ``val(s:string) : maybe[number];``: parse a string into a number - maybe.
 
 The next item is planned, but not yet implemented:
 
-* ``ascii(a:number) -> string``: Produce the given numbered byte as a string.
+* ``ascii(a:number) : string``: Produce the given numbered byte as a string.
 
 
 Examining Strings
 ==================
 
-* ``len(s:string) -> number``: Return the size of a string, as defined by the implementation.
-* ``ord(s:string) -> number``: Return the numeric value of the first item in the given string.
+* ``len(s:string) : number``: Return the size of a string, as defined by the implementation.
+* ``ord(s:string) : number``: Return the numeric value of the first item in the given string.
 * ``each_chr(s:string) : list[string]``: The list of items drawn from a string, as strings.
 
 .. note::
@@ -35,8 +35,8 @@ Examining Strings
 
 The next four items are planned but not yet implemented:
 
-* ``ord_at(s:string, offset:number) -> number``: Return the Unicode code-point at the given offset, or -1 if offset is invalid.
-* ``byte_at(s:string, offset:number) -> number``: Return the byte at the given offset, or -1 if offset is out of range.
+* ``ord_at(s:string, offset:number) : number``: Return the Unicode code-point at the given offset, or -1 if offset is invalid.
+* ``byte_at(s:string, offset:number) : number``: Return the byte at the given offset, or -1 if offset is out of range.
 * ``each_ord(s:string) : list[number]``: The list of code-points drawn from a string, as numbers.
 * ``each_byte(s:string) : list[number]``: The list of bytes drawn from a string, as numbers.
 
@@ -47,11 +47,11 @@ By convention, the order of arguments for searching things is always *needle, ha
 If there is an offset, it comes first in the argument list.
 If there is a replacement string, it comes last.
 
-* ``find_string(needle, haystack) -> maybe[number]``: Equivalent to ``find_string_at(0, needle, haystack)``
-* ``find_string_at(offset, needle, haystack) -> maybe[number]``: The offset of the first occurrence of the needle, if any.
-* ``is_match_at(offset, needle, haystack) -> flag``: tells whether the needle matches the haystack at that position.
-* ``replace_first(needle, haystack, with) -> string``: replaces the first instance of ``needle`` with ``with``. 
-* ``replace_all(needle, haystack, with) -> string``: replaces every instance of ``needle`` with ``with``. 
+* ``find_string(needle, haystack) : maybe[number]``: Equivalent to ``find_string_at(0, needle, haystack)``
+* ``find_string_at(offset, needle, haystack) : maybe[number]``: The offset of the first occurrence of the needle, if any.
+* ``is_match_at(offset, needle, haystack) : flag``: tells whether the needle matches the haystack at that position.
+* ``replace_first(needle, haystack, with) : string``: replaces the first instance of ``needle`` with ``with``. 
+* ``replace_all(needle, haystack, with) : string``: replaces every instance of ``needle`` with ``with``. 
 
 Composing Strings
 ==================
@@ -71,7 +71,5 @@ The internal string functions in the VM all either assume nothing or assume UTF-
 
 See also :doc:`../explain/string` for more details.
 
-Currently, most string functions are implemented mostly in Sophie directly.
-This leaves some performance on the table, especially in cases like ``join``,
-which is quadratic at the moment. To be fair, a balanced-fold would make it log-linear,
-but it could be just plain linear with help from the VM.
+The ``join`` function has recently been made native so it can run in linear time.
+
