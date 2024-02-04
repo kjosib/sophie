@@ -1,0 +1,60 @@
+# See https://adventofcode.com/2023/day/2 for an explanation.
+
+# While this solution was under development,
+# the type checker bugged out on the definition of "surely".
+# I had to write a method for how to deal with
+# type variables like "?x" in function signatures.
+
+# Also, while working on this puzzle I moved the "filesystem"
+# actor to the standard preamble.
+
+# I managed to trigger the "absurd"-ity in "surely" as a
+# consequence of writing a bug in the "split_one" function:
+# In place of the expression "len(haystack)", I had
+# accidentally written "len(needle)", making "suffix" empty.
+
+define:
+
+solve(lines) = console ! echo[str(sum(map(parse_game, lines))), EOL];
+
+parse_game(line) = surely(val(mid(cut.fst, 5, 10))) if possible_game(cut.snd) else 0 where
+	cut = split_one(": ", line);
+end parse_game;
+
+surely(must:maybe[?x]) : ?x = case must of
+	nope -> absurd "caller gave assurances";
+	this -> must.item;
+esac;
+
+slice(subject, start, stop) = mid(subject, start, stop - start);
+
+split_one(needle, haystack) = pair(prefix, suffix) where
+	prefix = slice(haystack, 0, cut);
+	suffix = slice(haystack, cut+len(needle), len(haystack));
+	cut = surely(find_string(needle, haystack));
+end split_one;
+
+split(needle, haystack) = split_at(0, needle, haystack);
+
+split_at(at, needle, haystack) = case find_string_at(at, needle, haystack) as found of
+	nope -> [slice(haystack, at, len(haystack))];
+	this -> cons(slice(haystack, at, found.item), split_at(found.item+len(needle), needle, haystack));
+esac;
+
+possible_game(game) = all(map(possible_round, split('; ', game)));
+possible_round(round) = all(map(possible_cubes, split(', ', round)));
+possible_cubes(segment) = nr_cubes <= limit_for_color where
+	nr_cubes = surely(val(it.fst));
+	color = left(it.snd, 1);
+	it = split_one(' ', segment);
+	limit_for_color = case
+		when color == 'r' then 12;
+		when color == 'g' then 13;
+		when color == 'b' then 14;
+		else 99;
+	esac;
+end possible_cubes;
+
+begin:
+filesystem!read_lines("2023-d2", !solve);
+
