@@ -1,9 +1,5 @@
 # See https://adventofcode.com/2015/day/1
 
-
-import:
-sys."filesystem" (filesystem);
-
 define:
 parenval(ch) = case
 	when ch == '(' then 1;

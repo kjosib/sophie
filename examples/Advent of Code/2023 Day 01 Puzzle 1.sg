@@ -5,10 +5,6 @@
 # (I can always add more features later.)
 # It was easy to add to the interpreter, but the VM lags behind.
 
-import:
-
-    sys."filesystem" (filesystem);
-
 define:
     
     solve_puzzle(lines) = console ! echo [str(sum(map(value_for, lines)))];

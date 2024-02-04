@@ -7,10 +7,6 @@
 # I'm leaving the type annotations in place because they did
 # help narrow down a problem with ill-typed code.
 
-import:
-
-    sys."filesystem" (filesystem);
-
 define:
 
 solve_puzzle(lines) = console ! echo [str(sum(map(value_for, lines)))];
