@@ -32,5 +32,5 @@ end solve;
 
 begin:
 
-filesystem ! read_file("/playground/advent of code/2015-d1-p1", !solve);
+filesystem ! read_file("/playground/advent of code/2015-d1", !solve);
 
