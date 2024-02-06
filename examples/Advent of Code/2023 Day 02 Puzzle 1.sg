@@ -56,5 +56,5 @@ possible_cubes(segment) = nr_cubes <= limit_for_color where
 end possible_cubes;
 
 begin:
-filesystem!read_lines("2023-d2", !solve);
+filesystem!read_lines("/playground/advent of code/2023-d2", !solve);
 

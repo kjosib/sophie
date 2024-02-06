@@ -25,4 +25,4 @@ define:
     
 begin:
 
-    filesystem ! read_lines("/playground/advent of code/d1p1", !solve_puzzle);
+    filesystem ! read_lines("/playground/advent of code/2023-d1", !solve_puzzle);
