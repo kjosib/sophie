@@ -57,11 +57,14 @@ def run(args):
 		return 1
 	if args.check:
 		print("Looks plausible to me.", file=sys.stderr)
-	elif args.experimental:
-		from .intermediate import translate
-		translate(roadmap)
 	else:
-		run_program(roadmap)
+		from .demand import analyze_demand
+		analyze_demand(roadmap)
+		if args.experimental:
+			from .intermediate import translate
+			translate(roadmap)
+		else:
+			run_program(roadmap)
 
 def main():
 	if len(sys.argv) > 1:

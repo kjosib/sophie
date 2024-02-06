@@ -1,0 +1,190 @@
+from collections import defaultdict
+from boozetools.support.foundation import Visitor, strongly_connected_components_hashable
+from . import syntax
+from .resolution import RoadMap, TopDown
+
+
+def analyze_demand(roadmap:RoadMap):
+	call_graph = DeterminedCallGraphPass(roadmap).graph
+	outer = {udf:set() for udf in call_graph.keys()}
+	for component in strongly_connected_components_hashable(call_graph):
+		again = [True]
+		while any(again):
+			again = [DemandPass(udf, outer).grew for udf in component]
+
+
+class DeterminedCallGraphPass(TopDown):
+	def __init__(self, roadmap:RoadMap):
+		self.graph = defaultdict(set)
+		
+		self.analyze_module(roadmap.preamble)
+		for module in roadmap.each_module:
+			self.analyze_module(module)
+		
+		if None in self.graph:
+			del self.graph[None]
+	
+	def analyze_module(self, module:syntax.Module):
+		self.tour(module.outer_functions)
+		self.tour(module.agent_definitions)
+	
+	def tour(self, items):
+		for i in items:
+			self.visit(i)
+	
+	def visit_UserFunction(self, udf:syntax.UserFunction):
+		self.tour(udf.where)
+		self.visit(udf.expr, udf)
+	
+	def visit_UserAgent(self, uda:syntax.UserAgent):
+		self.tour(uda.behaviors)
+	
+	def visit_Behavior(self, b:syntax.Behavior):
+		self.visit(b.expr, None)
+	
+	def visit_Call(self, call: syntax.Call, src):
+		if isinstance(call.fn_exp, syntax.Lookup):
+			target = call.fn_exp.ref.dfn
+			if isinstance(target, syntax.UserFunction):
+				self.graph[src].add(target)
+		self.visit(call.fn_exp, src)
+		for a in call.args:
+			self.visit(a, src)
+	
+	def visit_Lookup(self, lu:syntax.Lookup, src):
+		# If the dfn has no parameters, then make a link,
+		# for it corresponds to calling a 0-ary function.
+		dfn = lu.ref.dfn
+		if isinstance(dfn, syntax.UserFunction):
+			if not dfn.params:
+				self.graph[src].add(dfn)
+	
+	def visit_MatchExpr(self, mx:syntax.MatchExpr, src):
+		self.visit(mx.subject.expr, src)
+		for alt in mx.alternatives:
+			self.visit(alt, src)
+		if mx.otherwise is not None:
+			self.visit(mx.otherwise, src)
+
+	def visit_Alternative(self, alt: syntax.Alternative, src):
+		self.tour(alt.where)
+		self.visit(alt.sub_expr, src)
+	
+	def visit_DoBlock(self, do:syntax.DoBlock, src):
+		for agent in do.agents:
+			self.visit(agent.expr, src)
+		for step in do.steps:
+			self.visit(step, src)
+	
+	def visit_AssignField(self, af:syntax.AssignField, src):
+		self.visit(af.expr, src)
+
+EMPTY = set()
+
+class DemandPass(Visitor):
+
+	def __init__(self, udf:syntax.UserFunction, outer:dict[syntax.UserFunction,set[syntax.FormalParameter]]):
+		self.grew = False
+		self._outer = outer
+		demanded = self.visit(udf.expr)
+		
+		for p in udf.params:
+			if p in demanded:
+				demanded.remove(p)
+				if not p.is_strict:
+					p.is_strict = True
+					self.grew = True
+		
+		if demanded - outer[udf]:
+			outer[udf].update(demanded)
+			self.grew = True
+
+	def _union(self, items):
+		return EMPTY.union(*map(self.visit, items))
+
+	def visit_Call(self, call: syntax.Call):
+		if isinstance(call.fn_exp, syntax.Lookup):
+			target = call.fn_exp.ref.dfn
+			if isinstance(target, syntax.UserFunction):
+				outer = self._outer.get(target, EMPTY)
+				eager = [
+					self.visit(actual)
+					for formal, actual in zip(target.params, call.args)
+					if formal.is_strict
+				]
+				return outer.union(*eager)
+			elif isinstance(target, syntax.FFI_Alias):
+				return self._union(call.args)
+			elif isinstance(target, (syntax.SubTypeSpec, syntax.Record, syntax.FormalParameter)):
+				return EMPTY
+			else:
+				assert False, type(target)  # How to analyze this target?
+		elif isinstance(call.fn_exp, syntax.BindMethod):
+			return self.visit(call.fn_exp) | self._union(call.args)
+		return self.visit(call.fn_exp)
+
+	def visit_MatchExpr(self, mx:syntax.MatchExpr):
+		branches = [
+			self.visit(alt.sub_expr)
+			for alt in mx.alternatives
+		]
+		if mx.otherwise is not None:
+			branches.append(self.visit(mx.otherwise))
+		return self.visit(mx.subject.expr) | set.intersection(*branches)
+
+	def visit_Cond(self, cond:syntax.Cond):
+		if_part = self.visit(cond.if_part)
+		then_part = self.visit(cond.then_part)
+		else_part = self.visit(cond.else_part)
+		
+		return if_part | ( then_part & else_part )
+
+	def visit_ShortCutExp(self, expr:syntax.ShortCutExp):
+		return self.visit(expr.lhs)
+
+	def visit_BinExp(self, bx:syntax.BinExp):
+		return self.visit(bx.lhs) | self.visit(bx.rhs)
+
+	def visit_UnaryExp(self, ux:syntax.UnaryExp):
+		return self.visit(ux.arg)
+	
+	def visit_DoBlock(self, do:syntax.DoBlock):
+		return self._union([agent.expr for agent in do.agents]) | self._union(do.steps)
+	
+	def visit_Lookup(self, lu:syntax.Lookup):
+		dfn = lu.ref.dfn
+		if isinstance(dfn, syntax.FormalParameter):
+			return {dfn}
+		elif isinstance(dfn, syntax.UserFunction) and not dfn.params:
+			return self._outer.get(dfn, EMPTY)
+		else:
+			return EMPTY
+
+	def visit_BindMethod(self, expr:syntax.BindMethod):
+		return self.visit(expr.receiver)
+
+	def visit_FieldReference(self, fr:syntax.FieldReference):
+		return self.visit(fr.lhs)
+	
+	def visit_AsTask(self, task:syntax.AsTask):
+		return self.visit(task.sub)
+
+	@staticmethod
+	def visit_Literal(_):
+		return EMPTY
+
+	@staticmethod
+	def visit_ExplicitList(_):
+		return EMPTY
+
+	@staticmethod
+	def visit_Skip(_):
+		return EMPTY
+
+	@staticmethod
+	def visit_Absurdity(_):
+		return EMPTY
+	
+	@staticmethod
+	def visit_AssignField(_):
+		assert False, "Only behaviors can assign fields, but only functions are subject to this analysis."
