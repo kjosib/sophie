@@ -81,6 +81,9 @@ class DeterminedCallGraphPass(TopDown):
 
 EMPTY = set()
 
+def _possible(expr):
+	return not isinstance(expr, syntax.Absurdity)
+
 class DemandPass(Visitor):
 
 	def __init__(self, udf:syntax.UserFunction, outer:dict[syntax.UserFunction,set[syntax.FormalParameter]]):
@@ -127,17 +130,20 @@ class DemandPass(Visitor):
 		branches = [
 			self.visit(alt.sub_expr)
 			for alt in mx.alternatives
+			if _possible(alt.sub_expr) 
 		]
-		if mx.otherwise is not None:
+		if mx.otherwise is not None and _possible(mx.otherwise):
 			branches.append(self.visit(mx.otherwise))
 		return self.visit(mx.subject.expr) | set.intersection(*branches)
 
 	def visit_Cond(self, cond:syntax.Cond):
 		if_part = self.visit(cond.if_part)
-		then_part = self.visit(cond.then_part)
-		else_part = self.visit(cond.else_part)
+		consequent = self.visit(cond.then_part)
+		if _possible(cond.else_part):
+			else_part = self.visit(cond.else_part)
+			consequent.intersection_update(else_part)
 		
-		return if_part | ( then_part & else_part )
+		return if_part | consequent
 
 	def visit_ShortCutExp(self, expr:syntax.ShortCutExp):
 		return self.visit(expr.lhs)
@@ -183,7 +189,7 @@ class DemandPass(Visitor):
 
 	@staticmethod
 	def visit_Absurdity(_):
-		return EMPTY
+		assert False, "Absurd cases ought not influence demand analysis."
 	
 	@staticmethod
 	def visit_AssignField(_):
