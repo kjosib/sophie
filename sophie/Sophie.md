@@ -212,7 +212,13 @@ but should resemble whatever happens in case of division by zero.
 
 ```
 alternative -> name '->' absurdity :absurdAlternative
-absurdity -> .ABSURD .short_string  :Absurdity
+absurdity -> .ABSURD .optional(short_string)  :Absurdity
+```
+
+Let's also provide for the `ELSE` case to be absurd.
+This works for *both* `CASE ... OF` (type-case) and `CASE WHEN ...` (compound-conditional) forms:
+```
+else_clause -> ELSE absurdity ';'
 ```
 
 -----
