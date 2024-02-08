@@ -388,6 +388,8 @@ class _WordResolver(_ResolutionPass):
 		module = self.module
 		for td in module.types:
 			self.visit(td)
+		for a in module.assumptions:
+			self.visit(a.type_expr, self.globals)
 		for item in module.foreign:
 			self.visit(item)
 		for item in module.agent_definitions:
