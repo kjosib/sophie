@@ -1,0 +1,26 @@
+# Commonalities between the first and second puzzle of 2023 day 2
+
+
+define:
+
+surely(must:maybe[?x]) : ?x = case must of
+	nope -> absurd "caller gave assurances";
+	this -> must.item;
+esac;
+
+slice(subject, start, stop) = mid(subject, start, stop - start);
+
+split_one(needle, haystack) = pair(prefix, suffix) where
+	prefix = slice(haystack, 0, cut);
+	suffix = slice(haystack, cut+len(needle), len(haystack));
+	cut = surely(find_string(needle, haystack));
+end split_one;
+
+split(needle, haystack) = split_at(0, needle, haystack);
+
+split_at(at, needle, haystack) = case find_string_at(at, needle, haystack) as found of
+	nope -> [slice(haystack, at, len(haystack))];
+	this -> cons(slice(haystack, at, found.item), split_at(found.item+len(needle), needle, haystack));
+esac;
+
+

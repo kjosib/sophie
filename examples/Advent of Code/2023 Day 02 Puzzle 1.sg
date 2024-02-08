@@ -13,33 +13,19 @@
 # In place of the expression "len(haystack)", I had
 # accidentally written "len(needle)", making "suffix" empty.
 
+import:
+
+"2023 Day 02 common" (surely, split, split_one);
+
 define:
 
-solve(lines) = console ! echo[str(sum(map(parse_game, lines))), EOL];
+solve(lines) = console ! echo[str(goal(lines)), EOL];
+goal(lines) = sum(map(parse_game, lines));
 
-parse_game(line) = surely(val(mid(cut.fst, 5, 10))) if possible_game(cut.snd) else 0 where
+parse_game(line) = game_id if possible_game(cut.snd) else 0 where
 	cut = split_one(": ", line);
+    game_id = surely(val(mid(cut.fst, 5, 10)));
 end parse_game;
-
-surely(must:maybe[?x]) : ?x = case must of
-	nope -> absurd "caller gave assurances";
-	this -> must.item;
-esac;
-
-slice(subject, start, stop) = mid(subject, start, stop - start);
-
-split_one(needle, haystack) = pair(prefix, suffix) where
-	prefix = slice(haystack, 0, cut);
-	suffix = slice(haystack, cut+len(needle), len(haystack));
-	cut = surely(find_string(needle, haystack));
-end split_one;
-
-split(needle, haystack) = split_at(0, needle, haystack);
-
-split_at(at, needle, haystack) = case find_string_at(at, needle, haystack) as found of
-	nope -> [slice(haystack, at, len(haystack))];
-	this -> cons(slice(haystack, at, found.item), split_at(found.item+len(needle), needle, haystack));
-esac;
 
 possible_game(game) = all(map(possible_round, split('; ', game)));
 possible_round(round) = all(map(possible_cubes, split(', ', round)));
@@ -51,7 +37,7 @@ possible_cubes(segment) = nr_cubes <= limit_for_color where
 		when color == 'r' then 12;
 		when color == 'g' then 13;
 		when color == 'b' then 14;
-		else 99;
+		else absurd;
 	esac;
 end possible_cubes;
 
