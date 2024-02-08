@@ -66,8 +66,8 @@ class Activation(Frame):
 		return self if key in self._bindings else self._static_link.chase(key)
 
 	def trace(self, tracer):
-		tracer.trace_frame(self.breadcrumb, self._bindings, self.pc)
 		self._dynamic_link.trace(tracer)
+		tracer.trace_frame(self.breadcrumb, self._bindings, self.pc)
 
 	@staticmethod
 	def for_function(static_link: Frame[T], dynamic_link: Frame[T], udf: UserFunction, arguments) -> "Activation[T]":
