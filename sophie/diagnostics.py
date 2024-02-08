@@ -339,19 +339,19 @@ class Tracer:
 		self.trace = []
 	def called_with(self, path, breadcrumb, args:dict):
 		bind_text = ', '.join("%s:%s" % (p.nom.text, t) for p, t in args.items())
-		self.trace.append(Annotation(path, breadcrumb, "Called with " + bind_text))
+		self.trace.append(Annotation(path, breadcrumb, "with " + bind_text))
 	def called_from(self, path, pc):
-		self.trace.append(Annotation(path, pc, "Called from here"))
+		self.trace.append(Annotation(path, pc, "calls:"))
 	def hit_bottom(self):
 		pass
 	def trace_frame(self, breadcrumb, bindings, pc):
 		path = breadcrumb.source_path
-		if pc is not None: self.called_from(path, pc)
 		args = {
 			k:v for k,v in bindings.items()
 			if isinstance(k, syntax.FormalParameter)
 		}
 		if args: self.called_with(path, breadcrumb, args)
+		if pc is not None: self.called_from(path, pc)
 
 def trace_stack(env:TYPE_ENV) -> list[Annotation]:
 	tracer = Tracer()
