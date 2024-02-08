@@ -1,0 +1,45 @@
+# See https://adventofcode.com/2023/day/2 for an explanation.
+
+import:
+
+"2023 Day 02 common" (surely, split, split_one);
+
+type:
+
+	Bag is (red:number, green:number, blue:number);
+	Observation is (color:string, cubes:number);
+
+assume:
+	bag : Bag;
+	obs : Observation;
+	game, round, segment, color : string;
+	cubes : number;
+
+define:
+
+solve(lines) = console ! echo[str(goal(lines)), EOL];
+
+goal(lines) = sum(map(power, lines));
+
+power(line) = bag.red * bag.green * bag.blue where
+    bag = minimal_bag(split_one(": ", line).snd);
+end power;
+
+empty_bag = Bag(0,0,0);
+
+played(bag, obs) : Bag = case
+	when obs.color == 'r' then Bag(max(obs.cubes, bag.red), bag.green, bag.blue);
+	when obs.color == 'g' then Bag(bag.red, max(obs.cubes, bag.green), bag.blue);
+	when obs.color == 'b' then Bag(bag.red, bag.green, max(obs.cubes, bag.blue));
+	else absurd;
+esac;
+
+minimal_bag(game) = reduce(played, empty_bag, each_observation(game));
+each_observation(game) : list[Observation] = flat(map(parse_round, split('; ', game)));
+parse_round(round) = map(parse_segment, split(", ", round));
+parse_segment(segment) = Observation(left(it.snd, 1), surely(val(it.fst))) where
+	it = split_one(' ', segment);
+end parse_segment;
+
+begin:
+filesystem!read_lines("/playground/advent of code/2023-d2", !solve);
