@@ -179,7 +179,6 @@ _hint("TYPE : ??? round_list(simple_type) ● ;", "Might be a record missing fie
 _hint("AGENT ??? semicolon_list(behavior) END ● ;", "End agents by name: AGENT foo ... END foo;")
 _hint("name formals annotation = expr WHERE semicolon_list(function) END ● ;", "End enclosing functions by name: foo(x) = ... WHERE ... END foo;")
 _hint("TYPE : ??? ! ● name", "you have !foo and probably want !(foo) to represent a message/procedure of one argument.")
-_hint("name -> ABSURD ● ;", "Please provide a reason for the absurdity:  foo -> ABSURD \"...reason foo can't happen...\" ")
 
 assert _best_hint("export_section import_section TYPE : name square_list(name) IS".split(), 'OPAQUE')
 
