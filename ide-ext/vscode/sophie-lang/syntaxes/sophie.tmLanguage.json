@@ -1,0 +1,49 @@
+{
+	"$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+	"name": "Sophie",
+	"scopeName": "source.sophie",
+	"patterns": [
+		{
+			"name": "keyword.control.sophie",
+			"match": "(?i)\\b(as|case|esac|else|end|if|is|of|when|then|agent|to|do|cast|where)\\b"
+		}, {
+			"name": "keyword.operator.sophie",
+			"match": "(?i)\\b(and|or|not|div|mod|absurd)\\b"
+		}, {
+			"name": "keyword.other.sophie",
+			"match": "(?i)\\b(import|export|type|assume|define|begin)\\s*:"
+		}, {
+			"name": "variable.language.sophie",
+			"match": "(?i)\\b(my)\\b"
+		}, {
+			"name": "constant.language.sophie",
+			"match": "(?i)\\b(yes|no)\\b"
+		}, {
+			"name": "string.quoted.single.sophie",
+			"begin": "'",
+			"end": "'"
+		}, {
+			"name": "string.quoted.double.sophie",
+			"begin": "\"",
+			"end": "\""
+		}, {
+			"name": "comment.line.number-sign",
+			"match": "#.*$"
+		}, {
+			"name": "constant.numeric.sophie",
+			"match": "\\b[-+]?(0|\\d(_?\\d*))(\\.\\d(_?\\d)*)?([eE][-+]?(0|\\d(_?\\d*)))?\\b"
+		}, {
+			"name": "support.constant.sophie",
+			"match": "\\b(nil|cons|nope|this)\\b"
+		}, {
+			"name": "support.type.sophie",
+			"match": "\\b(string|flag|number|list|maybe)\\b"
+		}, {
+			"name": "support.class.sophie",
+			"match": "\\b(Console|FileSystem)\\b"
+		}, {
+			"name": "support.variable.sophie",
+			"match": "\\b(console|filesystem)\\b"
+		}
+	]
+}

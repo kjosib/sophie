@@ -1,0 +1,25 @@
+{
+  "name": "sophie-lang",
+  "displayName": "Sophie Language",
+  "description": "Syntax highlighting for Sophie Language",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.86.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [{
+      "id": "sophie",
+      "aliases": ["Sophie", "sophie"],
+      "extensions": [".sg"],
+      "configuration": "./language-configuration.json"
+    }],
+    "grammars": [{
+      "language": "sophie",
+      "scopeName": "source.sophie",
+      "path": "./syntaxes/sophie.tmLanguage.json"
+    }]
+  }
+}
