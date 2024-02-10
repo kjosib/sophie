@@ -1,14 +1,9 @@
 # Commonalities between the first and second puzzle of 2023 day 2
 
+import:
+"common" (slice, surely);
 
 define:
-
-surely(must:maybe[?x]) : ?x = case must of
-	nope -> absurd "caller gave assurances";
-	this -> must.item;
-esac;
-
-slice(subject, start, stop) = mid(subject, start, stop - start);
 
 split_one(needle, haystack) = pair(prefix, suffix) where
 	prefix = slice(haystack, 0, cut);

@@ -1,0 +1,20 @@
+# Commonalities across different puzzles
+# These functions (and perhaps types?)
+# become interesting candidates for either standard preamble
+# or a standard utility library.
+
+# I started this when working on 2023 day 3 puzzle 1,
+# which was the seventh puzzle I attempted.
+
+define:
+
+slice(subject, start, stop) = mid(subject, start, stop - start);
+
+is_digit(ch) = ord("0") <= ord(ch) and ord(ch) <= ord("9");
+digit_value(digit) = ord(digit) - ord("0");
+
+surely(must:maybe[?x]) : ?x = case must of
+	nope -> absurd "caller gave assurances";
+	this -> must.item;
+esac;
+
