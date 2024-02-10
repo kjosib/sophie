@@ -15,7 +15,7 @@ setuptools.setup(
 	name='sophie-lang',
 	author='Ian Kjos',
 	author_email='kjosib@gmail.com',
-	version='0.0.4',
+	version='0.0.5',
 	packages=['sophie', "sophie.adapters", ],
 	package_data={
 		'sophie': ["Sophie.automaton"]+["sys/"+f for f in os.listdir("sophie/sys")],
@@ -24,7 +24,7 @@ setuptools.setup(
 		'console_scripts': ["sophie = sophie.cmdline:main"],
 	},
 	license='MIT',
-	description='A call-by-need strong-inferred-type language named for French mathematician Sophie Germain',
+	description='A call-by-need strongly-static-duck-typed language named for French mathematician Sophie Germain',
 	long_description=open('README.md').read(),
 	long_description_content_type="text/markdown",
 	url="https://github.com/kjosib/sophie",
