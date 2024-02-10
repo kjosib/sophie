@@ -31,7 +31,7 @@
 			"match": "#.*$"
 		}, {
 			"name": "constant.numeric.sophie",
-			"match": "([-+]\\s*|\\b)(0|\\d(_?\\d)*)(\\.\\d(_?\\d)*)?([eE][-+]?(0|\\d(_?\\d)*))?\\b"
+			"match": "\\b(0|\\d(_?\\d)*)(\\.\\d(_?\\d)*)?([eE][-+]?(0|\\d(_?\\d)*))?\\b"
 		}, {
 			"name": "support.constant.sophie",
 			"match": "\\b(nil|cons|nope|this)\\b"
