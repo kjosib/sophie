@@ -1,0 +1,111 @@
+# See https://adventofcode.com/2023/day/3
+# This solution is mostly going to exercise lists, I think.
+# I'm writing it in chronological order as ideas occur to me.
+
+import:
+"common" (is_digit, slice, surely);
+
+type:
+
+Range is (start:number, stop:number, value:number);
+Triple[x] is (a:x, b:x, c:x);
+
+define:
+
+# Given two sorted lists of ranges and points,
+# return a list of part numbers.
+part_numbers(ranges:list[Range], points:list[number]) : list[number]
+= case ranges of
+	nil -> nil;
+	cons -> case points of
+		nil -> nil;
+		cons -> case
+			when points.head < ranges.head.start - 1 then part_numbers(ranges, points.tail);
+			when ranges.head.stop < points.head then part_numbers(ranges.tail, points);
+			else cons(ranges.head.value, part_numbers(ranges.tail, points));
+		esac;
+	esac;
+esac;
+
+# Extract the indices within a line where a symbol is found,
+# according to the definition given in the puzzle.
+symbol_indices(line:string) : list[number]
+= filter(is_symbol_at, iota(0, len(line))) where
+	is_symbol_at(i) = is_symbol(mid(line, i, 1));
+end symbol_indices;
+
+# This is specific to the puzzle and so can't become generic,
+# despite the generic-looking name.
+is_symbol(ch) = ch != '.' and ord(ch) > 32 and not is_digit(ch);
+
+# Given two sorted lists, produce a proper merged sorted list.
+# Ties go to the left, giving the core of a stable merge-sort.
+merge(left, right) = case left of
+	nil -> right;
+	cons -> case right of
+		nil -> left;
+		cons -> case
+			when left.head <= right.head then cons(left.head, merge(left.tail, right));
+			else cons(right.head, merge(left, right.tail));
+		esac;
+	esac;
+esac;
+
+# Now if I could somehow get rolling triples...
+_roll3(a,b,rest) = case rest of
+	nil -> nil;
+	cons -> cons(Triple(a,b,rest.head), _roll3(b,rest.head,rest.tail));
+esac;
+
+roll3(xs) = case xs of
+	nil -> nil;
+	cons -> case xs.tail as ys of
+		nil -> nil;
+		cons -> _roll3(xs.head, ys.head, ys.tail);
+	esac;
+esac;
+
+
+# Something like this could get all the points corresponding to the
+# symbols on each line that would make numbers into part numbers:
+part_number_points(lines) = map(merge3, roll3(padded(nil, map(symbol_indices, lines))));
+merge3(t:Triple) = merge(t.a, merge(t.b, t.c));
+padded(pad, xs) = cons(pad, cat(xs, [pad]));
+
+# Now I need the list of digit ranges.
+
+digit_ranges(line, at) = case
+	when at >= len(line) then nil;
+	when is_digit(mid(line, at, 1)) then start_range(line, at);
+	else digit_ranges(line, at+1);
+esac;
+
+start_range(line, at) = cons(Range(at, stop, value), digit_ranges(line, stop)) where
+	stop = either(first(non_digit_at, iota(at+1, len(line))), len(line));
+	non_digit_at(i) = not is_digit(mid(line, i, 1));
+	value = surely(val(slice(line, at, stop)));
+end start_range;
+
+# Escape the "maybe" monad:
+either(x:maybe[?t], y:?t) = case x of
+	nope -> y;
+	this -> x.item;
+esac;
+
+solve(lines) = console ! echo[str(goal(lines)), EOL];
+goal(lines) = sum(flat(map2(part_numbers, range_matrix(lines), part_number_points(lines))));
+
+range_matrix(lines) = map(fn, lines) where fn(s) = digit_ranges(s, 0); end range_matrix;
+
+map2(fn, xs, ys) = case xs of
+	nil -> nil;
+	cons -> case ys of
+		nil -> nil;
+		cons -> cons(fn(xs.head, ys.head), map2(fn, xs.tail, ys.tail));
+	esac;
+esac;
+
+begin:
+
+filesystem!read_lines("/playground/advent of code/2023-d3", !solve);
+
