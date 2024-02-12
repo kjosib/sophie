@@ -1,0 +1,59 @@
+# Parts common to the solutions of the two puzzles on day 3
+import:
+"common" (is_digit, slice, surely);
+
+type:
+Range is (start:number, stop:number, value:number);
+Triple[x] is (a:x, b:x, c:x);
+
+
+define:
+
+digit_ranges(line, at) = case
+	when at >= len(line) then nil;
+	when is_digit(mid(line, at, 1)) then start_range(line, at);
+	else digit_ranges(line, at+1);
+esac;
+
+start_range(line, at) = cons(Range(at, stop, value), digit_ranges(line, stop)) where
+	stop = either(first(non_digit_at, iota(at+1, len(line))), len(line));
+	non_digit_at(i) = not is_digit(mid(line, i, 1));
+	value = surely(val(slice(line, at, stop)));
+end start_range;
+
+
+range_matrix(lines) = map(fn, lines) where fn(s) = digit_ranges(s, 0); end range_matrix;
+
+
+# Now if I could somehow get rolling triples...
+_roll3(a,b,rest) = case rest of
+	nil -> nil;
+	cons -> cons(Triple(a,b,rest.head), _roll3(b,rest.head,rest.tail));
+esac;
+
+roll3(xs) = case xs of
+	nil -> nil;
+	cons -> case xs.tail as ys of
+		nil -> nil;
+		cons -> _roll3(xs.head, ys.head, ys.tail);
+	esac;
+esac;
+
+padded(pad, xs) = cons(pad, cat(xs, [pad]));
+
+rolling_combinations(how, xs:list) = map(how, roll3(padded(nil, xs)));
+
+map2(fn, xs, ys) = case xs of
+	nil -> nil;
+	cons -> case ys of
+		nil -> nil;
+		cons -> cons(fn(xs.head, ys.head), map2(fn, xs.tail, ys.tail));
+	esac;
+esac;
+
+# Escape the "maybe" monad:
+either(x:maybe[?t], y:?t) = case x of
+	nope -> y;
+	this -> x.item;
+esac;
+
