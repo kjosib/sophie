@@ -13,8 +13,13 @@ slice(subject, start, stop) = mid(subject, start, stop - start);
 is_digit(ch) = ord("0") <= ord(ch) and ord(ch) <= ord("9");
 digit_value(digit) = ord(digit) - ord("0");
 
+# Escape the "maybe" monad:
+either(x:maybe[?t], y:?t) = case x of
+	nope -> y;
+	this -> x.item;
+esac;
+
 surely(must:maybe[?x]) : ?x = case must of
 	nope -> absurd "caller gave assurances";
 	this -> must.item;
 esac;
-
