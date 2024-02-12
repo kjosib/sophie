@@ -1,14 +1,11 @@
 # See https://adventofcode.com/2023/day/3
-# This solution is mostly going to exercise lists, I think.
-# I'm writing it in chronological order as ideas occur to me.
+# This solution mostly exercises lists, I think.
+# I wrote it in chronological order as ideas occurred to me.
+# Then, I pulled a few bits into the common area.
 
 import:
-"common" (is_digit, slice, surely);
-
-type:
-
-Range is (start:number, stop:number, value:number);
-Triple[x] is (a:x, b:x, c:x);
+"common" (is_digit);
+"2023 Day 03 common" (range_matrix, rolling_combinations, Triple, map2, Range);
 
 define:
 
@@ -51,59 +48,20 @@ merge(left, right) = case left of
 	esac;
 esac;
 
-# Now if I could somehow get rolling triples...
-_roll3(a,b,rest) = case rest of
-	nil -> nil;
-	cons -> cons(Triple(a,b,rest.head), _roll3(b,rest.head,rest.tail));
-esac;
-
-roll3(xs) = case xs of
-	nil -> nil;
-	cons -> case xs.tail as ys of
-		nil -> nil;
-		cons -> _roll3(xs.head, ys.head, ys.tail);
-	esac;
-esac;
+merge3(t:Triple) = merge(t.a, merge(t.b, t.c));
 
 
 # Something like this could get all the points corresponding to the
 # symbols on each line that would make numbers into part numbers:
-part_number_points(lines) = map(merge3, roll3(padded(nil, map(symbol_indices, lines))));
-merge3(t:Triple) = merge(t.a, merge(t.b, t.c));
-padded(pad, xs) = cons(pad, cat(xs, [pad]));
+part_number_points(lines) = rolling_combinations(merge3, map(symbol_indices, lines));
 
 # Now I need the list of digit ranges.
-
-digit_ranges(line, at) = case
-	when at >= len(line) then nil;
-	when is_digit(mid(line, at, 1)) then start_range(line, at);
-	else digit_ranges(line, at+1);
-esac;
-
-start_range(line, at) = cons(Range(at, stop, value), digit_ranges(line, stop)) where
-	stop = either(first(non_digit_at, iota(at+1, len(line))), len(line));
-	non_digit_at(i) = not is_digit(mid(line, i, 1));
-	value = surely(val(slice(line, at, stop)));
-end start_range;
-
-# Escape the "maybe" monad:
-either(x:maybe[?t], y:?t) = case x of
-	nope -> y;
-	this -> x.item;
-esac;
 
 solve(lines) = console ! echo[str(goal(lines)), EOL];
 goal(lines) = sum(flat(map2(part_numbers, range_matrix(lines), part_number_points(lines))));
 
-range_matrix(lines) = map(fn, lines) where fn(s) = digit_ranges(s, 0); end range_matrix;
 
-map2(fn, xs, ys) = case xs of
-	nil -> nil;
-	cons -> case ys of
-		nil -> nil;
-		cons -> cons(fn(xs.head, ys.head), map2(fn, xs.tail, ys.tail));
-	esac;
-esac;
+
 
 begin:
 

@@ -1,0 +1,50 @@
+# The motto for this solution is:
+#     When in doubt, use brute-force.
+#
+# This is basically an inversion of the prior solution:
+# Instead of filtering numbers according to bands of symbols,
+# it instead filters stars according to bands of numbers.
+
+import:
+"2023 Day 03 common" (range_matrix, rolling_combinations, Triple, map2, Range);
+
+define:
+
+star_indices(line) = filter(is_star, iota(0, len(line))) where
+	is_star(index) = mid(line, index, 1) == '*';
+end star_indices;
+
+
+goal(lines) = sum(all_gear_ratios) where
+	
+	star_matrix : list[list[number]]
+	= map(star_indices, lines);
+
+	all_candidates : list[list[Range]]
+	= flat(map2(overlapping_ranges, star_matrix, range_triads));
+
+	range_triads = rolling_combinations(cat3, range_matrix(lines));
+	all_gears = filter(is_gear, all_candidates);
+	all_gear_ratios = map(gear_ratio, all_gears);
+
+end goal;
+
+cat3(t:Triple) = cat(t.a, cat(t.b, t.c));
+
+overlapping_ranges(stars:list[number], ranges:list[Range]):list[list[Range]]
+= map(overlaps, stars) where
+	overlaps(star) = filter(is_overlap, ranges) where
+		is_overlap(range) = range.start-1 <= star and star <= range.stop;
+	end overlaps;
+end overlapping_ranges;
+
+is_gear(candidate:list[Range]) = length(candidate) == 2;
+
+gear_ratio(gear:list[Range]) = product(map(range_value, gear));
+range_value(range) = range.value;  # This sort of thing could be implicit syntax?
+
+solve(lines) = console ! echo[str(goal(lines)), EOL];
+
+begin:
+
+filesystem!read_lines("/playground/advent of code/2023-d3", !solve);
