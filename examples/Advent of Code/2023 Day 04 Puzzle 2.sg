@@ -1,0 +1,41 @@
+# The original plan was to keep a list of copy-counts (called "copies")
+# which tells how many copies of each scratch-card have been won, exluding the original.
+# This turned out to be an error-prone mistake: I kept on writing off-by-one bugs.
+
+# A much better plan was to define "copies" as the total number of cards for each game,
+# *including* the original. That made all the special cases and magic increments go away.
+
+
+import:
+"2023 Day 04 common" (nr_winning);
+
+define:
+
+goal(lines) = sum(copies_per_game(map(nr_winning, lines), ones));
+
+ones = cons(1, ones);
+
+repeat(nr, x) = nil if nr <= 0 else cons(x, repeat(nr-1, x));
+
+list_sum(xs, ys) = case xs of
+	nil -> ys;
+	cons -> case ys of
+		nil -> xs;
+		cons -> cons(xs.head + ys.head, list_sum(xs.tail, ys.tail));
+	esac;
+esac;
+
+copies_per_game(wins:list[number], copies:list[number]):list[number]
+= case wins of
+	nil -> nil;
+	cons -> case copies of
+		nil -> absurd;
+		cons -> cons(copies.head, copies_per_game(wins.tail, list_sum(copies.tail, repeat(wins.head, copies.head))));
+	esac;
+esac;
+
+solve(lines) = console ! echo[str(goal(lines)), EOL];
+
+begin:
+
+filesystem!read_lines("/playground/advent of code/2023-d4", !solve);
