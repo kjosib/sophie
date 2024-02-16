@@ -80,7 +80,16 @@ type:
 		nope;
 	esac;
 
+    entry[k,v] is (key: k, value:v);
+
 	pair[a,b] is (fst:a, snd:b);
+
+	folio[V,S] is case:
+		done;
+		step(view:V, state:S);
+	esac;
+
+	predicate[x] is (x)->flag;
 
 	Console is agent:
 		echo(list[string]);
@@ -88,128 +97,171 @@ type:
 		random(!(number));
 	end;
 
-    FileSystem is agent:
-        read_file(string, !(string));
-        read_lines(string, !(list[string]));
-    end;
+	FileSystem is agent:
+		read_file(string, !(string));
+		read_lines(string, !(list[string]));
+	end;
 
 assume:
-    xs, ys: list[?];
-    xss: list[list[?]];
-    predicate: (?)->flag;
-    n: number;
-    s, needle, haystack: string;
+	xs, ys: list[?];
+	xss: list[list[?]];
+	p, q: predicate;
+	n: number;
+	s, needle, haystack: string;
 
 define:
 
-	id(x) = x;
-	any(xs) = case xs of nil -> no; cons -> xs.head or any(xs.tail); esac;
-	all(xs) = case xs of nil -> yes; cons -> xs.head and all(xs.tail); esac;
+# Combinators:
 
-	map(fn, xs) = case xs of
+id(x) = x;
+non(p) = q where q(x) = not p(x); end non;
+compose(f,g) = h where h(x) = f(g(x)); end compose;
+
+# List things:
+
+any(xs) = case xs of nil -> no; cons -> xs.head or any(xs.tail); esac;
+all(xs) = case xs of nil -> yes; cons -> xs.head and all(xs.tail); esac;
+
+map(fn, xs) = case xs of
+	nil -> nil;
+	cons -> cons(fn(xs.head), map(fn, xs.tail));
+esac;
+
+filter(p, xs) = case xs of
+	nil -> nil;
+	cons -> cons(xs.head, rest) if p(xs.head) else rest where
+		rest = filter(p, xs.tail);
+	end cons;
+esac;
+
+first(p:predicate[?x], xs:list[?x]):maybe[?x] = case xs of
+	nil -> nope;
+	cons -> this(xs.head) if p(xs.head) else first(p, xs.tail);
+esac;
+
+reduce(fn, strict a, xs) = case xs of
+	nil -> a;
+	cons -> reduce(fn, fn(a, xs.head), xs.tail);
+esac;
+
+unfold(fn, state) = case fn(state) as folio of
+	done -> nil;
+	step -> cons(folio.view, unfold(fn, folio.state));
+esac;
+
+cat(xs,ys) = case xs of
+	nil -> ys;
+	cons -> cons(xs.head, cat(xs.tail, ys));
+esac;
+
+flat(xss) = case xss of
+	nil -> nil;
+	cons -> cat(xss.head, flat(xss.tail));
+esac;
+
+take(n, xs) = nil if n < 1 else case xs of
+	nil -> nil;
+	cons -> cons(xs.head, take(n-1, xs.tail));
+esac;
+
+drop(n, xs) = xs if n < 1 else case xs of
+	nil -> nil;
+	cons -> drop(n-1, xs.tail);
+esac;
+
+take_while(p, xs) = case xs of
+	nil -> nil;
+	cons -> cons(xs.head, take_while(p, xs.tail)) if p(xs.head) else nil;
+esac;
+
+drop_while(p, xs) = case xs of
+	nil -> nil;
+	cons -> drop_while(p, xs.tail) if p(xs.head) else xs;
+esac;
+
+length(xs) = reduce(fn, 0, xs) where fn(a,_) = a+1; end length;
+
+index(n, xs) = case drop(n, xs) as e of
+	nil -> nope;
+	cons -> this(e.head);
+esac;
+
+iota(start, stop) : list[number]
+	# Count off a half-open range, stepping by one.
+	# For example, iota(3, 7) = [3,4,5,6]
+	# You can also start from an offset: iota(2.5, 4) = [2.5, 3.5]
+= nil if start >= stop else cons(start, iota(start+1, stop));
+
+count_off(n, xs) = case xs of
+	nil -> nil;
+	cons -> cons(entry(n, xs.head), count_off(n+1, xs.tail));
+esac;
+
+# Maybe Things
+
+either(x:maybe[?t], y:?t) = case x of
+	nope -> y;
+	this -> x.item;
+esac;
+
+surely(must:maybe[?x]) : ?x = case must of
+	nope -> absurd "caller gave assurances";
+	this -> must.item;
+esac;
+
+# Math Things
+
+max(a,b) = a if a >= b else b;
+min(a,b) = a if a <= b else b;
+
+sum(xs) = reduce(add, 0, xs) where add(a,b) = a+b; end sum;
+product(xs) = reduce(mul, 1, xs) where mul(a,b) = a*b; end product;
+hypot(xs) = sqrt(sum(map(square, xs))) where square(x) = x*x; end hypot;
+
+log_base(n, base) = log(n) / log(base);
+
+# String Things
+
+left(s, size) = mid(s, 0, size);
+right(s, size) = mid(s, len(s)-size, size);
+
+interleave(x, ys) = case ys of
+	nil -> nil;
+	cons -> cons(ys.head, prefix(ys.tail));
+esac where
+	prefix(lst) = case lst of
 		nil -> nil;
-		cons -> cons(fn(xs.head), map(fn, xs.tail));
+		cons -> cons(x, cons(lst.head, prefix(lst.tail)));
 	esac;
+end interleave;
 
-	filter(predicate, xs) = case xs of
-		nil -> nil;
-		cons -> cons(xs.head, rest) if predicate(xs.head) else rest where
-			rest = filter(predicate, xs.tail);
-		end cons;
+each_chr(s) = from(0) where
+	from(n) = nil if n >= len(s) else cons(mid(s,n,1), from(n+1));
+end each_chr;
+
+EOL = chr(10);
+
+find_string(needle, haystack):maybe[number] = find_string_at(0, needle, haystack);
+
+find_string_at(offset, needle, haystack) = first(is_match, candidates) where
+	candidates = iota(offset, 1+len(haystack)-len(needle));
+	is_match(at) = is_match_at(at, needle, haystack);
+end find_string_at;
+
+replace_first(needle, haystack, with) = case find_string(needle, haystack) as found of
+	nope -> haystack;
+	this -> join [prefix, with, suffix] where
+		prefix = left(haystack, found.item);
+		suffix = mid(haystack, found.item+len(needle), len(haystack));
+	end this;
+esac;
+
+replace_all(needle, haystack, with) = join(from(0)) where
+	from(i):list[string] = case find_string_at(i, needle, haystack) as found of
+		nope -> [mid(haystack, i, len(haystack))];
+		this -> cons(mid(haystack, i, found.item-i), cons(with, from(found.item+needle_size)));
 	esac;
-
-    first(predicate, xs) = case xs of
-		nil -> nope;
-		cons -> this(xs.head) if predicate(xs.head) else first(predicate, xs.tail);
-	esac;
-
-	reduce(fn, strict a, xs) = case xs of
-		nil -> a;
-		cons -> reduce(fn, fn(a, xs.head), xs.tail);
-	esac;
-
-	cat(xs,ys) = case xs of
-		nil -> ys;
-		cons -> cons(xs.head, cat(xs.tail, ys));
-	esac;
-
-	flat(xss) = case xss of
-		nil -> nil;
-		cons -> cat(xss.head, flat(xss.tail));
-	esac;
-
-	take(n, xs) = nil if n < 1 else case xs of
-		nil -> nil;
-		cons -> cons(xs.head, take(n-1, xs.tail));
-	esac;
-
-	drop(n, xs) = xs if n < 1 else case xs of
-		nil -> nil;
-		cons -> drop(n-1, xs.tail);
-	esac;
-
-    max(a,b) = a if a >= b else b;
-    min(a,b) = a if a <= b else b;
-
-	sum(xs) = reduce(add, 0, xs) where add(a,b) = a+b; end sum;
-	product(xs) = reduce(mul, 1, xs) where mul(a,b) = a*b; end product;
-	hypot(xs) = sqrt(sum(map(square, xs))) where square(x) = x*x; end hypot;
-
-	left(s, size) = mid(s, 0, size);
-	right(s, size) = mid(s, len(s)-size, size);
-
-	interleave(x, ys) = case ys of
-	    nil -> nil;
-	    cons -> cons(ys.head, prefix(ys.tail));
-	esac where
-	    prefix(lst) = case lst of
-	        nil -> nil;
-	        cons -> cons(x, cons(lst.head, prefix(lst.tail)));
-	    esac;
-	end interleave;
-
-	each_chr(s) = from(0) where
-		from(n) = nil if n >= len(s) else cons(mid(s,n,1), from(n+1));
-	end each_chr;
-
-	EOL = chr(10);
-	
-	log_base(n, base) = log(n) / log(base);
-	
-	length(xs) = reduce(fn, 0, xs) where fn(a,_) = a+1; end length;
-	
-	index(n, xs, otherwise) = case drop(n, xs) as e of
-		nil -> otherwise;
-		cons -> e.head;
-	esac;
-	
-	iota(start, stop) : list[number]
-		# Count off a half-open range, stepping by one.
-		# For example, iota(3, 7) = [3,4,5,6]
-		# You can also start from an offset: iota(2.5, 4) = [2.5, 3.5]
-	= nil if start >= stop else cons(start, iota(start+1, stop));
-
-    find_string(needle, haystack):maybe[number] = find_string_at(0, needle, haystack);
-    
-    find_string_at(offset, needle, haystack) = first(is_match, candidates) where
-        candidates = iota(offset, 1+len(haystack)-len(needle));
-        is_match(at) = is_match_at(at, needle, haystack);
-    end find_string_at;
-    
-    replace_first(needle, haystack, with) = case find_string(needle, haystack) as found of
-        nope -> haystack;
-        this -> join [prefix, with, suffix] where
-            prefix = left(haystack, found.item);
-            suffix = mid(haystack, found.item+len(needle), len(haystack));
-        end this;
-    esac;
-    
-    replace_all(needle, haystack, with) = join(from(0)) where
-        from(i):list[string] = case find_string_at(i, needle, haystack) as found of
-            nope -> [mid(haystack, i, len(haystack))];
-            this -> cons(mid(haystack, i, found.item-i), cons(with, from(found.item+needle_size)));
-        esac;
-        needle_size = max(1, len(needle));
-    end replace_all;
+	needle_size = max(1, len(needle));
+end replace_all;
 
 end.

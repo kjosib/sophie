@@ -11,7 +11,7 @@
 # Another is the lack of proper generics just yet: Keys can so far only be numbers and strings.
 
 export:
-    Tree, Item, Removed,
+    Tree, Removed,
     
     search, in_order, assign, new_tree, is_empty,
     first, last, shift, delete,
@@ -22,27 +22,26 @@ type:
 
     Tree[K,V] is case:
         Leaf;
-        Two(left:Tree[K,V], pivot:Item[K,V], right:Tree[K,V]);
-        Three(left:Tree[K,V], p1:Item[K,V], mid:Tree[K,V], p2:Item[K,V], right:Tree[K,V]);
+        Two(left:Tree[K,V], pivot:entry[K,V], right:Tree[K,V]);
+        Three(left:Tree[K,V], p1:entry[K,V], mid:Tree[K,V], p2:entry[K,V], right:Tree[K,V]);
     esac;
 
-    Item[K,V] is (key: K, value:V);
 
-    Removed[K,V] is (item:maybe[Item[K,V]], rest:Tree[K,V]);
+    Removed[K,V] is (item:maybe[entry[K,V]], rest:Tree[K,V]);
 
     #####################   Internal Implementation Types   #####################
 
     puddle[K,V] is  # Intermediate result type for upsert sub-function
     case:
         ok(tree:Tree[K,V]);
-        spill(left:Tree[K,V], pivot:Item[K,V], right:Tree[K,V]);
+        spill(left:Tree[K,V], pivot:entry[K,V], right:Tree[K,V]);
     esac;
     
     bubble[K,V] is  # Intermediate result for shift and delete internals
     case:
         Nothing;
-        Hole(item:Item[K,V], tree:Tree[K,V]);
-        Full(item:Item[K,V], tree:Tree[K,V]);
+        Hole(item:entry[K,V], tree:Tree[K,V]);
+        Full(item:entry[K,V], tree:Tree[K,V]);
     esac;
     
 define:
@@ -70,7 +69,7 @@ define:
         esac;
     esac;
 
-    in_order(T:Tree) : list[Item] = case T of
+    in_order(T:Tree) : list[entry] = case T of
         Leaf -> nil;
         Two -> cat(in_order(T.left), cons(T.pivot, in_order(T.right)));
         Three -> cat(in_order(T.left), cons(T.p1, cat(in_order(T.mid), cons(T.p2, in_order(T.right)))));
@@ -80,7 +79,7 @@ define:
         ok -> x.tree;
         spill -> Two(x.left, x.pivot, x.right);
     esac where
-        new_item = Item(key, value);
+        new_item = entry(key, value);
         downward(T) : puddle = case T of
             Leaf -> spill(Leaf, new_item, Leaf);
             Two -> case
@@ -113,7 +112,7 @@ define:
         esac;
     end assign;
 
-    first(T:Tree) : maybe[Item]
+    first(T:Tree) : maybe[entry]
     = case T of
         Leaf -> nope;
         Two -> case first(T.left) as sub of
@@ -126,7 +125,7 @@ define:
         esac;
     esac;
     
-    last(T:Tree) : maybe[Item]
+    last(T:Tree) : maybe[entry]
     = case T of
         Leaf -> nope;
         Two -> case last(T.right) as sub of
@@ -160,7 +159,7 @@ define:
         Three -> _bubble_three_from_left(_shift(T.left), T.p1, T.mid, T.p2, T.right, Full(T.p1, Two(Leaf, T.p2, Leaf)));
     esac;
 
-    _bubble_two_from_left(sub:bubble, pivot:Item, right:Tree, on_nothing:bubble) : bubble
+    _bubble_two_from_left(sub:bubble, pivot:entry, right:Tree, on_nothing:bubble) : bubble
     = case sub of
         Nothing -> on_nothing;
         Hole -> case right of
@@ -171,7 +170,7 @@ define:
         Full -> Full(sub.item, Two(sub.tree, pivot, right));
     esac;
     
-    _bubble_three_from_left(sub:bubble, p1:Item, mid:Tree, p2:Item, right:Tree, on_nothing): bubble
+    _bubble_three_from_left(sub:bubble, p1:entry, mid:Tree, p2:entry, right:Tree, on_nothing): bubble
     = case sub of
         Nothing -> on_nothing;
         Hole -> case mid of
@@ -200,7 +199,7 @@ define:
                     Full -> Full(T.pivot, Two(T.left, next.item, next.tree));
                 esac;
             esac where
-                balance(evict:Item, pivot:Item, sub:Tree) = case T.left as left of
+                balance(evict:entry, pivot:entry, sub:Tree) = case T.left as left of
                     Leaf -> absurd "all siblings have the same height";
                     Two -> Hole(evict, Three(left.left, left.pivot, left.right, pivot, sub));
                     Three -> Full(evict, Two(Two(left.left, left.p1, left.mid), left.p2, Two(left.right, pivot, sub)));
@@ -230,13 +229,13 @@ define:
                     Full -> Full(sub.item, Three(T.left, T.p1, T.mid, T.p2, sub.tree));
                 esac;
             esac where
-                lonely(evict:Item, keep:Item) = Full(evict, Two(Leaf, keep, Leaf));
-                balance_mid(evict:Item, keep:Item, sub:Tree) = case T.left as left of
+                lonely(evict:entry, keep:entry) = Full(evict, Two(Leaf, keep, Leaf));
+                balance_mid(evict:entry, keep:entry, sub:Tree) = case T.left as left of
                     Leaf -> absurd "all siblings have the same height";
                     Two -> Full(evict, Two(Three(left.left, left.pivot, left.right, keep, sub), T.p2, T.right));
                     Three -> Full(evict, Three(Two(left.left, left.p1, left.mid), left.p2, Two(left.right, keep, sub), T.p2, T.right));
                 esac;
-                balance_right(evict:Item, keep:Item, sub:Tree) = case T.mid as mid of
+                balance_right(evict:entry, keep:entry, sub:Tree) = case T.mid as mid of
                     Leaf -> absurd "all siblings have the same height";
                     Two -> Full(evict, Two(T.left, T.p1, Three(mid.left, mid.pivot, mid.right, keep, sub)));
                     Three -> Full(evict, Three(T.left, T.p1, Two(mid.left, mid.p1, mid.mid), mid.p2, Two(mid.right, keep, sub)));

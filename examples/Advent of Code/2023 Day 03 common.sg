@@ -1,6 +1,6 @@
 # Parts common to the solutions of the two puzzles on day 3
 import:
-"common" (is_digit, slice, surely, either);
+"common" (is_digit, slice);
 
 type:
 Range is (start:number, stop:number, value:number);

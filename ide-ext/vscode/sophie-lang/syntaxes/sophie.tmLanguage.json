@@ -34,10 +34,10 @@
 			"match": "\\b(0|\\d(_?\\d)*)(\\.\\d(_?\\d)*)?([eE][-+]?(0|\\d(_?\\d)*))?\\b"
 		}, {
 			"name": "support.constant.sophie",
-			"match": "\\b(nil|cons|nope|this)\\b"
+			"match": "\\b(nil|cons|nope|this|done|step|less|same|more)\\b"
 		}, {
 			"name": "support.type.sophie",
-			"match": "\\b(string|flag|number|list|maybe)\\b"
+			"match": "\\b(string|flag|number|list|maybe|entry|folio|pair|order|predicate)\\b"
 		}, {
 			"name": "support.class.sophie",
 			"match": "\\b(Console|FileSystem)\\b"
