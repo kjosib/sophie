@@ -43,9 +43,7 @@ def run_program(roadmap:RoadMap):
 					result = list(iterate_list(result))
 			if result is not None:
 				print(result)
-		# This kludge makes QualifiedReference work,
-		# at least until a proper linkage model takes over.
-		root._bindings.update(env._bindings)
+		root.absorb(env)
 	return result
 
 def _dynamic_root(static_root) -> RootFrame:

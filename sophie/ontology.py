@@ -1,3 +1,4 @@
+from pathlib import Path
 from boozetools.support.symtab import NameSpace
 
 class Nom:
@@ -31,6 +32,7 @@ class Symbol:
 NS = NameSpace[Symbol]
 
 class Term(Symbol):
+	source_path: Path  # WordDefiner pass fills this in.
 	def has_value_domain(self): return True
 
 class Expr:

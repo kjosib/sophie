@@ -208,9 +208,9 @@ def _init():
 	
 	math_op = _arrow_of(primitive.literal_number, 2)
 	
-	for op in '^ * / DIV MOD + -'.split():
-		BINARY_TYPES[op] = AdHocType(op, 2)
-		BINARY_TYPES[op].cases.append(math_op)
+	for glyph in '^ * / DIV MOD + -'.split():
+		BINARY_TYPES[glyph] = AdHocType(glyph, 2)
+		BINARY_TYPES[glyph].cases.append(math_op)
 	
 	numeric = relop_type(primitive.literal_number)
 	stringy = relop_type(primitive.literal_string)
@@ -240,14 +240,19 @@ _init()
 
 class ManifestBuilder(Visitor):
 	"""Converts the syntax of manifest types into corresponding type-calculus objects."""
-	_bind : dict[syntax.TypeParameter:SophieType]
+	_bound : dict[syntax.TypeParameter:SophieType]
 	
-	def __init__(self, tps: Sequence[syntax.TypeParameter], type_args: list[SophieType]):
-		self._bind = dict(zip(tps, type_args))
+	def __init__(self, type_formals: Sequence[syntax.TypeParameter], type_actuals: list[SophieType]):
+		self._bound = dict(zip(type_formals, type_actuals))
 		
 	def _make_product(self, formals:Iterable[syntax.ARGUMENT_TYPE]) -> ProductType:
 		return ProductType(map(self.visit, formals)).exemplar()
-		
+	
+	def _bind(self, tp:Symbol):
+		if tp not in self._bound:
+			self._bound[tp] = TypeVariable()
+		return self._bound[tp]
+	
 	def visit_RecordSpec(self, rs:syntax.RecordSpec) -> ProductType:
 		# This is sort of a handy special case: Things use it to build constructor arrows.
 		return self._make_product(field.type_expr for field in rs.fields)
@@ -255,10 +260,16 @@ class ManifestBuilder(Visitor):
 	def visit_TypeCall(self, tc:syntax.TypeCall) -> SophieType:
 		dfn = tc.ref.dfn
 		if isinstance(dfn, syntax.TypeParameter):
-			return self._bind[dfn]
+			return self._bind(dfn)
+		assert isinstance(dfn, syntax.TypeDeclaration), dfn
 		if isinstance(dfn, syntax.Opaque):
 			return OpaqueType(dfn).exemplar()
-		args = [self.visit(a) for a in tc.arguments]
+		
+		if tc.arguments:
+			args = [self.visit(a) for a in tc.arguments]
+		else:
+			args = [BOTTOM for _ in dfn.type_params]
+		
 		if isinstance(dfn, syntax.Record):
 			return RecordType(dfn, args).exemplar()
 		if isinstance(dfn, syntax.Variant):
@@ -268,6 +279,13 @@ class ManifestBuilder(Visitor):
 		if isinstance(dfn, syntax.Interface):
 			return InterfaceType(dfn, args).exemplar()
 		raise NotImplementedError(type(dfn))
+	
+	@staticmethod
+	def visit_ImplicitTypeVariable(_:syntax.ImplicitTypeVariable):
+		return BOTTOM
+	
+	def visit_ExplicitTypeVariable(self, tv:syntax.ExplicitTypeVariable):
+		return self._bind(tv.dfn)
 	
 	def visit_ArrowSpec(self, spec:syntax.ArrowSpec):
 		return ArrowType(self._make_product(spec.lhs), self.visit(spec.rhs))
@@ -306,13 +324,17 @@ class Rewriter(TypeVisitor):
 		return ProductType([f.visit(self) for f in p.fields])
 	def on_message(self, m: MessageType):
 		return MessageType(m.arg.visit(self))
+	def on_bottom(self):
+		return BOTTOM
+
+TRIVIAL_TYPES = (BOTTOM, ERROR)
 
 class Binder(Visitor):
 	"""
 	Discovers (or fails) a substitution-of-variables (in the formal)
 	which makes the formal accept the actual as an instance.
 	"""
-	def __init__(self, engine:"DeductionEngine", env:TYPE_ENV):
+	def __init__(self, engine, env:TYPE_ENV):
 		self.gamma = {}
 		self.ok = True
 		self._engine = engine
@@ -324,7 +346,7 @@ class Binder(Visitor):
 		self.ok = False
 		self.why = why
 	
-	def inputs(self, formal_types, actual_types, args):
+	def inputs(self, formal_types, actual_types, args:Sequence[ValExpr]):
 		for expr, need, got in zip(args, formal_types, actual_types):
 			if self.ok:
 				self.bind_param(expr, need, got)
@@ -338,7 +360,7 @@ class Binder(Visitor):
 		report.bad_type(self._dynamic_link, *self._task, self.why)
 				
 	def bind(self, formal: SophieType, actual: SophieType):
-		if actual in (BOTTOM, ERROR) or formal.number == actual.number:
+		if actual in TRIVIAL_TYPES or formal in TRIVIAL_TYPES or formal.number == actual.number:
 			return
 		else:
 			self.visit(formal, actual)
@@ -540,71 +562,44 @@ class UnionFinder(Visitor):
 			return None  # Not a function.
 	
 	@staticmethod
-	def visit__Error(this: ERROR, that: SophieType):
+	def visit__Error(this: ERROR, _that: SophieType):
 		return this
 
-class Checker(Visitor):
+class ManifestEngine:
 	"""
-	Responsible for checking type assertions/annotations.
-	Compares syntax to SophieType objects.
-	I don't need this too powerful,
-	because the DeductionEngine does the hard stuff.
-	This is just a layer to try to see where to blame for a typing failure.
+	Like a mini deduction engine specifically for the sanity-checking phase.
+	Concerned only with binding arrow-types to user-defined functions.
+	Gives credence to manifest type declarations, not body expressions.
+	
+	Because the binder only needs an "engine" for user-defined things,
+	this has a relatively small API compared to the full decision engine.
 	"""
-	def __init__(self, types):
+	
+	def __init__(self, types:dict[Symbol,SophieType], report:diagnostics.Report):
 		self._types = types
-		self._gamma : dict[Symbol,SophieType] = {}
-		self.sick = False
+		self._report = report
 	
-	def _need(self, assertion):
-		if not assertion:
-			self.sick = True
-	
-	def bind(self, formal, actual:SophieType):
-		if actual in [BOTTOM, ERROR]: return
-		self.visit(formal, actual)
-	
-	def visit_FormalParameter(self, fp:syntax.FormalParameter, actual:SophieType):
-		if fp.type_expr:
-			self.bind(fp.type_expr, actual)
-	
-	def visit_ExplicitTypeVariable(self, etv:syntax.ExplicitTypeVariable, actual:SophieType):
-		sym = etv.dfn
-		if sym in self._gamma:
-			self._need(self._gamma[sym] == actual)
+	def apply_UDF(self, fn_type: UDFType, arg_types: Sequence[SophieType], env:TYPE_ENV) -> SophieType:
+		udf = fn_type.fn
+		binder = Binder(self, env)
+		for param, actual in zip(udf.params, arg_types):
+			if param in self._types:
+				binder.bind(self._types[param], actual)
+				if not binder.ok:
+					self._report.bad_argument(env, udf, param, actual, binder.why)
+					return ERROR
+		if udf in self._types:
+			return self._types[udf].visit(Rewriter(binder.gamma))
 		else:
-			self._gamma[sym] = actual
+			return BOTTOM
 	
-	def visit_TypeCall(self, tc:syntax.TypeCall, actual:SophieType):
-		formal = tc.ref.dfn
-		if isinstance(formal, syntax.Opaque):
-			self._need(isinstance(actual, OpaqueType) and actual.symbol is formal)
-		elif isinstance(formal, syntax.Variant):
-			if isinstance(actual, SumType):
-				self._need(actual.variant is formal)
-			elif isinstance(actual, SubType):
-				self._need(actual.st.variant is formal)
-			else:
-				self._need(False)
-		elif isinstance(formal, syntax.Record):
-			self._need(isinstance(actual, RecordType) and actual.symbol is formal)
-		else:
-			print(type(formal), formal, actual)
-			self._need(False)
-	
-	def visit_ArrowSpec(self, spec:syntax.ArrowSpec, actual:SophieType):
-		arity = len(spec.lhs)
-		self._need(arity == actual.expected_arity())
-		if isinstance(actual, ArrowType):
-			for f,a in zip(spec.lhs, actual.arg.fields):
-				self.bind(f,a)
-		elif isinstance(actual, UDFType):
-			# Not worth wrestling with right now.
-			pass
-		else:
-			self._need(False)
+	def apply_behavior(self, bt:BehaviorType, arg_types: Sequence[SophieType], env:TYPE_ENV) -> SophieType:
+		raise NotImplementedError("To do.")
+
 
 class DeductionEngine(Visitor):
+	_types: dict[Symbol, SophieType]
+	
 	def __init__(self, roadmap:RoadMap, report:diagnostics.Report):
 		# self._trace_depth = 0
 		self._report = report  # .on_error("Checking Types")
@@ -629,13 +624,19 @@ class DeductionEngine(Visitor):
 		for fi in module.foreign: self.visit(fi)
 		local = Activation.for_module(self._root, module)
 		builder = ManifestBuilder([], [])
+		for udf in module.all_functions:
+			for fp in udf.params:
+				if fp.type_expr:
+					self._types[fp] = builder.visit(fp.type_expr)
+			if udf.result_type_expr:
+				self._types[udf] = builder.visit(udf.result_type_expr)
 		for uda in module.agent_definitions:
 			self._constructors[uda] = builder.make_agent_template(uda, local)
 		for expr in module.main:
 			self._report.trace(" -->", expr)
 			result = self.visit(expr, local)
 			self._report.info(result)
-		self._root._bindings.update(local._bindings)
+		self._root.absorb(local)
 
 	###############################################################################
 
@@ -657,14 +658,18 @@ class DeductionEngine(Visitor):
 				res = TaggedRecord(st, type_args)
 				self._constructors[st] = ArrowType(arg, res)
 				
-	def visit_TypeAlias(self, a: syntax.TypeAlias):
-		type_args = [TypeVariable() for _ in a.type_params]
-		self._types[a] = it = ManifestBuilder(a.type_params, type_args).visit(a.body)
-		if isinstance(it, RecordType):
-			formals = self._types[it.symbol].type_args
-			original = self._constructors[it.symbol]
-			gamma = dict(zip(formals, it.type_args))
-			self._constructors[a] = original.visit(Rewriter(gamma))
+	def visit_TypeAlias(self, alias: syntax.TypeAlias):
+		type_args = [TypeVariable() for _ in alias.type_params]
+		self._types[alias] = referent = ManifestBuilder(alias.type_params, type_args).visit(alias.body)
+		# If the alias refers to something with a constructor (i.e. a record-type)
+		# then install a new constructor by the same name as the alias,
+		# with all of its type-variables properly rewritten.
+		if isinstance(referent, RecordType):
+			basis_type = self._types[referent.symbol]
+			assert isinstance(basis_type, RecordType)
+			renaming = dict(zip(basis_type.type_args, referent.type_args))
+			basis_constructor = self._constructors[referent.symbol]
+			self._constructors[alias] = basis_constructor.visit(Rewriter(renaming))
 	
 	def visit_Opaque(self, td:syntax.Opaque):
 		self._types[td] = OpaqueType(td)
@@ -685,26 +690,31 @@ class DeductionEngine(Visitor):
 	###############################################################################
 
 	@staticmethod
-	def visit_Literal(expr: syntax.Literal, env:TYPE_ENV) -> SophieType:
+	def visit_Literal(expr: syntax.Literal, _env:TYPE_ENV) -> SophieType:
 		return _literal_type_map[type(expr.value)]
 	
 	def apply_UDF(self, fn_type: UDFType, arg_types: Sequence[SophieType], env:TYPE_ENV) -> SophieType:
-		# Question: Do the type-preconditions hold?
-		checker = Checker(self._types)
-		fn = fn_type.fn
+		udf = fn_type.fn
+		
+		# Sanity-check the argument-types against any manifest-type expressions
+		checker = ManifestEngine(self._types, self._report)
+		expect = checker.apply_UDF(fn_type, arg_types, env)
+		if expect is ERROR: return ERROR
+		
+		# Evaluate the body-expression to determine the actual result-type
 		inner = Activation.for_function(fn_type.static_link, env, fn_type.fn, arg_types)
-		for param, actual in zip(fn.params, arg_types):
-			checker.bind(param, actual)
-			if checker.sick:
-				self._report.bad_argument(inner, param, actual, checker)
-				return ERROR
-		result_type = self.exec_UDF(fn, inner)
+		result_type = self.exec_UDF(udf, inner)
 		if result_type is ERROR: return ERROR
-		if fn.result_type_expr:
-			checker.bind(fn.result_type_expr, result_type)
-			if checker.sick:
-				self._report.bad_result(inner, fn_type.fn, result_type, checker)
+		
+		# Sanity-check the result-type against its manifest-type.
+		if expect is not BOTTOM:
+			binder = Binder(checker, inner)
+			binder.bind(expect, result_type)
+			if not binder.ok:
+				self._report.bad_result(inner, udf, result_type, binder.why)
 				return ERROR
+		
+		# If all went well:
 		return result_type
 	
 	def apply_behavior(self, bt:BehaviorType, arg_types: Sequence[SophieType], env:TYPE_ENV) -> SophieType:
@@ -841,7 +851,7 @@ class DeductionEngine(Visitor):
 			return static_env.fetch(target)
 	
 	@staticmethod
-	def visit_Absurdity(_:syntax.Absurdity, env:TYPE_ENV) -> SophieType:
+	def visit_Absurdity(_:syntax.Absurdity, _env:TYPE_ENV) -> SophieType:
 		return BOTTOM
 	
 	def visit_ExplicitList(self, el:syntax.ExplicitList, env:TYPE_ENV) -> SumType:
@@ -871,8 +881,8 @@ class DeductionEngine(Visitor):
 		def try_one_alternative(alt, subtype:SubType) -> SophieType:
 			inner = Activation.for_subject(env, mx.subject)
 			inner.assign(mx.subject, subtype)
-			for subfn in alt.where:
-				inner.declare(subfn)
+			for sub in alt.where:
+				inner.declare(sub)
 			return self.visit(alt.sub_expr, inner)
 		
 		def try_otherwise():
@@ -1028,7 +1038,7 @@ class DeductionEngine(Visitor):
 		return answer
 
 	@staticmethod
-	def visit_Skip(s:syntax.Skip, env:TYPE_ENV) -> SophieType:
+	def visit_Skip(_s:syntax.Skip, _env:TYPE_ENV) -> SophieType:
 		return primitive.literal_act
 
 	def visit_AsTask(self, at:syntax.AsTask, env:TYPE_ENV) -> SophieType:
