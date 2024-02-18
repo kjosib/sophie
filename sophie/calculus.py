@@ -71,12 +71,16 @@ class OpaqueType(SophieType):
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_opaque(self)
 	def expected_arity(self) -> int: return -1  # Not callable
 
+def _exemplargs(type_args: Iterable[SophieType], size) -> tuple[SophieType, ...]:
+	them = tuple(a.exemplar() for a in type_args)
+	assert len(them) == size, (len(them), size)
+	return them
+
 class RecordType(SophieType):
 	def __init__(self, r:syntax.Record, type_args: Iterable[SophieType]):
 		assert type(r) is syntax.Record
 		self.symbol = r
-		self.type_args = tuple(a.exemplar() for a in type_args)
-		assert len(self.type_args) == len(r.type_params)
+		self.type_args = _exemplargs(type_args, len(r.type_params))
 		super().__init__(self.symbol, *(a.number for a in self.type_args))
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_record(self)
 	def expected_arity(self) -> int: return -1  # Not callable. (There's a constructor arrow made.)
@@ -89,8 +93,7 @@ class SumType(SophieType):
 	def __init__(self, variant: syntax.Variant, type_args: Iterable[SophieType]):
 		assert isinstance(variant, syntax.Variant)
 		self.variant = variant
-		self.type_args = tuple(a.exemplar() for a in type_args)
-		assert len(self.type_args) == len(variant.type_params)
+		self.type_args = _exemplargs(type_args, len(variant.type_params))
 		super().__init__(self.variant, *(a.number for a in self.type_args))
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_sum(self)
 	def expected_arity(self) -> int: return -1  # Not callable directly.
@@ -112,8 +115,7 @@ class TaggedRecord(SubType):
 		assert isinstance(st, syntax.SubTypeSpec)
 		assert isinstance(st.body, syntax.RecordSpec)
 		self.st = st
-		self.type_args = tuple(a.exemplar() for a in type_args)
-		assert len(self.type_args) == len(st.variant.type_params)
+		self.type_args = _exemplargs(type_args, len(st.variant.type_params))
 		super().__init__(st, *(a.number for a in self.type_args))
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_tag_record(self)
 	def family(self) -> Symbol: return self.st.variant
@@ -177,8 +179,7 @@ class InterfaceType(SophieType):
 	def __init__(self, symbol:syntax.Interface, type_args: Iterable[SophieType]):
 		assert type(symbol) is syntax.Interface
 		self.symbol = symbol
-		self.type_args = tuple(a.exemplar() for a in type_args)
-		assert len(self.type_args) == len(symbol.type_params)
+		self.type_args = _exemplargs(type_args, len(symbol.type_params))
 		super().__init__(self.symbol, *(a.number for a in self.type_args))
 	def visit(self, visitor: "TypeVisitor"): return visitor.on_interface(self)
 	def expected_arity(self) -> int: return -1  # Not callable
@@ -214,9 +215,15 @@ class BehaviorType(SophieType):
 
 
 class _Bottom(SophieType):
+	"""
+	The completely unrestricted type:
+	It unifies with anything to become that other thing.
+	This does double duty as "I don't know" and "I don't care".
+	"""
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_bottom()
 
 class _Error(SophieType):
+	""" The type of things that make no sense or otherwise do not compute. """
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_error_type()
 
 BOTTOM = _Bottom(None)
@@ -258,7 +265,7 @@ class Render(TypeVisitor):
 		return self._var_names[v]
 	def on_opaque(self, o: OpaqueType):
 		return o.symbol.nom.text
-	def _generic(self, params:tuple[SophieType]):
+	def _generic(self, params:tuple[SophieType, ...]):
 		if params:
 			return "[%s]"%(",".join(t.visit(self) for t in params))
 		else:

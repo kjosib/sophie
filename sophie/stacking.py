@@ -23,7 +23,7 @@ T = TypeVar("T")
 PLACE_HOLDER = object()
 
 class Frame(Generic[T]):
-	_bindings : dict[T]
+	_bindings : dict[Symbol, T]
 	pc : ValExpr = None
 	breadcrumb : CRUMB = None
 	def path(self) -> Path: raise NotImplementedError(type(self))
@@ -50,6 +50,11 @@ class RootFrame(Frame):
 			raise KeyError(key)
 	def trace(self, tracer):
 		tracer.hit_bottom()
+	
+	def absorb(self, other:Frame):
+		# This kludge allows imported symbols to work.
+		# The root-frame stands in for an inter-module linkage model.
+		self._bindings.update(other._bindings)
 
 class Activation(Frame):
 	def __init__(self, static_link: Frame[T], dynamic_link: Frame[T], breadcrumb:CRUMB):

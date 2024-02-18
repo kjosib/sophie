@@ -191,7 +191,6 @@ class Function(Term):
 	Representation shared between two subclasses.
 	They differ only to distinguish semantics.
 	"""
-	source_path: Path
 	namespace: NS
 	params: Sequence[FormalParameter]
 	where: Sequence["UserFunction"]
@@ -236,7 +235,6 @@ class WhereClause(NamedTuple):
 	coda: Nom
 
 class UserAgent(Term):
-	source_path: Path
 	field_space: NS
 	fields: Sequence[FormalParameter]
 	message_space: NS
@@ -258,7 +256,6 @@ class UserAgent(Term):
 
 
 class Behavior(Term):
-	source_path: Path
 	namespace: NS
 	def head(self) -> slice: return self.nom.head()
 	def __repr__(self):

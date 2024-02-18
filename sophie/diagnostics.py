@@ -4,7 +4,7 @@ from traceback import TracebackException
 from pathlib import Path
 from boozetools.support.failureprone import SourceText, Issue, Evidence, Severity, illustration
 from . import syntax
-from .ontology import Expr, Nom, Symbol, Reference
+from .ontology import Expr, Nom, Symbol, Reference, Term
 from .calculus import TYPE_ENV, SophieType
 
 class TooManyIssues(Exception):
@@ -255,13 +255,21 @@ class Report:
 			problem = [Annotation(env.path(), site, "Here")]
 			self.issue(Pic(intro, problem))  # +trace_stack(env)
 
-	def bad_argument(self, env: TYPE_ENV, param:syntax.FormalParameter, actual:SophieType, checker):
-		self.issue(Pic("Square peg, round hole", trace_stack(env)))
+	def bad_argument(self, env: TYPE_ENV, term:Term, param:syntax.FormalParameter, actual:SophieType, why:str):
+		assert isinstance(term, Term)
+		assert isinstance(param, syntax.FormalParameter)
+		assert isinstance(why, str)
+		intro = "Type-checking found a square peg in a round hole:"
+		caption = str(actual) + " does not apply because " + why
+		problem = [Annotation(term.source_path, param, caption)]
+		self.issue(Pic(intro, trace_stack(env)+problem))
 	
-	def bad_result(self, env: TYPE_ENV, fn:syntax.UserFunction, result_type, checker):
-		intro = "This function produces a result inconsistent with the annotation"
-		problem = [Annotation(fn.source_path, fn, "produced "+str(result_type))]
-		self.issue(Pic(intro, problem+trace_stack(env)))
+	def bad_result(self, env: TYPE_ENV, fn:syntax.UserFunction, result_type, why):
+		intro = "Type-checking found a problem. Here's how it happens:"
+		produced = Annotation(fn.source_path, fn.expr, "Produced "+str(result_type))
+		caption = "Did not match because " + why
+		needed = Annotation(fn.source_path, fn.result_type_expr, caption)
+		self.issue(Pic(intro, trace_stack(env)+[produced, needed]))
 
 	def bad_type(self, env: TYPE_ENV, expr: syntax.ValExpr, need, got, why):
 		intro = "Type-checking found a problem. Here's how it happens:"
