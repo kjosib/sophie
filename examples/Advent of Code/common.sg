@@ -13,3 +13,22 @@ slice(subject, start, stop) = mid(subject, start, stop - start);
 is_digit(ch) = ord("0") <= ord(ch) and ord(ch) <= ord("9");
 digit_value(digit) = ord(digit) - ord("0");
 
+nums_in(s) = map(surely, map(val, split_on_whitespace(s)));
+
+split_on_whitespace(s) = split_on_whitespace_at(0, s);
+
+split_on_whitespace_at(offset, s) = case
+	when offset >= len(s) then nil;
+	when is_space_at(offset) then split_on_whitespace_at(offset+1, s);
+	else cons(slice(s, offset, after), split_on_whitespace_at(after, s));
+esac where
+	is_space_at(i) = is_space(mid(s, i, 1));
+	after = either(first(is_space_at, iota(offset+1, len(s))), len(s));
+end split_on_whitespace_at;
+
+is_space(ch) = ch == " ";
+
+contains(x, xs) = case xs of
+	nil -> no;
+	cons -> xs.head == x or contains(x, xs.tail);
+esac;
