@@ -6,6 +6,7 @@ from boozetools.support.failureprone import SourceText, Issue, Evidence, Severit
 from . import syntax
 from .ontology import Expr, Nom, Symbol, Reference, Term
 from .calculus import TYPE_ENV, SophieType
+from .stacking import Frame
 
 class TooManyIssues(Exception):
 	pass
@@ -87,12 +88,7 @@ class Report:
 
 	def complain_to_console(self):
 		""" Emit all the issues to the console. """
-		if self._issues:
-			print("*"*60, file=sys.stderr)
-			print(_outburst(), file=sys.stderr)
-		for i in self._issues:
-			print("  -"*20, file=sys.stderr)
-			print(i.as_text(_fetch), file=sys.stderr)
+		_bemoan(self._issues)
 			
 	def assert_no_issues(self):
 		""" Does what it says on the tin """
@@ -361,7 +357,7 @@ class Tracer:
 		if args: self.called_with(path, breadcrumb, args)
 		if pc is not None: self.called_from(path, pc)
 
-def trace_stack(env:TYPE_ENV) -> list[Annotation]:
+def trace_stack(env:Frame) -> list[Annotation]:
 	tracer = Tracer()
 	env.trace(tracer)
 	return tracer.trace
@@ -407,3 +403,16 @@ class Undefined:
 	def as_text(self, fetch):
 		return '\n'.join(self._lines)
 
+def trace_absurdity(env:Frame, absurdity:syntax.Absurdity):
+	intro = "Absurd thing happened:"
+	problem = [Annotation(env.path(), absurdity)]
+	_bemoan([Pic(intro, trace_stack(env) + problem)])
+
+def _bemoan(issues):
+	""" Emit all the issues to the console. """
+	if issues:
+		print("*"*60, file=sys.stderr)
+		print(_outburst(), file=sys.stderr)
+	for i in issues:
+		print("  -"*20, file=sys.stderr)
+		print(i.as_text(_fetch), file=sys.stderr)
