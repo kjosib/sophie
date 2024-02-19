@@ -4,6 +4,7 @@ from . import syntax
 from .ontology import SELF
 from .stacking import Frame, Activation, RootFrame
 from .scheduler import Task, Actor
+from .diagnostics import trace_absurdity
 
 BINARY_IMPL = {
 	"^"   : operator.pow,
@@ -166,6 +167,11 @@ def _eval_as_task(expr:syntax.AsTask, dynamic_env:ENV):
 def _eval_assign_field(expr:syntax.AssignField, dynamic_env:ENV):
 	state = dynamic_env.chase(SELF).fetch(SELF)
 	return AssignAction(state, expr.nom.key(), evaluate(expr.expr, dynamic_env))
+
+def _eval_absurdity(expr:syntax.Absurdity, dynamic_env:ENV):
+	trace_absurdity(dynamic_env, expr)
+	exit()
+	
 
 ###############################################################################
 

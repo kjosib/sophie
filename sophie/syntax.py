@@ -405,11 +405,15 @@ class Alternative(Symbol):
 
 class Absurdity(ValExpr):
 	is_volatile = False
-	def __init__(self, _head:slice, reason:Literal):
-		self._head = _head
+	def __init__(self, head:Nom, reason:Optional[Literal]):
+		self._head = head
 		self.reason = reason
 	def head(self) -> slice:
-		return slice(self._head.start, self.reason.head().stop)
+		it = self._head.head()
+		if self.reason:
+			return slice(it.start, self.reason.head().stop)
+		else:
+			return it
 
 def absurdAlternative(pattern:Nom, _head:Nom, absurdity:Absurdity):
 	return Alternative(pattern, _head, absurdity, None)

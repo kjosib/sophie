@@ -70,7 +70,7 @@ class ThreadPoolScheduler:
 			task = self._tasks.popleft()
 			self._mutex.release()
 			try: task.proceed()
-			except Exception as ex:
+			except BaseException as ex:
 				self.main_thread.insert_task(ex)
 	
 	def _less_busy(self):
@@ -133,7 +133,7 @@ class MainThread:
 				return
 			try:
 				for task in tasks:
-					if isinstance(task, Exception):
+					if isinstance(task, BaseException):
 						self._zombify()
 						raise task
 					else: task.proceed()
