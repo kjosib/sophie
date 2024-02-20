@@ -151,6 +151,7 @@ _hint("semicolon_list(alternative) ELSE ● ->", "This doesn't take an arrow. Ju
 _hint("CASE semicolon_list(when_clause) ● ESAC", "CASE-WHEN needs an ELSE clause.")
 _hint("ELSE expr ● ???", "Probably missing a semicolon just before here.")
 _hint("THEN expr ● WHEN", "Probably missing a semicolon just before here.")
+_hint("expr ● END", "Probably missing a semicolon just before here.")
 _hint("expr ● ,", "Not sure, but might be some stray parentheses nearby.")
 _hint("( ● )", """
 	Gentle breezes formed
