@@ -1,0 +1,82 @@
+# https://adventofcode.com/2023/day/5
+
+# Solution Concept:
+# The new "convert" operation works on ranges instead of specific numbers.
+# To keep things tractable, whenever an input range would be cut into parts by
+# a partially-overlapping range-map, the converter will compute only for the
+# first part of the input range.
+# There's also a work-list in the form of an "unfold" operation:
+# An unconverted portion of an input range gets prepended to that work-list.
+# For the final answer, we only need the start of the converted ranges.
+
+# Incidentally, it turns out AoC does not accept trailing decimals in the answer.
+
+import:
+"common" (pair_off);
+"2023 Day 05 common" (seeds, least_of, each_segment);
+
+type:
+
+# Range-types conventionally include `start` and exclude `stop`.
+range is (start: number, stop:number);
+range_map is (source: range, offset: number);
+
+assume:
+r, r1, r2: range;
+rs: list[range];
+n, destination, start, size:number;
+rm:range_map;
+segment:list[range_map];
+
+define:
+
+goal(lines) = least_of(map(start, candidates)) where
+	start(r) = r.start;
+	candidates = reduce(propagate, seed_ranges, mappings);
+	seed_ranges = pair_off(as_range, seeds(lines));
+	mappings = each_segment(lines, as_range_map);
+end goal;
+
+propagate(rs, segment) = unfold(advance, rs) where
+	advance(state:list[range]) = case state of
+		nil -> done;
+		cons -> step(front, next_state) where
+			next_state = state.tail if complete else cons(back, state.tail);
+			r = state.head;
+			complete = range_size(front) == range_size(r);
+			front = convert(r, segment);
+			back = range(r.start + range_size(front), r.stop);
+		end cons;
+	esac;
+end propagate;
+
+convert(r, segment) = case segment of
+	nil -> r;
+	cons -> case
+		when not range_overlaps(r, rm.source) then convert(r, segment.tail);
+		when r.start < rm.source.start then convert(chop(rm.source.start), segment.tail);
+		else shift_range(rm.offset, chop(min(r.stop, rm.source.stop)));
+	esac where
+		rm = segment.head;
+		chop(stop) = range(r.start, stop);
+	end cons;
+esac;
+
+shift_range(offset, r) = range(r.start+offset, r.stop+offset);
+range_size(r) = r.stop - r.start;
+
+as_range_map(destination, start, size) = range_map(as_range(start, size), destination - start);
+
+as_range(start, size) = range(start, start+size);
+
+# Note that an empty range won't overlap itself,
+# but an empty range can overlap a range with size.
+
+range_overlaps(r1, r2) = r1.start < r2.stop and r2.start < r1.stop;
+
+solve(lines) = console ! echo[str(int(goal(lines))), EOL];
+
+begin:
+
+filesystem!read_lines("/playground/advent of code/2023-d5", !solve);
+

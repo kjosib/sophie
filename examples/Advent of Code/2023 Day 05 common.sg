@@ -1,0 +1,28 @@
+import:
+"common" (nums_in, slice, head_or);
+
+define:
+
+chunks_where(p:predicate, xs:list) : list[list] = unfold(dechunk, xs) where
+	dechunk(xs) = case drop_while(non(p), xs) as ys of
+		nil -> done;
+		cons -> step(take_while(p, ys), drop_while(p, ys));
+	esac;
+end chunks_where;
+
+least_of(xs) = reduce(min, inf, xs);
+
+non_blank(s) = len(s) >= 3;  # Close enough for the puzzle.
+
+each_segment(lines, fn) = map(as_segment, chunks_where(non_blank, drop(1, lines))) where
+	as_segment(chunk:list[string]) = map(as_range_map, drop(1, chunk));
+	as_range_map(line) = fn(item(0), item(1), item(2)) where
+		vec = nums_in(line);
+		item(n) = surely(index(n, vec));
+	end as_range_map;
+end each_segment;
+
+seeds(lines) = nums_in(slice(first_line, 7, len(first_line))) where
+	first_line = head_or(lines, "");
+end seeds;
+

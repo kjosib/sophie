@@ -32,3 +32,17 @@ contains(x, xs) = case xs of
 	nil -> no;
 	cons -> xs.head == x or contains(x, xs.tail);
 esac;
+
+head_or(xs, otherwise) = case xs of
+	nil -> otherwise;
+	cons -> xs.head;
+esac;
+
+pair_off(fn, xs) = case xs of
+	nil -> nil;
+	cons -> case xs.tail as ys of
+		nil -> nil;
+		cons -> cons(fn(xs.head, ys.head), pair_off(fn, ys.tail));
+	esac;
+esac;
+
