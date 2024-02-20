@@ -8,7 +8,7 @@
 #    That saves a ton of time solving bugs.
 
 import:
-"common" (nums_in, slice);
+"2023 Day 05 common" (seeds, least_of, each_segment);
 
 type:
 RangeMap is (destination: number, source: number, size:number);
@@ -17,11 +17,9 @@ assume:
 p : predicate;
 
 define:
-goal(lines) = reduce(min, inf, map(convert_all, each_seed)) where
-	each_seed = nums_in(slice(first_line, 7, len(first_line)));
-	first_line = surely(index(0, lines));
-	each_segment = map(as_segment, chunks(drop(1, lines)));
-	convert_all(nr) = reduce(convert_one, nr, each_segment);
+goal(lines) = least_of(map(convert_all, seeds(lines))) where
+	mappings = each_segment(lines, RangeMap);
+	convert_all(nr) = reduce(convert_one, nr, mappings);
 end goal;
 
 convert_one(nr, range_maps:list[RangeMap]) = case range_maps of
@@ -36,33 +34,7 @@ convert_one(nr, range_maps:list[RangeMap]) = case range_maps of
 	end cons;
 esac;
 
-# Now, some things about converting lines into segments.
-# The first thing is to chunk up the lines.
-# That seems like it will need:
-
-chunks(lines:list[string]) : list[list[string]] = unfold(dechunk, skip_blanks(lines));
-dechunk(lines) = case lines of
-	nil -> done;
-	cons -> step(take_chunk(lines), skip_blanks(skip_chunk(lines)));
-esac;
-take_chunk(lines) = take_while(non(is_blank), lines);
-skip_chunk(lines) = drop_while(non(is_blank), lines);
-skip_blanks(lines) = drop_while(is_blank, lines);
-
-
-
-is_blank(s) = len(s) < 3;  # Close enough for the puzzle.
-
-# Need a function from a string to a range-map...
-
-as_range_map(line:string) = RangeMap(item(0), item(1), item(2)) where
-	vec = nums_in(line);
-	item(n) = surely(index(n, vec));
-end as_range_map;
-
-as_segment(chunk:list[string]) : list[RangeMap] = map(as_range_map, drop(1, chunk));
-
-solve(lines) = console ! echo[str(goal(lines)), EOL];
+solve(lines) = console ! echo[str(int(goal(lines))), EOL];
 
 begin:
 
