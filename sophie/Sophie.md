@@ -320,9 +320,9 @@ round_list(x) -> '(' comma_list(x) ')'
 * Highest precedence comes first, like you learned in school.
 
 ```
+%left '(' '[' '.'
 %bogus UMINUS
 %nonassoc  '!'
-%left '(' '[' '.'
 %right '^'
 %left '*' '/' DIV MOD
 %left '+' '-'
