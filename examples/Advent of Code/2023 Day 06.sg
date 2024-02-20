@@ -1,0 +1,34 @@
+# https://adventofcode.com/2023/day/6
+
+# There's only one file for this day becuase the two parts were so closely related.
+# Also, the input was small enough to hand-jam into the begin-block
+# rather than pull from a file.
+
+type:
+	race is (time:number, distance:number);
+define:
+
+ways_to_win(r)
+# The distance travelled is the time of charging multiplied by the remaining time in the race.
+# The best distance will happen at charging for floor(one half of the available time).
+= 2 * (floor(optimal_charge_time(r)) - floor(time_charged(r)));
+
+optimal_charge_time(r) = r.time / 2;
+
+# The charge-time corresponding to a given distance is the solution to a quadratic equation.
+# For simplicity's sake, we can take only the smaller solution.
+# d = x * (t-x)
+# d = tx - x^2
+# x^2 -tx + d = 0
+# Thus:
+time_charged(r) = min(q.fst, q.snd) where q = quadratic(1, -r.time, r.distance); end time_charged;
+
+# This is not numerically stable, but it should serve for the puzzle.
+quadratic(a,b,c) = pair((-b+radical)/denom, (-b-radical)/denom) where
+	radical = sqrt(b*b - 4*a*c);
+	denom = 2*a;
+end quadratic;
+
+begin:
+product(map(ways_to_win, [race(59, 597), race(79,1234), race(65,1032), race(75,1328)]));
+ways_to_win(race(59_79_65_75, 597_1234_1032_1328));
