@@ -8,20 +8,18 @@ type:
 	race is (time:number, distance:number);
 define:
 
-ways_to_win(r)
-# The distance travelled is the time of charging multiplied by the remaining time in the race.
-# The best distance will happen at charging for floor(one half of the available time).
-= 2 * (floor(optimal_charge_time(r)) - floor(time_charged(r)));
-
-optimal_charge_time(r) = r.time / 2;
-
-# The charge-time corresponding to a given distance is the solution to a quadratic equation.
-# For simplicity's sake, we can take only the smaller solution.
+# The charge-time corresponding to a given distance is the solution to a quadratic equation:
 # d = x * (t-x)
 # d = tx - x^2
 # x^2 -tx + d = 0
-# Thus:
-time_charged(r) = min(q.fst, q.snd) where q = quadratic(1, -r.time, r.distance); end time_charged;
+#
+# There are as many ways to win as integers between the roots.
+# Conveniently, that equals the difference between the floors of the two roots.
+ways_to_win(r) = floor(upper) - floor(lower) where
+	upper = max(x.fst, x.snd);
+	lower = min(x.fst, x.snd);
+	x = quadratic(1, -r.time, r.distance);
+end ways_to_win;
 
 # This is not numerically stable, but it should serve for the puzzle.
 quadratic(a,b,c) = pair((-b+radical)/denom, (-b-radical)/denom) where
