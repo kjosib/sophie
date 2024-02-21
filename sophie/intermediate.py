@@ -34,6 +34,7 @@ BINARY_INSTRUCTION = {
 	'<=': ("GT NOT", -1),
 	'>': ("GT", -1),
 	'>=': ("LT NOT", -1),
+	'<=>': ("CMP", -1),
 	True: ("TRUE", 1),
 	False: ("FALSE", 1),
 }

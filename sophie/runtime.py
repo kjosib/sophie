@@ -6,6 +6,15 @@ from .stacking import Frame, Activation, RootFrame
 from .scheduler import Task, Actor
 from .diagnostics import trace_absurdity
 
+LESS = {"":"less"}
+SAME = {"":"same"}
+MORE = {"":"more"}
+
+def _compare(a,b):
+	if a < b: return LESS
+	if a == b: return SAME
+	return MORE
+
 BINARY_IMPL = {
 	"^"   : operator.pow,
 	"*"   : operator.mul,
@@ -20,6 +29,7 @@ BINARY_IMPL = {
 	"<" : operator.lt,
 	">="  : operator.ge,
 	">" : operator.gt,
+	"<=>" : _compare
 }
 UNARY_IMPL = {
 	"-" : operator.neg,
@@ -38,6 +48,22 @@ SHORTCUT = {
 }
 
 THREADED_ROOT = RootFrame()
+
+def overloaded_bin_op(a, op, b, dynamic_env:ENV):
+	# TODO: Dispatch operator overloads
+	#  Probably use the first tag to look up a vtable.
+	if op in RELOP_MAP:
+		pass
+	raise NotImplementedError
+
+RELOP_MAP = {
+	"<" : ("less",),
+	"==" : ("same",),
+	">" : ("more",),
+	"!=" : ("less", "more"),
+	"<=" : ("less", "same"),
+	">=" : ("more", "same"),
+}
 
 ###############################################################################
 
@@ -94,8 +120,12 @@ def _eval_lookup(expr:syntax.Lookup, dynamic_env:ENV):
 		return static_env.assign(sym, value)
 
 def _eval_bin_exp(expr:syntax.BinExp, dynamic_env:ENV):
-	# TODO: Dispatch operator overloads
-	return BINARY_IMPL[expr.op.text](_strict(expr.lhs, dynamic_env), _strict(expr.rhs, dynamic_env))
+	a = _strict(expr.lhs, dynamic_env)
+	b = _strict(expr.rhs, dynamic_env)
+	try:
+		return BINARY_IMPL[expr.op.text](a, b)
+	except TypeError:
+		return overloaded_bin_op(a, expr.op.text, b, dynamic_env)
 
 def _eval_unary_exp(expr:syntax.UnaryExp, dynamic_env:ENV):
 	return UNARY_IMPL[expr.op.text](_strict(expr.arg, dynamic_env))
