@@ -132,7 +132,7 @@ However, if you specify parameter types, then the type-checker will check them a
 You can define the meanings of (a small selection of) mathematical operators in conjunction with your data types:
 
 ```
-operator -> '+' | '-' | '*' | '/' | '^'
+operator -> '+' | '-' | '*' | '/' | '^' | '<=>'
 operator_overload -> OPERATOR operator formals annotation '=' expr where_clause_for_operator     :OperatorOverload
 where_clause_for_operator -> :nothing | WHERE semicolon_list(function) END OPERATOR operator     :WhereClause
 ```
@@ -146,6 +146,16 @@ For example, a module defining the arithmetic of complex numbers might contain s
 Sophie *intentionally* will not support user-defined operators.
 A small and standard set of operators imposes essentially no learning curve.
 For anything else, named functions are recommended.
+
+If you define the three-way comparison operator '<=>' for some particular type,
+then it must return an `order` and you will get the six relational operators for free.
+This makes sense when a total order is reasonable and natural.
+
+*Note:*
+There is a well-defined total order for (IEEE 754 floating point)
+numbers including both positive and negative *NaN* values,
+but the tree-walker might not match the VM's behavior
+because Python does not preserve the sign of *NaN*.
 
 -----
 
@@ -172,6 +182,7 @@ expr -> integer | real | short_string | list_expr | case_expr | match_expr
 | expr '<' expr :BinExp
 | expr '>' expr :BinExp
 | expr '>=' expr :BinExp
+| expr '<=>' expr :BinExp
 | .expr .AND .expr :ShortCutExp
 | .expr .OR .expr :ShortCutExp
 | .NOT .expr  :UnaryExp
@@ -192,8 +203,7 @@ else_clause -> ELSE expr ';'
 For a while, that was all. But then Sophie got type-matching based on variant-types:
 ```
 match_expr -> CASE subject hint OF semicolon_list(alternative) optional(else_clause) ESAC  :MatchExpr
-subject -> name     :simple_subject
-  | expr AS name    :Subject
+subject -> expr alias    :Subject
 hint -> :nothing | ':' reference
 alternative -> name '->' expr where_clause :Alternative
 
@@ -327,6 +337,7 @@ round_list(x) -> '(' comma_list(x) ')'
 %left '*' '/' DIV MOD
 %left '+' '-'
 %left '<' '<=' '==' '!=' '>=' '>'
+%nonassoc '<=>'
 %left NOT
 %left AND OR
 %nonassoc ':='
@@ -364,6 +375,7 @@ An action consisting of the `|` vertical-bar character means to use the identica
 \'[^'\v]*\'             :short_string
 \s+|\#.*                :ignore
 [<:>!=]=|[-=]>|{punct}  :punctuation
+<=>                     :punctuation
 ```
 
 There is not (yet?) any particular support for string-escapes as commonly found in languages like C or Java.

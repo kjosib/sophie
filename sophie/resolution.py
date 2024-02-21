@@ -25,6 +25,7 @@ class Yuck(Exception):
 class RoadMap:
 	preamble : syntax.Module
 	list_symbol : syntax.Variant
+	order_symbol : syntax.Variant
 	module_scopes : dict[syntax.Module, NS]
 	import_alias : dict[syntax.Module, NS]
 	each_module : list[syntax.Module]
@@ -74,6 +75,7 @@ class RoadMap:
 		self.preamble = register(primitive.root_namespace, program.preamble)
 		preamble_scope = self.module_scopes[self.preamble]
 		self.list_symbol = preamble_scope['list']
+		self.order_symbol = preamble_scope['order']
 		for path in program.module_sequence:
 			self.each_module.append(register(preamble_scope, path))
 

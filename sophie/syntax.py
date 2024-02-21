@@ -421,12 +421,21 @@ def absurdAlternative(pattern:Nom, _head:Nom, absurdity:Absurdity):
 class Subject(Term):
 	""" Within a match-case, a name must reach a different symbol with the particular subtype """
 	expr: ValExpr
-	def __init__(self, expr: ValExpr, nom: Nom):
-		super().__init__(nom)
+	def __init__(self, expr: ValExpr, alias: Optional[Nom]):
+		super().__init__(alias or _implicit_nom(expr))
 		self.expr = expr
 
-def simple_subject(nom:Nom):
-	return Subject(Lookup(PlainReference(nom)), nom)
+def _implicit_nom(expr: ValExpr):
+	if isinstance(expr, Lookup) and isinstance(expr.ref, PlainReference):
+		return expr.ref.nom
+	else:
+		return Nom(_gensym(), expr.head())
+
+_gs_count = 0
+def _gensym():
+	global _gs_count
+	_gs_count += 1
+	return "#gs:"+str(_gs_count)
 
 class MatchExpr(ValExpr):
 	subject:Subject  # Symbol in scope within alternative expressions; contains the value of interest

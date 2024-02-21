@@ -191,52 +191,16 @@ _literal_type_map : dict[type, OpaqueType] = {
 	float: primitive.literal_number,
 }
 
-BINARY_TYPES = {}
-UNARY_TYPES = {}
-
 def _arrow_of(typ: SophieType, arity: int) -> ArrowType:
 	assert arity > 0
 	product = ProductType((typ,) * arity).exemplar()
 	return ArrowType(product, typ).exemplar()
 
+def _binop_type(src, dst):
+	pair = ProductType((src, src)).exemplar()
+	return ArrowType(pair, dst).exemplar()
+
 logical_shortcut = _arrow_of(primitive.literal_flag, 2)
-
-def _init():
-	def relop_type(case):
-		pair = ProductType((case, case)).exemplar()
-		return ArrowType(pair, primitive.literal_flag).exemplar()
-	
-	math_op = _arrow_of(primitive.literal_number, 2)
-	
-	for glyph in '^ * / DIV MOD + -'.split():
-		BINARY_TYPES[glyph] = AdHocType(glyph, 2)
-		BINARY_TYPES[glyph].cases.append(math_op)
-	
-	numeric = relop_type(primitive.literal_number)
-	stringy = relop_type(primitive.literal_string)
-	flagged = relop_type(primitive.literal_flag)
-	
-	def eq(op):
-		rel(op)
-		BINARY_TYPES[op].cases.append(flagged)
-	
-	def rel(op):
-		BINARY_TYPES[op] = AdHocType(op, 2)
-		BINARY_TYPES[op].cases.append(numeric)
-		BINARY_TYPES[op].cases.append(stringy)
-	
-	eq("==")
-	eq("!=")
-	rel("<=")
-	rel("<")
-	rel(">=")
-	rel(">")
-	
-	UNARY_TYPES['-'] = AdHocType("-", 1)
-	UNARY_TYPES["-"].cases.append(_arrow_of(primitive.literal_number, 1))
-	UNARY_TYPES["NOT"] = _arrow_of(primitive.literal_flag, 1)
-
-_init()
 
 class ManifestBuilder(Visitor):
 	"""Converts the syntax of manifest types into corresponding type-calculus objects."""
@@ -603,20 +567,65 @@ class DeductionEngine(Visitor):
 	def __init__(self, roadmap:RoadMap, report:diagnostics.Report):
 		# self._trace_depth = 0
 		self._report = report  # .on_error("Checking Types")
-		self._types = { ot.symbol: ot for ot in _literal_type_map.values() }
-		self._types[primitive.literal_act.symbol]  = primitive.literal_act
+		self._types = {}
+		self._unary_types = {}
+		self._binary_types = {}
 		self._constructors : dict[syntax.Symbol, SophieType] = {}
 		self._ffi : dict[syntax.FFI_Alias, SophieType] = {}
+		self._udf = {}
 		self._memo = {}
 		self._recursion = {}
 		self._deps_pass = DependencyPass()
 		self._list_symbol = roadmap.list_symbol
-		self._udf = {}
+		self._order_type = SumType(roadmap.order_symbol, []).exemplar()
+		self._init_types()
 		self._root = RootFrame()
 		self.visit_Module(roadmap.preamble)
 		for module in roadmap.each_module:
 			self.visit_Module(module)
 	
+	def _init_types(self):
+		
+		for ot in [primitive.literal_act, *_literal_type_map.values()]:
+			self._types[ot.symbol] = ot
+		
+		def relop_type(src):
+			return _binop_type(src, primitive.literal_flag)
+		
+		math_op = _arrow_of(primitive.literal_number, 2)
+		
+		for glyph in '^ * / DIV MOD + -'.split():
+			self._binary_types[glyph] = AdHocType(glyph, 2)
+			self._binary_types[glyph].cases.append(math_op)
+		
+		numeric = relop_type(primitive.literal_number)
+		stringy = relop_type(primitive.literal_string)
+		flagged = relop_type(primitive.literal_flag)
+		
+		def eq(op):
+			rel(op)
+			self._binary_types[op].cases.append(flagged)
+		
+		def rel(op):
+			self._binary_types[op] = AdHocType(op, 2)
+			self._binary_types[op].cases.append(numeric)
+			self._binary_types[op].cases.append(stringy)
+		
+		eq("==")
+		eq("!=")
+		rel("<=")
+		rel("<")
+		rel(">=")
+		rel(">")
+		
+		self._binary_types['<=>'] = spaceship = AdHocType('<=>', 2)
+		for ot in (primitive.literal_number, primitive.literal_string):
+			spaceship.cases.append(_binop_type(ot, self._order_type))
+		
+		self._unary_types['-'] = AdHocType("-", 1)
+		self._unary_types["-"].cases.append(_arrow_of(primitive.literal_number, 1))
+		self._unary_types["NOT"] = _arrow_of(primitive.literal_flag, 1)
+
 	def visit_Module(self, module:syntax.Module):
 		self._report.info("Type-Check", module.source_path)
 		self._deps_pass.visit_Module(module)
@@ -824,13 +833,13 @@ class DeductionEngine(Visitor):
 		return self._call_site(site, fn_type, site.args, env)
 	
 	def visit_BinExp(self, expr:syntax.BinExp, env:TYPE_ENV) -> SophieType:
-		return self._call_site(expr, BINARY_TYPES[expr.op.text], (expr.lhs, expr.rhs), env)
+		return self._call_site(expr, self._binary_types[expr.op.text], (expr.lhs, expr.rhs), env)
 	
 	def visit_ShortCutExp(self, expr:syntax.ShortCutExp, env:TYPE_ENV) -> SophieType:
 		return self._call_site(expr, logical_shortcut, (expr.lhs, expr.rhs), env)
 	
 	def visit_UnaryExp(self, expr: syntax.UnaryExp, env:TYPE_ENV) -> SophieType:
-		return self._call_site(expr, UNARY_TYPES[expr.op.text], (expr.arg,), env)
+		return self._call_site(expr, self._unary_types[expr.op.text], (expr.arg,), env)
 		
 	def visit_Lookup(self, lu:syntax.Lookup, env:TYPE_ENV) -> SophieType:
 		target = lu.ref.dfn
