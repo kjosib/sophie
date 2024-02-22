@@ -140,6 +140,18 @@ void perform() {
 	} else crashAndBurn("Can't perform a %s action.", valKind(TOP));
 }
 
+static Value compare_numbers(double lhs, double rhs) {
+	if (lhs < rhs) return ENUM_VAL(LESS);
+	if (lhs == rhs) return ENUM_VAL(SAME);
+	if (lhs > rhs) return ENUM_VAL(MORE);
+	// At this point, NaN is involved.
+	// Arbitrarily put them all in an equivalence class above infinity.
+	// This isn't what IEEE says, but it will probably be less astonishing most of the time.
+	if (!isnan(lhs)) return ENUM_VAL(LESS);
+	if (!isnan(rhs)) return ENUM_VAL(MORE);
+	return ENUM_VAL(SAME);
+}
+
 #define NEXT goto dispatch
 #define READ_BYTE() (*vpc++)
 #define LEAP() do { vpc += word_at(vpc); } while (0)
@@ -237,6 +249,14 @@ dispatch:
 				assert(IS_GC_ABLE(TOP));
 				AS_GC(SND)->kind->compare();
 				TOP = BOOL_VAL(AS_ENUM(TOP) == LESS);
+			}
+		NEXT;
+		case OP_CMP:
+			if (IS_NUMBER(SND)) merge(compare_numbers(AS_NUMBER(SND), num(TOP)));
+			else {
+				assert(IS_GC_ABLE(SND));
+				assert(IS_GC_ABLE(TOP));
+				AS_GC(SND)->kind->compare();
 			}
 		NEXT;
 		case OP_POWER: merge(NUMBER_VAL(pow(num(SND), num(TOP)))); NEXT;
