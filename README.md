@@ -62,6 +62,8 @@ then you can install the Sophie language extension directly from there.
 
 ## Current Status
 
+There is now a [change log](https://github.com/kjosib/sophie/tree/main/CHANGELOG.md).
+
 Some things are going well:
 
 * A native-code [Virtual-Machine](https://github.com/kjosib/sophie/tree/main/vm) can run Sophie code at a respectable speed.
