@@ -1,4 +1,5 @@
 ﻿#include <stdarg.h>
+#include <math.h>
 #include "common.h"
 #include "prep.h"
 #include "chacha.h"
@@ -56,6 +57,7 @@ int main(int argc, const char *argv[]) {
 		fprintf(stderr, "ChaCha20 Block: %d\n", (int)sizeof(ChaCha_Block));
 		chacha_test_quarter_round();
 		chacha_test_make_noise();
+		fprintf(stderr, "Inf == Inf == %d\n", (HUGE_VAL == HUGE_VAL));
 		exit(64);
 	}
 }
