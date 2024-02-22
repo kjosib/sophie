@@ -1665,3 +1665,22 @@ Both took just about exactly five seconds for the 39th Fibonacci number.
 A half-decent demand analysis would automatically infer that the parameter must be strict.
 That should yield a significant speed boost for the language overall.
 Maybe that will be a project for later this month.
+
+21 February 2024
+----------------
+
+There needs to be a ``CMP`` instruction to handle the "spaceship" comparison operator.
+I will eventually also want a ``CMP_EXEC`` to support tail-recursive overloads.
+I'll go ahead and add both at once, but save actual overloading support for another time.
+
+Also, I got a wild hair to replace every mention of ``NIL`` with ``UNSET`` in the C code.
+It's a bit more clear, I think.
+
+*Observation:* This pattern of special tail-recursive instructions has me thinking.
+This idea probably has no practical benefit in the moment,
+but it might point the way to something:
+What if all calls had exec-like behavior, but there were also a "push-frame" instruction?
+Then tail-recursion would be the standard case. However, you'd still need to move
+arguments to their proper place in an activation record, so you'd get a "shift-stack" instruction.
+With that, ``RETURN`` could simplify to only pop an execution context.
+
