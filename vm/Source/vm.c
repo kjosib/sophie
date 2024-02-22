@@ -35,7 +35,7 @@ static void resetStack() {
 void vm_init() {
 	resetStack();
 	initTable(&vm.strings);
-	vm.cons = vm.nil = vm.maybe_this = vm.maybe_nope = NIL_VAL;
+	vm.cons = vm.nil = vm.maybe_this = vm.maybe_nope = UNSET_VAL;
 	gc_install_roots(grey_the_vm_roots);
 }
 
@@ -135,7 +135,7 @@ void perform() {
 		// Either way, the proper response is to enqueue the thing.
 		enqueue_message(pop());
 	}
-	else if (IS_NIL(TOP)) {
+	else if (IS_UNSET(TOP)) {
 		// Overloaded here to mean the empty action
 	} else crashAndBurn("Can't perform a %s action.", valKind(TOP));
 }
@@ -397,7 +397,7 @@ dispatch:
 			NEXT;
 		case OP_PERFORM_EXEC:
 			switch (INDICATOR(TOP)) {
-			case IND_NIL: YIELD(NIL_VAL);
+			case IND_UNSET: YIELD(UNSET_VAL);
 			case IND_CLOSURE:
 			{
 				closure = AS_CLOSURE(pop());
@@ -407,12 +407,12 @@ dispatch:
 			}
 			case IND_GC:
 				enqueue_message(TOP);
-				YIELD(NIL_VAL);
+				YIELD(UNSET_VAL);
 			default:
 				crashAndBurn("Can't yet handle a %s action.", valKind(TOP));
 			}
 		case OP_SKIP:
-			push(NIL_VAL);  // Something that will get treated as an empty action.
+			push(UNSET_VAL);  // Something that will get treated as an empty action.
 			NEXT;
 		case OP_CAST:
 			make_actor_from_template();

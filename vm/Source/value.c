@@ -5,7 +5,7 @@ DEFINE_VECTOR_APPEND(ValueArray, Value)
 
 void print_simply(Value value) {
 	if (IS_NUMBER(value)) printf(NUMBER_FORMAT, AS_NUMBER(value));
-	else if (IS_NIL(value)) printf("nil");
+	else if (IS_UNSET(value)) printf("nil");
 	else if (IS_ENUM(value)) printf("<enum: %d>", AS_ENUM(value));
 	else if (IS_PTR(value)) printf("<ptr: %p>", AS_PTR(value));
 	else {
@@ -36,7 +36,7 @@ void darkenValueArray(ValueArray *vec) {
 
 char *valKind(Value value) {
 	if (IS_NUMBER(value)) return "number";
-	if (IS_NIL(value)) return "the formless void";
+	if (IS_UNSET(value)) return "the formless void";
 	if (IS_ENUM(value)) return "enumerated constant";
 	if (IS_PTR(value)) return "opaque pointer";
 	if (IS_CLOSURE(value)) return "closure";

@@ -22,7 +22,11 @@ Eventually I might enforce a consistent style. But for now, there are bigger fis
 #include <stddef.h>
 #include <stdint.h>
 
-typedef union Value Value;
+typedef union {
+	uint64_t bits;
+	double number;
+	void *hex;  // This case only exists to make the debugger provide a hexadecimal read-out.
+} Value;
 
 typedef enum { // written to match the standard preamble's order type
 	LESS = 0,
@@ -113,12 +117,6 @@ void *reallocate(void *pointer, size_t newSize);
 
 #define NUMBER_FORMAT "%.17g"
 
-union Value {
-	uint64_t bits;
-	double number;
-	void *hex;  // This case only exists to make the debugger provide a hexadecimal read-out.
-};
-
 #define SHIFT(x) x ## 000000000000
 
 #define BOX_BITS SHIFT(0x7ff4)
@@ -127,7 +125,7 @@ union Value {
 #define PAYLOAD_BITS (SHIFT(0x1)-1)
 #define IS_NUMBER(v) (((v).bits & BOX_BITS) != BOX_BITS)  // Meaning "double-precision"
 #define INDICATOR(v) ((v).bits & SHIFT(0xffff))
-#define IND_NIL BOX_BITS            // Not the same as Sophie's nil.
+#define IND_UNSET BOX_BITS          // Not the same as Sophie's nil.
 #define IND_ENUM SHIFT(0x7ff5)      // Overload for runes, booleans, etc.
 #define IND_PTR SHIFT(0x7ff6)       // Non-collectable opaque pointer.
 #define IND_GC SHIFT(0xfff4)        // Pointer to Garbage-Collected Heap for this and subsequent tags.
@@ -135,7 +133,7 @@ union Value {
 #define IND_THUNK SHIFT(0xfff6)     // As long as the VM is recursive, it must check for these.
 #define IND_GLOBAL SHIFT(0xfff7)    // Global reference; used only during compiling.
 
-#define IS_NIL(value)     ((value).bits == IND_NIL)
+#define IS_UNSET(value)   ((value).bits == IND_UNSET)
 #define IS_ENUM(value)    (INDICATOR(value) == IND_ENUM)
 #define IS_PTR(value)     (INDICATOR(value) == IND_PTR)
 #define IS_GC_ABLE(value) (((value).bits & IND_GC) == IND_GC)
@@ -152,7 +150,7 @@ union Value {
 #define AS_PTR(value)     ((void *)PAYLOAD(value))
 #define AS_GC(value)      ((GC *)PAYLOAD(value))
 
-#define NIL_VAL	            PACK(IND_NIL, 0)
+#define UNSET_VAL	        PACK(IND_UNSET, 0)
 #define BOOL_VAL(value)     PACK(IND_ENUM, ((bool)(value)))
 #define NUMBER_VAL(value)   ((Value){.number=value})
 #define ENUM_VAL(value)     PACK(IND_ENUM, value)
