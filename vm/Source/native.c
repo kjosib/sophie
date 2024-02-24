@@ -57,6 +57,12 @@ static Value len_native(Value *args) {
 	return NUMBER_VAL((double)(str->length));
 }
 
+static Value ord_native(Value *args) {
+	String *str = AS_STRING(force(args[0]));
+	if (str->length) return NUMBER_VAL((double)(str->text[0]));
+	else return NUMBER_VAL(-1);
+}
+
 static Value chr_native(Value *args) {
 	args[0] = force(args[0]);
 	String *dst = new_String(1);
@@ -321,6 +327,7 @@ static void install_strings() {
 	create_native_function("chr", 1, chr_native);
 	create_native_function("str", 1, str_native);
 	create_native_function("len", 1, len_native);
+	create_native_function("ord", 1, ord_native);
 	create_native_function("mid", 3, mid_native);
 	create_native_function("join", 1, join_native);
 }
