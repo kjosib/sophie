@@ -1,0 +1,129 @@
+import:
+"common"(split_on_whitespace);
+
+type:
+game is (hand:list[number], bid:number, class:number);
+
+assume:
+hand:list[number];
+card:string;
+e:entry;
+
+define:
+
+lexical_comparison(xs, ys) = case xs of
+	nil -> case ys of nil -> same; cons -> less; esac;
+	cons -> case ys of nil -> more; cons -> lex(xs.head <=> ys.head, lexical_comparison(xs.tail, ys.tail)); esac;
+esac;
+
+# I'm debating whether this concept should be promoted to an operator.
+# No particular glyph makes obvious sense for it,
+# but it's pretty clearly a candidate for an associative-commutatitive syntax.
+# There may also be a case for a VM super-instruction for this whole concept.
+# In any case, this will serve for now.
+lex(primary:order, break_ties:order) = case primary of same -> break_ties; else primary; esac;
+
+# Now for something specific to the actual puzzle:
+# How shall we identify the type of a hand?
+# The rules in this game are about multiplicity.
+# The 2-3 tree can act as a histogram with the right tweaks.
+# Alternately, I could just make a simple entry list.
+
+# A grouping mechanic must take entry objects as input, and work on a tree.
+# It also requires a unary and a binary operation.
+
+group_by(unary, binary, xs) = reduce(fn, nil, xs) where
+	fn(g, e) = case g of
+		nil -> [entry(e.key, unary(e.value))];
+		cons -> cons(entry(e.key, binary(g.head.value, e.value)), g.tail) if e.key == g.head.key else cons(g.head, fn(g.tail, e));
+	esac;
+end group_by;
+
+# A histogram function falls right out:
+
+histogram(xs) = group_by(id, add, map(one, xs)) where add(x,y) = x+y; one(x) = entry(x, 1); end histogram;
+
+# Hand-type depends strongly on this histogram.
+# The problem is we need to sort it by value.
+# There's a classic fake-quicksort that makes the rounds of lazy-functional circles.
+# This is not a real quick-sort by any means, but it will serve the purpose for small-enough data sets.
+# (At some point, a proper merge-sort is planned.)
+# With a few extra trimmings, it goes something like this:
+
+sort(in_order, xs) = case xs of
+	nil -> nil;
+	cons -> flat[prefix, [xs.head], suffix] where
+		prefix = sort(in_order, filter(before, xs.tail));
+		suffix = sort(in_order, filter(non(before), xs.tail));
+		before(x) = in_order(x, xs.head);
+	end cons;
+esac;
+
+evaluate(e) = e.key * e.value.bid;
+
+# Now to address the puzzle...
+
+weakest_first(x,y) = case lex(x.class <=> y.class, lexical_comparison(x.hand, y.hand)) of
+	less -> yes;
+	else no;
+esac;
+
+sample_games = [
+	"32T3K 765",
+	"T55J5 684",
+	"KK677 28",
+	"KTJJT 220",
+	"QQQJA 483",
+];
+
+goal(card_rank, organize, lines) = sum(map(evaluate, count_off(1, read_puzzle))) where
+	read_puzzle = sort(weakest_first, map(interpret, lines));
+	interpret(line) = game(hand, surely(val(bid)), classify(organize(hand))) where
+		hand = map(card_rank, each_chr(cards));
+		cards = surely(index(0, parts));
+		bid = surely(index(1, parts));
+		parts = split_on_whitespace(line);
+	end interpret;
+end goal;
+
+
+# To classify hands, let's look at the descending sort of the values of the histogram:
+
+organize(hand) = sort(descending, map(dot_value, histogram(hand)));
+
+classify(organized) = case organized as top of
+	nil -> HIGH_CARD;
+	cons -> case
+		when top.head == 5 then FIVE_OF_KIND;
+		when top.head == 4 then FOUR_OF_KIND;
+		when top.head == 3 then case top.tail as next of
+			nil -> THREE_OF_KIND;
+			cons -> FULL_HOUSE if next.head == 2 else THREE_OF_KIND;
+		esac;
+		when top.head == 2 then case top.tail as next of
+			nil -> ONE_PAIR;
+			cons -> TWO_PAIR if next.head == 2 else ONE_PAIR;
+		esac;
+		else HIGH_CARD;
+	esac;
+esac;
+
+# There's surely a way to look at that as a finite-state machine. Anyway, some details:
+descending(a,b) = a>b;
+dot_value(e) = e.value;
+
+HIGH_CARD = 0;
+ONE_PAIR = 1;
+TWO_PAIR = 2;
+THREE_OF_KIND = 3;
+FULL_HOUSE = 4;
+FOUR_OF_KIND = 5;
+FIVE_OF_KIND = 6;
+
+# It's time I started factoring out procedural commonalities too:
+
+run(rank, arrange) = filesystem!read_lines(path, !solve) where
+	path = "/playground/advent of code/2023-d7";
+	solve(lines) = console ! echo[str(int(goal(rank, arrange, lines))), EOL];
+end run;
+
