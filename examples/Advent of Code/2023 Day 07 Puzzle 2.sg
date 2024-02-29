@@ -1,0 +1,44 @@
+# Puzzle 2 is largely about refatoring the first solution
+# to substitute in some alternative logic
+# for determining the card valuation and hand classification.
+# Everything else is basically the same.
+
+import:
+"common"(split_on_whitespace);
+"2023 Day 07 common"(histogram, sort, goal, sample_games, organize, run);
+
+assume:
+hand:list[number];
+card:string;
+e:entry;
+
+
+define:
+
+# The card-rank function is adjusted to make "J" the lowest-ranked card:
+card_rank(card) = ord(card) - ord('0') if ord(card)<=ord('9') else find_index(10, card, faces);
+find_index(strict offset, needle, haystack) = case haystack of
+	nil -> 0;
+	cons -> offset if haystack.head == needle else find_index(offset+1, needle, haystack.tail);
+esac;
+faces = each_chr("TQKA");
+
+
+# To classify the hand in light of wild cards, first organize the
+# tame (i.e. non-wild) cards and then juice the biggest group
+# before yielding to the rest of the classification logic.
+
+wild_organize(hand) = improve(nr_wild, organize(tame_cards)) where
+	tame_cards = filter(non(is_wild), hand);
+	is_wild(card:number) = card == 0;
+	nr_wild = length(filter(is_wild, hand));
+end wild_organize;
+
+improve(nr_wild, hand) = case hand of
+	nil -> [nr_wild];
+	cons -> cons(nr_wild+hand.head, hand.tail);
+esac;
+
+begin:
+goal(card_rank, wild_organize, sample_games);
+run(card_rank, wild_organize);
