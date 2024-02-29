@@ -116,6 +116,7 @@ define:
 id(x) = x;
 non(p) = q where q(x) = not p(x); end non;
 compose(f,g) = h where h(x) = f(g(x)); end compose;
+flip(f) = g where g(a,b) = f(b,a); end flip;
 
 # List things:
 
@@ -196,6 +197,10 @@ count_off(n, xs) = case xs of
 	nil -> nil;
 	cons -> cons(entry(n, xs.head), count_off(n+1, xs.tail));
 esac;
+
+reverse(xs) = reduce(snoc, nil, xs);
+snoc(tail, head) = cons(head, tail);
+
 
 # Maybe Things
 
