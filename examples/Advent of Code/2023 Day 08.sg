@@ -1,0 +1,84 @@
+# This puzzle is apparently about a simple graph algorithm.
+# The input comes in two parts: A set of left/right instructions
+# and a set of node definitions, which consist of a node-label
+# and a pair of target-node labels.
+# The goal is to find the number of steps from start to finish,
+# where "start" and "finish" mean "AAA" and "ZZZ" respectively.
+
+# The 2-3-tree library is the key to solving this.
+
+# I have two observations coming out of this:
+
+# 1. I went down several garden paths trying to get too clever before writing the actual "garden_path" function.
+#    Unfoldings are not yet completely intuitive to me. The approach works,
+#    but produces a pointless list I don't actually care about except for its length.
+#    On the other hand, "how many iterations until X" is a fairly unusual problem,
+#    and a proper optimizer would probably remove the allocation.
+
+# 2. I spent hours frustrated by what I thought was a performance problem when it was really a wrong input file name.
+#    The best thing here is probably to work in a different order. Instead of conjuring up a magical result after
+#    careful planning and bottom-up or top-down coding, I need to adopt a "middle-out" appraoch to see partial
+#    solutions actually running as I go along. These visual spot-checks will find problems before they can hide.
+
+
+import:
+	sys."tree" (tree_of, search, in_order);
+	"common" (filter_maybe, head_or);
+
+type:
+	node is (left:string, right:string);
+	state is (turns:list[flag], here:string);
+
+define:
+
+parse_line(line) : entry[string, node]
+= entry(label, node(on_left, on_right)) where
+	label = left(line, 3);
+	on_left = mid(line, 7,3);
+	on_right = mid(line, 12, 3);
+end parse_line;
+
+parse_map(lines) = tree_of(map(parse_line, lines));
+
+
+# Let's consider the guide as an (infinite) list of "is-left" flags:
+as_guide(line) = cycle(filter_maybe(map(parse_guide, each_chr(line))));
+parse_guide(c) = case
+	when c == "R" then this(no);
+	when c == "L" then this(yes);
+	else nope;
+esac;
+
+
+# Suppose there's an unfold operation and we can take the length until it hits a sentinel.
+garden_path(guide, map) = unfold(advance, initial_state) where
+	initial_state = state(as_guide(guide), "AAA");
+	advance(s:state) = case s.turns as T of
+		nil -> absurd;
+		cons -> case
+			when s.here == 'ZZZ' then done;
+			else step(s.here, state(T.tail, place.left if T.head else place.right));
+		esac;
+	esac where
+		place = surely(search(map, s.here));
+	end advance;
+end garden_path;
+
+# Let's see how things are going so far:
+
+sample_guide = "LLR";
+sample_map = parse_map [
+	"AAA = (BBB, BBB)",
+	"BBB = (AAA, ZZZ)",
+	"ZZZ = (ZZZ, ZZZ)",
+];
+
+# Now to parse the actual file:
+solution(lines) = length(garden_path(head_or(lines, ""), parse_map(drop(2, lines))));
+solve(lines) = console!echo[str(solution(lines)), EOL];
+
+begin:
+length(garden_path(sample_guide, sample_map));
+
+filesystem!read_lines("/playground/advent of code/2023-d8", !solve);
+
