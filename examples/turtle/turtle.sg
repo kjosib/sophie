@@ -22,15 +22,7 @@ type:
 define:
     repeat(n, portion) = nil if n < 1 else cat(portion, repeat(n-1, portion));
     range(a, b) = nil if a > b else cons(a, range(a+1, b));
-    cycle(xs) = cat(xs, cycle(xs));  # You can have an infinite list as long as you don't try to use the whole thing.
-    map2(fn, xs, ys) = case xs of  # Work-around for lack of proper zip/apply forms.
-        nil -> nil;
-        cons -> case ys of
-            nil -> nil;
-            cons -> cons(fn(xs.head, ys.head), map2(fn, xs.tail, ys.tail));
-       esac;
-    esac;
-
+    
     rainbow = ["red", "#DDDD00", "light green", "cyan", "#0000FF", "#FF00FF"];
 
     square(size) = repeat(4, [forward(size), right(90)]);

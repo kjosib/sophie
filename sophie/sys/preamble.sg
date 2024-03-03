@@ -128,6 +128,14 @@ map(fn, xs) = case xs of
 	cons -> cons(fn(xs.head), map(fn, xs.tail));
 esac;
 
+map2(fn, xs, ys) = case xs of  # Alternative to zip/apply forms
+	nil -> nil;
+	cons -> case ys of
+		nil -> nil;
+		cons -> cons(fn(xs.head, ys.head), map2(fn, xs.tail, ys.tail));
+	esac;
+esac;
+
 filter(p, xs) = case xs of
 	nil -> nil;
 	cons -> cons(xs.head, rest) if p(xs.head) else rest where
@@ -201,6 +209,8 @@ esac;
 reverse(xs) = reduce(snoc, nil, xs);
 snoc(tail, head) = cons(head, tail);
 
+# You can have an infinite list as long as you don't try to use the whole thing.
+cycle(xs) = loop where loop = cat(xs,loop); end cycle;  # cat(xs, cycle(xs)) with a sufficiently smart optimizer.
 
 # Maybe Things
 
