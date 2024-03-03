@@ -749,10 +749,10 @@ def write_functions(fns, outer: VMScope):
 def write_one_function(fn: syntax.UserFunction, outer: VMScope):
 	inner = VMFunctionScope(outer, fn.nom.text, is_thunk=not fn.params)
 	inner.emit_preamble(fn.params, MANGLED[fn])
-	write_functions(fn.where, inner)
 	for param in fn.params:
 		if param.is_strict:
 			inner.make_strict(param)
+	write_functions(fn.where, inner)
 	TAIL.visit(fn.expr, inner)
 	inner.emit_epilogue()
 	
