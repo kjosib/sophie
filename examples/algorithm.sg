@@ -11,7 +11,7 @@ define:
         
         grow(tree, letters, n) = case letters of
             nil -> shrink(tree, sequence);
-            cons -> cons(show(tree, letters), grow(assign(tree, letters.head, n), letters.tail, n+1));
+            cons -> cons(show(tree, letters), grow(assign(tree, entry(letters.head, n)), letters.tail, n+1));
         esac;
         
         shrink(tree, letters) = case letters of
