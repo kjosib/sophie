@@ -1,4 +1,8 @@
 #pragma once
+#ifdef _WIN32
+#pragma warning(disable : 4996)  /* Stop irrelevant warning about fopen on MS compilers */
+#endif
+
 
 /*
 
@@ -441,6 +445,8 @@ static inline void merge(Value v) { pop(); TOP = v; }
 static inline void swap() { Value v = TOP; TOP = SND; SND = v; }  // ( a b -- b a )
 static inline void dup() { push(TOP); }  // ( a -- a a )
 static inline void over() { push(SND); }  // ( a b -- a b a )
+
+static inline void snoc() { swap(); push(vm.cons); push(construct_record()); }
 
 void defineGlobal();  // ( value name -- )
 

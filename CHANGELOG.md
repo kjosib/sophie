@@ -2,6 +2,10 @@
 
 Read this to get a general idea of what's new and nontrivial.
 
+## March 2024
+
+* 3 Mar: The VM gets the `filesystem` actor built in, along with both methods.
+
 ## February 2024
 
 * 21 Feb: The `<=>` three-way comparison operator now works in both the tree-walker and the VM.

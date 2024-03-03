@@ -61,9 +61,9 @@ static void displaySomeValues(Value *first, size_t count) {
 static void displayStack(Value *base) {
 	printf(" %s         ", CLOSURE->function->name->text);
 	displaySomeValues(vm.stack, (base - vm.stack));
-	printf("------- ");
+	printf("--|BASE|-- ");
 	displaySomeValues(base, (vm.stackTop - base));
-	printf("---( ");
+	printf("-|TOP|- ( ");
 	displaySomeValues(CLOSURE->captives, CLOSURE->function->nr_captures);
 	printf(")\n");
 }
@@ -393,14 +393,8 @@ dispatch:
 			NEXT;
 		}
 		case OP_SNOC:
-		{
-			swap();
-			// Construct a "cons" in the usual way
-			push(vm.cons);
-			push(construct_record());
-			// And begone
+			snoc();
 			NEXT;
-		}
 		case OP_BIND:
 		{
 			// ( actor -- bound_method )

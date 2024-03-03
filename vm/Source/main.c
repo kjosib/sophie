@@ -4,10 +4,6 @@
 #include "prep.h"
 #include "chacha.h"
 
-#ifdef _WIN32
-#pragma warning(disable : 4996)  /* Stop irrelevant warning about fopen on MS compilers */
-#endif
-
 static char *readFile(const char *path) {
 	FILE *file = fopen(path, "rb");
 	if (file == NULL) crashAndBurn("could not open input file");
