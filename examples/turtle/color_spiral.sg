@@ -10,14 +10,6 @@ define:
 
     range(a, b) = nil if a > b else cons(a, range(a+1, b));
 
-    map2(fn, xs, ys) = case xs of
-        nil -> nil;
-        cons -> case ys of
-            nil -> nil;
-            cons -> cons(fn(xs.head, ys.head), map2(fn, xs.tail, ys.tail));
-       esac;
-    esac;
-
     color_spiral(k, r, cs) = flat(map2(leg, range(1,k), cycle(cs))) where
         leg(x, c) = [color(c), forward(x*2), left(r)];
     end color_spiral;

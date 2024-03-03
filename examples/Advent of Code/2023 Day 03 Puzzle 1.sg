@@ -5,7 +5,7 @@
 
 import:
 "common" (is_digit);
-"2023 Day 03 common" (range_matrix, rolling_combinations, Triple, map2, Range);
+"2023 Day 03 common" (range_matrix, rolling_combinations, Triple, Range);
 
 define:
 

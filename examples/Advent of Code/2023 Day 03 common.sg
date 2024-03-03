@@ -43,12 +43,3 @@ padded(pad, xs) = cons(pad, cat(xs, [pad]));
 
 rolling_combinations(how, xs:list) = map(how, roll3(padded(nil, xs)));
 
-map2(fn, xs, ys) = case xs of
-	nil -> nil;
-	cons -> case ys of
-		nil -> nil;
-		cons -> cons(fn(xs.head, ys.head), map2(fn, xs.tail, ys.tail));
-	esac;
-esac;
-
-
