@@ -31,7 +31,7 @@ static void blacken_closure(Closure *closure) {
 static size_t size_closure(Closure *closure) { return sizeof(Closure) + (sizeof(Value) * closure->function->nr_captures); }
 
 static void display_snapped(Closure *snap) {
-	printf(":");
+	printf("snap:");
 	printValue(SNAP_RESULT(snap));
 }
 

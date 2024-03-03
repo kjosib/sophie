@@ -4,6 +4,8 @@
 #include <math.h>
 #include <time.h>
 
+#include <sys/stat.h>
+
 #include "common.h"
 #include "chacha.h"
 #include "platform_specific.h"
@@ -70,6 +72,15 @@ static Value chr_native(Value *args) {
 	return GC_VAL(intern_String(dst));
 }
 
+static Value slice(Value *argp, size_t left, size_t right) {
+	// Make a portion of a given string.
+	assert(left <= right);
+	size_t size = right - left;
+	String *dst = new_String(size);
+	memcpy(dst->text, AS_STRING(*argp)->text + left, size);
+	return GC_VAL(intern_String(dst));
+}
+
 static Value mid_native(Value *args) {
 	// Force the arguments, which are all needed:
 	for (int i = 0; i < 3; i++) args[i] = force(args[i]);
@@ -119,6 +130,45 @@ static Value str_native(Value *args) {
 	return GC_VAL(intern_String(dst));
 }
 
+static size_t beginning_of_line(char *text, size_t pos) {
+	// Search backwards for a newline.
+	// If one exists, return the index of the character after that newline.
+	// Otherwise, return zero.
+	while (pos) {
+		pos--;
+		if (text[pos] == '\n') return pos + 1;
+	}
+	return 0;
+}
+
+static Value split_lines(Value *args) {
+	// The meat of a function to convert a string into a list of strings
+	// by splitting it after every newline sequence.
+	// The approach is to work with some temp space pushed on the stack.
+
+	// args[0] = the input string.
+
+	// An empty input becomes an empty list.
+	// It's probably easiest to start at the end and work backwards.
+	
+	String *src = AS_STRING(args[0]);
+	size_t right = src->length;
+	if (!right) return vm.nil;
+
+	push(vm.nil);
+
+	size_t left = right;
+	if (src->text[right - 1] != '\n') left++;
+	while (right) {
+		left = beginning_of_line(AS_STRING(args[0])->text, left-1);
+		push(slice(args, left, right));
+		snoc();
+		right = left;
+	}
+
+	return pop();
+}
+
 /***********************************************************************************/
 
 static Value console_echo(Value *args) {
@@ -134,10 +184,6 @@ static Value console_read(Value *args) {
 	/*
 	Read a line of text from the console as a string,
 	and send it as the parameter to a given message.
-
-	Arbitrary-length input is rather a puzzle in C.
-	Short-term, I'll cheat and use a fixed-size buffer with fgets.
-	Later on, perhaps I build a list of chunks.
 	*/
 	static char buffer[1024];
 	fgets(buffer, sizeof(buffer), stdin);
@@ -172,6 +218,49 @@ static Value console_random(Value *args) {
 
 /***********************************************************************************/
 
+static void push_file_contents(const char *path) {
+	// Convenience function to pull the contents of a file (by C name) into a string and push it on the stack.
+	FILE *file = fopen(path, "rb");
+	if (! file) crashAndBurn("Failed to open file: %s", path);
+	struct _stat64 stat;
+	if (-1 == _fstat64(fileno(file), &stat)) crashAndBurn("Failed to stat file: %s", path);
+	String *dst = new_String(stat.st_size);
+	size_t nr_read = fread(&dst->text, sizeof(char), stat.st_size, file);
+	dst->text[nr_read] = 0;  // Just in case of partial read.
+	intern_String(dst);
+	fclose(file);
+	push(GC_VAL(dst));
+}
+
+static Value fs_read_file(Value *args) {
+	/*
+	Attempts to read and send a message containing a file's contents,
+	similar to what console_read does. The difference here is we can
+	as the operating system in advance how big the file is.
+
+	args[0] == self
+	args[1] == the file name
+	args[2] == the parametric message
+	*/
+	push_file_contents(AS_STRING(args[1])->text);
+	push(args[2]);
+	enqueue_message(apply());
+	return UNSET_VAL;
+}
+
+static Value fs_read_lines(Value *args) {
+	/*
+	Similar to read_file, but the message contains a list of strings.
+	*/
+	push_file_contents(AS_STRING(args[1])->text);
+	TOP = split_lines(&TOP);
+	push(args[2]);
+	enqueue_message(apply());
+	return UNSET_VAL;
+}
+
+/***********************************************************************************/
+
 static void display_native(Native *native) { printf("<fn %s>", native->name->text); }
 
 static void blacken_native(Native *native) { darken_in_place(&native->name); }
@@ -179,7 +268,7 @@ static void blacken_native(Native *native) { darken_in_place(&native->name); }
 static size_t size_native(Native *native) { return sizeof(Native); }
 static size_t arity_native(Native *native) { return native->arity; }
 
-static Value call_native() {
+static Value apply_native() {
 	Native *native = AS_NATIVE(pop());
 	Value *slot = vm.stackTop - native->arity;
 	Value result = native->function(slot);
@@ -192,7 +281,7 @@ GC_Kind KIND_Native = {
 	.deeply = display_native,
 	.blacken = blacken_native,
 	.size = size_native,
-	.apply = call_native,
+	.apply = apply_native,
 	.name = "Native Function",
 };
 
@@ -355,9 +444,27 @@ static void install_the_console() {
 	defineGlobal();
 }
 
+static void install_the_filesystem() {
+	// Similar linguistic interface to the console.
+	// Just happens to have some different methods.
+
+	push_C_string("FileSystem");
+	define_actor(0);
+
+	create_native_method("read_file", 3, fs_read_file);
+	create_native_method("read_lines", 3, fs_read_lines);
+
+	push(make_template_from_dfn());
+	make_actor_from_template();
+
+	push_C_string("filesystem");
+	defineGlobal();
+}
+
 void install_native_functions() {
 	create_native_function("clock", 0, clock_native);
 	install_numerics();
 	install_strings();
 	install_the_console();
+	install_the_filesystem();
 }
