@@ -210,7 +210,12 @@ reverse(xs) = reduce(snoc, nil, xs);
 snoc(tail, head) = cons(head, tail);
 
 # You can have an infinite list as long as you don't try to use the whole thing.
-cycle(xs) = loop where loop = cat(xs,loop); end cycle;  # cat(xs, cycle(xs)) with a sufficiently smart optimizer.
+cycle(xs) = case xs of
+	nil -> absurd "infinite regress";  # However, an empty cycle is a bug.
+	cons -> loop;  # Maybe Sophie will detect these automatically some day?
+esac where
+	loop = cat(xs,loop);   # cat(xs, cycle(xs)) with a sufficiently smart optimizer.
+end cycle;
 
 # Maybe Things
 
