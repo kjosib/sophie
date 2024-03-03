@@ -46,3 +46,13 @@ pair_off(fn, xs) = case xs of
 	esac;
 esac;
 
+filter_maybe(xs:list[maybe[?x]]):list[?x] = case xs of
+    nil -> nil;
+    cons -> case xs.head as head of
+        nope -> rest;
+        this -> cons(head.item, rest);
+    esac where
+        rest = filter_maybe(xs.tail);
+    end cons;
+esac;
+

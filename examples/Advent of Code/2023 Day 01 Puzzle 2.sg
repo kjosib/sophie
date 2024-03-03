@@ -7,6 +7,9 @@
 # I'm leaving the type annotations in place because they did
 # help narrow down a problem with ill-typed code.
 
+import:
+"common" (filter_maybe);
+
 define:
 
 solve_puzzle(lines) = console ! echo [str(sum(map(value_for, lines)))];
@@ -14,16 +17,6 @@ solve_puzzle(lines) = console ! echo [str(sum(map(value_for, lines)))];
 value_for(line) = case filter_maybe(scan(line)) as d1 of
     nil -> 0;
     cons -> 10*d1.head.snd + last(d1.head, d1.tail).snd;
-esac;
-
-filter_maybe(xs:list[maybe[?x]]):list[?x] = case xs of
-    nil -> nil;
-    cons -> case xs.head as head of
-        nope -> rest;
-        this -> cons(head.item, rest);
-    esac where
-        rest = filter_maybe(xs.tail);
-    end cons;
 esac;
 
 scan(line) = map(hit, iota(0, len(line))) where
