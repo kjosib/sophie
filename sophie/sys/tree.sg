@@ -14,7 +14,7 @@ export:
 	Tree, Removed,
 	
 	search, in_order, assign, new_tree, is_empty,
-	first, last, shift, delete,
+	first, last, shift, delete, tree_of
 
 type:
 
@@ -45,6 +45,8 @@ type:
 	esac;
 	
 define:
+
+	tree_of(entries:list[entry]) = reduce(assign, new_tree, entries);
 
 	new_tree:Tree = Leaf;
 	
@@ -77,19 +79,19 @@ define:
 		Three -> cat(in_order(T.left), cons(T.p1, cat(in_order(T.mid), cons(T.p2, in_order(T.right)))));
 	esac;
 
-	assign(tree:Tree, key, value) = case downward(tree) as x of
+	assign(tree:Tree, new_entry:entry) = case downward(tree) as x of
 		ok -> x.tree;
 		spill -> Two(x.left, x.pivot, x.right);
 	esac where
-		new_item = entry(key, value);
+		key = new_entry.key;
 		downward(T) : puddle = case T of
-			Leaf -> spill(Leaf, new_item, Leaf);
+			Leaf -> spill(Leaf, new_entry, Leaf);
 			Two -> case key <=> T.pivot.key of
 				less -> case downward(T.left) as sub of
 					ok -> ok(Two(sub.tree, T.pivot, T.right));
 					spill -> ok(Three(sub.left, sub.pivot, sub.right, T.pivot, T.right));
 				esac;
-				same -> ok(Two(T.left, new_item, T.right));
+				same -> ok(Two(T.left, new_entry, T.right));
 				more -> case downward(T.right) as sub of
 					ok -> ok(Two(T.left, T.pivot, sub.tree));
 					spill -> ok(Three(T.left, T.pivot, sub.left, sub.pivot, sub.right));
@@ -100,13 +102,13 @@ define:
 					ok -> ok(Three(sub.tree, T.p1, T.mid, T.p2, T.right));
 					spill -> spill(Two(sub.left, sub.pivot, sub.right), T.p1, Two(T.mid, T.p2, T.right));
 				esac;
-				same -> ok(Three(T.left, new_item, T.mid, T.p2, T.right));
+				same -> ok(Three(T.left, new_entry, T.mid, T.p2, T.right));
 				more -> case key <=> T.p2.key of
 					less -> case downward(T.mid) as sub of
 						ok -> ok(Three(T.left, T.p1, sub.tree, T.p2, T.right));
 						spill -> spill(Two(T.left, T.p1, sub.left), sub.pivot, Two(sub.right, T.p2, T.right));
 					esac;
-					same -> ok(Three(T.left, T.p1, T.mid, new_item, T.right));
+					same -> ok(Three(T.left, T.p1, T.mid, new_entry, T.right));
 					more -> case downward(T.right) as sub of
 						ok -> ok(Three(T.left, T.p1, T.mid, T.p2, sub.tree));
 						spill -> spill(Two(T.left, T.p1, T.mid), T.p2, Two(sub.left, sub.pivot, sub.right));
