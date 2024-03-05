@@ -34,6 +34,7 @@ foreign "sophie.adapters.yarn" where
 	val : (string) -> maybe[number];
 	join: (list[string]) -> string;
 	is_match_at: (number, string, string) -> flag;
+	trim, ltrim, rtrim : (string) -> string;
 end;
 
 foreign "operator" where
@@ -106,7 +107,7 @@ assume:
 	xs, ys: list[?];
 	xss: list[list[?]];
 	p, q: predicate;
-	n: number;
+	n, idx: number;
 	s, needle, haystack: string;
 
 define:
@@ -188,12 +189,13 @@ drop_while(p, xs) = case xs of
 	cons -> drop_while(p, xs.tail) if p(xs.head) else xs;
 esac;
 
-length(xs) = reduce(fn, 0, xs) where fn(a,_) = a+1; end length;
+length_at(strict n, xs) = case xs of nil -> n; cons -> length_at(n+1, xs.tail); esac;
 
-index(n, xs) = case drop(n, xs) as e of
-	nil -> nope;
-	cons -> this(e.head);
-esac;
+length(xs) = length_at(0, xs);
+
+index(n, xs) = head(drop(n, xs));
+
+head(xs) = case xs of nil -> nope; cons -> this(xs.head); esac;
 
 iota(start, stop) : list[number]
 	# Count off a half-open range, stepping by one.
@@ -201,7 +203,7 @@ iota(start, stop) : list[number]
 	# You can also start from an offset: iota(2.5, 4) = [2.5, 3.5]
 = nil if start >= stop else cons(start, iota(start+1, stop));
 
-count_off(n, xs) = case xs of
+count_off(strict n, xs) = case xs of
 	nil -> nil;
 	cons -> cons(entry(n, xs.head), count_off(n+1, xs.tail));
 esac;
@@ -217,6 +219,8 @@ esac where
 	loop = cat(xs,loop);   # cat(xs, cycle(xs)) with a sufficiently smart optimizer.
 end cycle;
 
+iterated(fn, x) = inner(x) where inner(x) = cons(x, inner(fn(x))); end iterated;
+
 # Maybe Things
 
 either(x:maybe[?t], y:?t) = case x of
@@ -229,18 +233,27 @@ surely(must:maybe[?x]) : ?x = case must of
 	this -> must.item;
 esac;
 
+exists(x:maybe):flag = case x of nope -> no; this -> yes; esac;
+
 # Math Things
+
+add(a, b) = a + b;
+mul(a, b) = a * b;
+square(x) = x*x;
 
 max(a,b) = a if a >= b else b;
 min(a,b) = a if a <= b else b;
 
-sum(xs) = reduce(add, 0, xs) where add(a,b) = a+b; end sum;
-product(xs) = reduce(mul, 1, xs) where mul(a,b) = a*b; end product;
-hypot(xs) = sqrt(sum(map(square, xs))) where square(x) = x*x; end hypot;
+sum(xs) = reduce(add, 0, xs);
+product(xs) = reduce(mul, 1, xs);
+hypot(xs) = sqrt(sum(map(square, xs)));
+sum_product(xs, ys) = sum(map2(mul, xs, ys));
 
 log_base(n, base) = log(n) / log(base);
 
 # String Things
+
+EOL = chr(10);
 
 left(s, size) = mid(s, 0, size);
 right(s, size) = mid(s, len(s)-size, size);
@@ -259,8 +272,6 @@ each_chr(s) = from(0) where
 	from(n) = nil if n >= len(s) else cons(mid(s,n,1), from(n+1));
 end each_chr;
 
-EOL = chr(10);
-
 find_string(needle, haystack):maybe[number] = find_string_at(0, needle, haystack);
 
 find_string_at(offset, needle, haystack) = first(is_match, candidates) where
@@ -277,11 +288,19 @@ replace_first(needle, haystack, with) = case find_string(needle, haystack) as fo
 esac;
 
 replace_all(needle, haystack, with) = join(from(0)) where
-	from(i):list[string] = case find_string_at(i, needle, haystack) as found of
-		nope -> [mid(haystack, i, len(haystack))];
-		this -> cons(mid(haystack, i, found.item-i), cons(with, from(found.item+needle_size)));
+	from(idx):list[string] = case find_string_at(idx, needle, haystack) as found of
+		nope -> [mid(haystack, idx, len(haystack))];
+		this -> cons(mid(haystack, idx, found.item-idx), cons(with, from(found.item+needle_size)));
 	esac;
 	needle_size = max(1, len(needle));
 end replace_all;
+
+# Algorithm things
+
+# Equivalent to first(is_done, iterated(advance, state)), but without consing.
+# (When the optimizer can do that by magic, I might switch to that simpler form.)
+until(is_done, advance, state) = run(state) where
+	run(x) = x if is_done(x) else run(advance(x));
+end until;
 
 end.
