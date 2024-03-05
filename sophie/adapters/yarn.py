@@ -25,3 +25,8 @@ def join(xs):
 
 def is_match_at(offset, needle, haystack):
 	return offset >= 0 and needle == haystack[offset:offset+len(needle)]
+
+trim = str.strip
+ltrim = str.lstrip
+rtrim = str.rstrip
+
