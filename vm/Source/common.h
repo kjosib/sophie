@@ -129,13 +129,13 @@ void *reallocate(void *pointer, size_t newSize);
 #define PAYLOAD_BITS (SHIFT(0x1)-1)
 #define IS_NUMBER(v) (((v).bits & BOX_BITS) != BOX_BITS)  // Meaning "double-precision"
 #define INDICATOR(v) ((v).bits & SHIFT(0xffff))
-#define IND_UNSET BOX_BITS          // Not the same as Sophie's nil.
-#define IND_ENUM SHIFT(0x7ff5)      // Overload for runes, booleans, etc.
-#define IND_PTR SHIFT(0x7ff6)       // Non-collectable opaque pointer.
-#define IND_GC SHIFT(0xfff4)        // Pointer to Garbage-Collected Heap for this and subsequent tags.
-#define IND_CLOSURE SHIFT(0xfff5)   // Pointer to callable; helps with VM to avoid indirections.
-#define IND_THUNK SHIFT(0xfff6)     // As long as the VM is recursive, it must check for these.
-#define IND_GLOBAL SHIFT(0xfff7)    // Global reference; used only during compiling.
+#define IND_UNSET    BOX_BITS       // Not the same as Sophie's nil.
+#define IND_ENUM     SHIFT(0x7ff5)  // Overload for runes, booleans, etc.
+#define IND_PTR      SHIFT(0x7ff6)  // Non-collectable opaque pointer.
+#define IND_GC       SHIFT(0xfff4)  // Pointer to Garbage-Collected Heap for this and subsequent tags.
+#define IND_CLOSURE  SHIFT(0xfff5)  // Pointer to callable; helps with VM to avoid indirections.
+#define IND_THUNK    SHIFT(0xfff6)  // As long as the VM is recursive, it must check for these.
+#define IND_GLOBAL   SHIFT(0xfff7)  // Global reference; used only during compiling.
 
 #define IS_UNSET(value)   ((value).bits == IND_UNSET)
 #define IS_ENUM(value)    (INDICATOR(value) == IND_ENUM)
