@@ -22,24 +22,14 @@
 
 
 import:
-	sys."tree" (tree_of, search, in_order);
+	sys."tree" (search);
 	"common" (filter_maybe, head_or);
+	"2023 Day 08 common" (parse_net);
 
 type:
-	node is (left:string, right:string);
 	state is (turns:list[flag], here:string);
 
 define:
-
-parse_line(line) : entry[string, node]
-= entry(label, node(on_left, on_right)) where
-	label = left(line, 3);
-	on_left = mid(line, 7,3);
-	on_right = mid(line, 12, 3);
-end parse_line;
-
-parse_map(lines) = tree_of(map(parse_line, lines));
-
 
 # Let's consider the guide as an (infinite) list of "is-left" flags:
 as_guide(line) = cycle(filter_maybe(map(parse_guide, each_chr(line))));
@@ -51,7 +41,7 @@ esac;
 
 
 # Suppose there's an unfold operation and we can take the length until it hits a sentinel.
-garden_path(guide, map) = unfold(advance, initial_state) where
+garden_path(guide, net) = unfold(advance, initial_state) where
 	initial_state = state(as_guide(guide), "AAA");
 	advance(s:state) = case s.turns as T of
 		nil -> absurd;
@@ -60,25 +50,25 @@ garden_path(guide, map) = unfold(advance, initial_state) where
 			else step(s.here, state(T.tail, place.left if T.head else place.right));
 		esac;
 	esac where
-		place = surely(search(map, s.here));
+		place = surely(search(net, s.here));
 	end advance;
 end garden_path;
 
 # Let's see how things are going so far:
 
 sample_guide = "LLR";
-sample_map = parse_map [
+sample_net = parse_net [
 	"AAA = (BBB, BBB)",
 	"BBB = (AAA, ZZZ)",
 	"ZZZ = (ZZZ, ZZZ)",
 ];
 
 # Now to parse the actual file:
-solution(lines) = length(garden_path(head_or(lines, ""), parse_map(drop(2, lines))));
+solution(lines) = length(garden_path(head_or(lines, ""), parse_net(drop(2, lines))));
 solve(lines) = console!echo[str(solution(lines)), EOL];
 
 begin:
-length(garden_path(sample_guide, sample_map));
+length(garden_path(sample_guide, sample_net));
 
 filesystem!read_lines("/playground/advent of code/2023-d8", !solve);
 

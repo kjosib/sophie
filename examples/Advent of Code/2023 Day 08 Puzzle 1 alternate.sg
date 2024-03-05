@@ -1,0 +1,49 @@
+# After spending way too much time thinking about puzzle two,
+# I decided to do puzzle one over again. This time,
+# I'm using a slightly different set of algorithm parts.
+
+import:
+	sys."tree" (search);
+	"common" (filter_maybe, head_or);
+	"2023 Day 08 common" (parse_net);
+
+type:
+	camel is (label:string, distance:number);
+
+assume:
+c: camel;
+k:number;
+
+define:
+
+solution(lines) = until(at_end, advance, initial).distance where
+	guide = trim(surely(head(lines)));
+	modulus = len(guide);
+	go_left(k) = mid(guide, k mod modulus, 1) == 'L';
+	
+	at_end(c) = c.label == 'ZZZ';
+	advance(c) = camel(turn(c), c.distance+1);
+	initial = camel('AAA', 0);
+	
+	turn(c) = place.left if go_left(c.distance) else place.right where
+		place = surely(search(net, c.label));
+	end turn;
+	net = parse_net(drop(2, lines));
+end solution;
+
+sample = [
+	"LLR",
+	"",
+	"AAA = (BBB, BBB)",
+	"BBB = (AAA, ZZZ)",
+	"ZZZ = (ZZZ, ZZZ)",
+];
+
+solve(lines) = console!echo[str(solution(lines)), EOL];
+
+begin:
+
+solution(sample);
+
+filesystem!read_lines("/playground/advent of code/2023-d8", !solve);
+
