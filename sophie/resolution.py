@@ -288,6 +288,9 @@ class _WordDefiner(_ResolutionPass):
 
 	def visit_Lookup(self, l:syntax.Lookup, env:NS): pass
 	
+	def visit_LambdaForm(self, lf:syntax.LambdaForm, env:NS):
+		self.visit(lf.function, env)
+	
 	def visit_DoBlock(self, db: syntax.DoBlock, env:NS):
 		if db.agents:
 			inner = env.new_child(db)
@@ -499,6 +502,9 @@ class _WordResolver(_ResolutionPass):
 		dfn = lu.ref.dfn
 		if isinstance(dfn, syntax.TypeAlias) or not dfn.has_value_domain():
 			self.dubious_constructors.append(lu.ref)
+	
+	def visit_LambdaForm(self, lf: syntax.LambdaForm, env: NS):
+		pass
 	
 	def visit_DoBlock(self, db: syntax.DoBlock, env:NS):
 		for new_agent in db.agents:

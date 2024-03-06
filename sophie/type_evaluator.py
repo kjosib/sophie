@@ -144,6 +144,12 @@ class DependencyPass(TopDown):
 	def visit_Lookup(self, lu: syntax.Lookup, env):
 		self.visit(lu.ref, env)
 
+	def visit_LambdaForm(self, lf:syntax.LambdaForm, env:Symbol):
+		dfn = lf.function
+		self._prepare(dfn, env)
+		self._outflows[dfn].add(env)
+		self.visit(dfn, env)
+	
 	def _is_relevant(self, sym):
 		return self._parent.get(sym) is not None
 
@@ -859,6 +865,12 @@ class DeductionEngine(Visitor):
 			assert target is SELF or isinstance(target, (syntax.FormalParameter, syntax.Subject, syntax.NewAgent)), type(target)
 			return static_env.fetch(target)
 	
+	def visit_LambdaForm(self, lf:syntax.LambdaForm, env:TYPE_ENV) -> SophieType:
+		# No need to chase to find a static environment:
+		# It's taken from the point-of-use by definition.
+		return UDFType(lf.function, env).exemplar()
+		
+		
 	@staticmethod
 	def visit_Absurdity(_:syntax.Absurdity, _env:TYPE_ENV) -> SophieType:
 		return BOTTOM

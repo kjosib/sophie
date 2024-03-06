@@ -83,7 +83,7 @@ class VMScope:
 		raise NotImplementedError(type(self))
 
 	def declare(self, symbol: ontology.Symbol):
-		MANGLED[symbol] = self._prefix + symbol.nom.text
+		MANGLED[symbol] = self._prefix + symbol.nom.key()
 	
 	def declare_several(self, symbols: Iterable[ontology.Symbol]):
 		for sym in symbols:
@@ -451,6 +451,7 @@ class LazyContext(Context):
 		FORCE.visit(expr, scope)
 	
 	visit_Literal = _force_it
+	visit_LambdaForm = _force_it
 	visit_ExplicitList = _force_it
 
 def _delay(expr:syntax.ValExpr, scope: VMFunctionScope):
@@ -547,6 +548,16 @@ class EagerContext(Context):
 	def visit_Literal(self, expr: syntax.Literal, scope: VMFunctionScope):
 		scope.constant(expr.value)
 		self.answer(scope)
+	
+	def visit_LambdaForm(self, lf:syntax.LambdaForm, scope: VMFunctionScope):
+		# Two steps:
+		# 1. Emit the function.
+		scope.declare(lf.function)
+		emit("{")
+		write_one_function(lf.function, scope)
+		emit("}")
+		# 2. Emit the code to load that function onto the stack.
+		scope.load(lf.function)
 		
 	def visit_FieldReference(self, fr: syntax.FieldReference, scope: VMFunctionScope):
 		FORCE.visit(fr.lhs, scope)

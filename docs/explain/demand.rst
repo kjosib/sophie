@@ -56,6 +56,12 @@ In practice it works out the same.
 By the way
 -----------
 
+To be sure, the current analysis is far from perfect.
+For example, if a recursive function's base case clearly *demands* a parameter,
+and if the recursive case uses that parameter in typical ways,
+then chances are the parameter ought to be made strict.
+But this does not yet happen. It would require a more sophisticated design.
+
 If some function is never passed as a parameter to any other thing,
 then we may be sure that all calls to it are statically-determined,
 so that its strictness criteria will always be respected in calls.

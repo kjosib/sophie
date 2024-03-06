@@ -1,4 +1,4 @@
-from collections import defaultdict
+from typing import Optional
 from boozetools.support.foundation import Visitor, strongly_connected_components_hashable
 from . import syntax
 from .resolution import RoadMap, TopDown
@@ -14,19 +14,24 @@ def analyze_demand(roadmap:RoadMap):
 
 
 class DeterminedCallGraphPass(TopDown):
+	graph : dict[Optional[syntax.UserFunction],set]
+	
 	def __init__(self, roadmap:RoadMap):
-		self.graph = defaultdict(set)
+		self.graph = {None:set()}
 		
 		self.analyze_module(roadmap.preamble)
 		for module in roadmap.each_module:
 			self.analyze_module(module)
 		
-		if None in self.graph:
-			del self.graph[None]
+		del self.graph[None]
 	
 	def analyze_module(self, module:syntax.Module):
+		for udf in module.all_functions:
+			self.graph[udf] = set()
 		self.tour(module.outer_functions)
 		self.tour(module.agent_definitions)
+		for expr in module.main:
+			self.visit(expr, None)
 	
 	def tour(self, items):
 		for i in items:
@@ -47,6 +52,8 @@ class DeterminedCallGraphPass(TopDown):
 			target = call.fn_exp.ref.dfn
 			if isinstance(target, syntax.UserFunction):
 				self.graph[src].add(target)
+		elif isinstance(call.fn_exp, syntax.LambdaForm):
+			self.graph[src].add(call.fn_exp.function)
 		self.visit(call.fn_exp, src)
 		for a in call.args:
 			self.visit(a, src)
@@ -59,6 +66,9 @@ class DeterminedCallGraphPass(TopDown):
 			if not dfn.params:
 				self.graph[src].add(dfn)
 	
+	def visit_LambdaForm(self, lf:syntax.LambdaForm, _src):
+		self.visit_UserFunction(lf.function)
+
 	def visit_MatchExpr(self, mx:syntax.MatchExpr, src):
 		self.visit(mx.subject.expr, src)
 		for alt in mx.alternatives:

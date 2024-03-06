@@ -42,7 +42,6 @@ Open Design Problems:
 * *rest*-parameters
 * Multimethods
 * Partial functions
-* Strictness analysis
 * First-Class Aborts
 
 Other Nice Things to Have

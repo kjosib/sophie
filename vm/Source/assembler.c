@@ -216,7 +216,11 @@ static void parse_function_block() {
 	emit(fn_count);
 }
 
-static void parse_some_functions(Verb define) {
+static void parse_top_level_functions(Verb define) {
+	// Top-level functions all need to be pre-closed.
+	// They come in two varieties:
+	// Regular and Actor-Method.
+	// The caller passes in a "how-to-define" function.
 	do {
 		push(parse_normal_function());
 		close_function(&TOP);
@@ -293,7 +297,7 @@ static void parse_actor_dfn() {
 	push(GC_VAL(parseString()));  // In retrospect, this part is probably mostly pointless.
 	define_actor(nr_fields);     // The only thing that can see an actor's fields knows their offsets.
 
-	parse_some_functions(install_method);
+	parse_top_level_functions(install_method);
 
 	// Define it as a global.
 	if (nr_fields) {
@@ -313,7 +317,7 @@ static void parseScript() {
 			else parse_record();
 		}
 		else if (maybe_token(TOKEN_LEFT_BRACE)) {
-			parse_some_functions(defineGlobal);
+			parse_top_level_functions(defineGlobal);
 			consume(TOKEN_RIGHT_BRACE, "expected semicolon or right-brace.");
 		}
 		else if (maybe_token(TOKEN_LESS)) {

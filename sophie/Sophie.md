@@ -194,6 +194,8 @@ expr -> integer | real | short_string | list_expr | case_expr | match_expr
 | .YES   :truth
 | .NO    :falsehood
 
+| .'{' .comma_list(parameter) '|' .expr .'}'   :LambdaForm
+
 list_expr -> square_list(expr) :ExplicitList
 
 case_expr -> CASE semicolon_list(when_clause) else_clause ESAC :CaseWhen
