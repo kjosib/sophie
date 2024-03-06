@@ -18,7 +18,6 @@ These sections are still on the drawing board...
 * Partial functions
 * List-builder notation
 * Starmap-like functors
-* Input from files
 * Other event-driven things, such as SDL bindings.
 * Ad-hoc polymorphic multimethods (sort of; I have some "notions".)
 

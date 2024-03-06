@@ -27,9 +27,7 @@ esac;
 # Extract the indices within a line where a symbol is found,
 # according to the definition given in the puzzle.
 symbol_indices(line:string) : list[number]
-= filter(is_symbol_at, iota(0, len(line))) where
-	is_symbol_at(i) = is_symbol(mid(line, i, 1));
-end symbol_indices;
+= filter( {idx|is_symbol(mid(line, idx, 1))} , iota(0, len(line)));
 
 # This is specific to the puzzle and so can't become generic,
 # despite the generic-looking name.

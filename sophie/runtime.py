@@ -119,6 +119,9 @@ def _eval_lookup(expr:syntax.Lookup, dynamic_env:ENV):
 			assert False, type(sym)
 		return static_env.assign(sym, value)
 
+def _eval_lambda_form(expr:syntax.LambdaForm, dynamic_env:ENV):
+	return Closure(dynamic_env, expr.function)
+
 def _eval_bin_exp(expr:syntax.BinExp, dynamic_env:ENV):
 	a = _strict(expr.lhs, dynamic_env)
 	b = _strict(expr.rhs, dynamic_env)
@@ -222,7 +225,7 @@ def evaluate(expr:EVALUABLE, dynamic_env:ENV) -> LAZY_VALUE:
 	except KeyError: raise NotImplementedError(type(expr), expr)
 	return fn(expr, dynamic_env)
 
-_NO_DELAY = {syntax.Literal, syntax.Lookup, syntax.DoBlock}
+_NO_DELAY = {syntax.Literal, syntax.Lookup, syntax.DoBlock, syntax.LambdaForm}
 
 def delay(expr: syntax.ValExpr, dynamic_env: ENV) -> LAZY_VALUE:
 	# For certain kinds of expression, there is no profit to delay:

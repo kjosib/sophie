@@ -10,9 +10,7 @@ import:
 
 define:
 
-star_indices(line) = filter(is_star, iota(0, len(line))) where
-	is_star(index) = mid(line, index, 1) == '*';
-end star_indices;
+star_indices(line) = filter({index|mid(line, index, 1) == '*'}, iota(0, len(line)));
 
 
 goal(lines) = sum(all_gear_ratios) where

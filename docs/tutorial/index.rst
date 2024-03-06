@@ -18,6 +18,7 @@ but *vive la différence!* I hope she gives you a new perspective on CS.
     list
     turtle
     game1
+    sugar
     module
     congrats
 

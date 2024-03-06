@@ -485,6 +485,19 @@ class AssignField(Reference):
 	def head(self) -> slice:
 		return self.nom.head()
 
+class LambdaForm(ValExpr):
+	# This is essentially a special kind of literal constant.
+	# It happens to be connected to a function definition.
+	def __init__(self, left, params:list[FormalParameter], body:ValExpr, right):
+		assert params
+		self._slice = slice(left.head().start, right.head().stop)
+		nom = Nom(_gensym(), self._slice)
+		self.function = UserFunction(nom, params, None, body, None)
+		self.is_volatile = self.function.has_volatility()
+		
+	def head(self):
+		return self._slice
+
 class ImportSymbol(NamedTuple):
 	yonder : Nom
 	hither : Optional[Nom]
