@@ -17,10 +17,6 @@ Conversion Functions
 * ``str(a:number) : string``: Format a number as a string in the most typical way.
 * ``val(s:string) : maybe[number];``: parse a string into a number - maybe.
 
-The next item is planned, but not yet implemented:
-
-* ``ascii(a:number) : string``: Produce the given numbered byte as a string.
-
 
 Examining Strings
 ==================
@@ -60,6 +56,10 @@ Composing Strings
 * ``strcat : (a:string, b:string) : string;``: Concatenate a pair of strings.
 * ``join(ss : list[string]) : string``: Concatenate an entire list of strings. (Runs in linear time.)
 * ``interleave(x:string, ys:list[string])``: Construct the string of ``ys`` concatenated but with ``x`` between them.
+
+* ``trim : (a:string) : string;``: Return a copy of ``a`` without leading or trailing whitespace.
+* ``ltrim : (a:string) : string;``: Return a copy of ``a`` without leading whitespace.
+* ``rtrim : (a:string) : string;``: Return a copy of ``a`` without trailing whitespace.
 
 
 Implementation Caveat
