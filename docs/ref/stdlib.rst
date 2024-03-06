@@ -94,18 +94,22 @@ That makes a nice ordered dictionary or set.
 The interface types are::
 
     Tree[K,V] is ... ;
-    Item[K,V] is (key: K, value:V);
-    Removed[K,V] is (item:maybe[Item[K,V]], rest:Tree[K,V]);
+    Removed[K,V] is (item:maybe[entry[K,V]], rest:Tree[K,V]);
+
+It relies on the standard-preambly type ``entry``, given as::
+
+    entry[K,V] is (key: K, value:V);
 
 Exported functions include::
 
     new_tree:Tree
+    tree_of(es:list[entry]):Tree
     is_empty(T:Tree):flag
-    search(T:Tree, key) : maybe 
-    in_order(T:Tree) : list[Item]
+    search(T:Tree, key) : maybe[entry]
+    in_order(T:Tree) : list[entry]
     assign(tree:Tree, key, value) : Tree
-    first(T:Tree) : maybe[Item]
-    last(T:Tree) : maybe[Item]
+    first(T:Tree) : maybe[entry]
+    last(T:Tree) : maybe[entry]
     shift(root:Tree) : Removed
     delete(root:Tree[K,V], key) : Removed
 
