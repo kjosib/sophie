@@ -1,0 +1,24 @@
+import:
+
+"common"(rolling_pairs, nums_in);
+
+define:
+
+
+extrapolate(xs) = 0 if all_zero(xs) else surely(head(xs)) - extrapolate(rolling_differences(xs));
+rolling_differences(xs) = map({p|p.snd - p.fst}, rolling_pairs(xs));
+
+all_zero(xs) = all(map({x|x==0}, xs));
+
+solve(lines) = console!echo[str(solution(lines)), EOL];
+solution(lines) = sum(map(compose(extrapolate, nums_in), lines));
+
+begin:
+
+extrapolate [0, 3, 6, 9, 12, 15];
+extrapolate [1, 3, 6, 10, 15, 21];
+extrapolate [10, 13, 16, 21, 30, 45];
+
+filesystem!read_lines("/playground/advent of code/2023-d9", !solve);
+
+

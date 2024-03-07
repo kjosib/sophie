@@ -4,7 +4,7 @@
 
 import:
 	sys."tree" (search);
-	"common" (filter_maybe, head_or);
+	"common" (filter_maybe);
 	"2023 Day 08 common" (parse_net);
 
 type:

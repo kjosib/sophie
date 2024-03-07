@@ -1,5 +1,5 @@
 import:
-"common" (nums_in, slice, head_or);
+"common" (nums_in, slice);
 
 define:
 
@@ -23,6 +23,6 @@ each_segment(lines, fn) = map(as_segment, chunks_where(non_blank, drop(1, lines)
 end each_segment;
 
 seeds(lines) = nums_in(slice(first_line, 7, len(first_line))) where
-	first_line = head_or(lines, "");
+	first_line = surely(head(lines));
 end seeds;
 

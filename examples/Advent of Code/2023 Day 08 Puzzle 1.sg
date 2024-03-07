@@ -23,7 +23,7 @@
 
 import:
 	sys."tree" (search);
-	"common" (filter_maybe, head_or);
+	"common" (filter_maybe);
 	"2023 Day 08 common" (parse_net);
 
 type:
@@ -64,7 +64,7 @@ sample_net = parse_net [
 ];
 
 # Now to parse the actual file:
-solution(lines) = length(garden_path(head_or(lines, ""), parse_net(drop(2, lines))));
+solution(lines) = length(garden_path(surely(head(lines)), parse_net(drop(2, lines))));
 solve(lines) = console!echo[str(solution(lines)), EOL];
 
 begin:
