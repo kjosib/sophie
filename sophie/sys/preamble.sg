@@ -115,9 +115,9 @@ define:
 # Combinators:
 
 id(x) = x;
-non(p) = q where q(x) = not p(x); end non;
-compose(f,g) = h where h(x) = f(g(x)); end compose;
-flip(f) = g where g(a,b) = f(b,a); end flip;
+non(p) = { x | not p(x) };
+compose(f,g) = { x | f(g(x)) };
+flip(f) = { a,b | f(b,a) };
 
 # List things:
 
