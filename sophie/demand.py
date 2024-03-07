@@ -128,7 +128,15 @@ class DemandPass(Visitor):
 				return outer.union(*eager)
 			elif isinstance(target, syntax.FFI_Alias):
 				return self._union(call.args)
-			elif isinstance(target, (syntax.SubTypeSpec, syntax.Record, syntax.FormalParameter)):
+			elif isinstance(target, syntax.FormalParameter):
+				return {target}
+			elif isinstance(target, (syntax.SubTypeSpec, syntax.Record)):
+				return EMPTY
+			elif isinstance(target, syntax.UserAgent):
+				# This is a rough spot. In general, the params to a syntax.UserAgent
+				# will eventually be strict, but the stricture happens later when the
+				# template gets cast as an actor in a do-block. Until then, it works
+				# like a record.
 				return EMPTY
 			else:
 				assert False, type(target)  # How to analyze this target?
@@ -187,6 +195,10 @@ class DemandPass(Visitor):
 
 	@staticmethod
 	def visit_Literal(_):
+		return EMPTY
+
+	@staticmethod
+	def visit_LambdaForm(_):
 		return EMPTY
 
 	@staticmethod
