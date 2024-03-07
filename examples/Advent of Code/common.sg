@@ -33,8 +33,6 @@ contains(x, xs) = case xs of
 	cons -> xs.head == x or contains(x, xs.tail);
 esac;
 
-head_or(xs, otherwise) = either(head(xs), otherwise);
-
 pair_off(fn, xs) = case xs of
 	nil -> nil;
 	cons -> case xs.tail as ys of
@@ -42,6 +40,16 @@ pair_off(fn, xs) = case xs of
 		cons -> cons(fn(xs.head, ys.head), pair_off(fn, ys.tail));
 	esac;
 esac;
+
+rolling_pairs(xs) = case xs of
+	nil -> nil;
+	cons -> roll2(xs.head, xs.tail);
+esac where
+	roll2(h, t) = case t of
+		nil -> nil;
+		cons -> cons(pair(h, t.head), roll2(t.head, t.tail));
+	esac;
+end rolling_pairs;
 
 filter_maybe(xs:list[maybe[?x]]):list[?x] = case xs of
     nil -> nil;
