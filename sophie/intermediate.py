@@ -367,22 +367,19 @@ class VMFunctionScope(VMScope):
 
 def write_record(names:Iterable[str], symbol:ontology.Symbol, tag:int):
 	emit("(")
+	emit(42) # Eventually this needs to be a vtable-index.
 	for name in names:
 		emit(name)
-	close_structure(symbol, tag)
+	emit(tag)
+	emit(quote(MANGLED[symbol]))
+	emit(")")
+	print()
 
 def write_enum(symbol:ontology.Symbol, tag:int):
 	write_record((), symbol, tag)
 
 def write_tagged_value(symbol:ontology.Symbol, tag:int):
-	emit("(", "*")
-	close_structure(symbol, tag)
-
-def close_structure(symbol:ontology.Symbol, tag:int):
-	emit(tag)
-	emit(quote(MANGLED[symbol]))
-	emit(")")
-	print()
+	write_record(["*"], symbol, tag)
 
 def symbol_harbors_thunks(sym:ontology.Symbol):
 	if isinstance(sym, syntax.FormalParameter): return not sym.is_strict
@@ -793,7 +790,7 @@ def write_actors(agent_definitions:list[syntax.UserAgent], outer:VMGlobalScope):
 class StructureDefiner(Visitor):
 	""" Just defines data structures. """
 	
-	def write_records(self, types, scope:VMGlobalScope):
+	def write_types(self, types, scope:VMGlobalScope):
 		for t in types:
 			self.visit(t, scope)
 
@@ -822,7 +819,7 @@ STRUCTURE = StructureDefiner()
 def translate(roadmap:RoadMap):
 	# Write all types:
 	for scope, module in each_piece(roadmap):
-		STRUCTURE.write_records(module.types, scope)
+		STRUCTURE.write_types(module.types, scope)
 		scope.declare_several(module.agent_definitions)
 	
 	# Write all functions (including FFI):

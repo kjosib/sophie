@@ -44,6 +44,9 @@ void vm_capture_preamble_specials(Table *globals) {
 	vm.nil = table_get_from_C(globals, "nil");
 	vm.maybe_this = table_get_from_C(globals, "this");
 	vm.maybe_nope = table_get_from_C(globals, "nope");
+	vm.less = table_get_from_C(globals, "less");
+	vm.same = table_get_from_C(globals, "same");
+	vm.more = table_get_from_C(globals, "more");
 }
 
 void vm_dispose() {
@@ -141,15 +144,15 @@ void perform() {
 }
 
 static Value compare_numbers(double lhs, double rhs) {
-	if (lhs < rhs) return ENUM_VAL(LESS);
-	if (lhs == rhs) return ENUM_VAL(SAME);
-	if (lhs > rhs) return ENUM_VAL(MORE);
+	if (lhs < rhs) return vm.less;
+	if (lhs == rhs) return vm.same;
+	if (lhs > rhs) return vm.more;
 	// At this point, NaN is involved.
 	// Arbitrarily put them all in an equivalence class above infinity.
 	// This isn't what IEEE says, but it will probably be less astonishing most of the time.
-	if (!isnan(lhs)) return ENUM_VAL(LESS);
-	if (!isnan(rhs)) return ENUM_VAL(MORE);
-	return ENUM_VAL(SAME);
+	if (!isnan(lhs)) return vm.less;
+	if (!isnan(rhs)) return vm.more;
+	return vm.same;
 }
 
 #define NEXT goto dispatch
@@ -222,33 +225,30 @@ dispatch:
 		case OP_FALSE: push(BOOL_VAL(false)); NEXT;
 		case OP_EQUAL:
 			if (IS_NUMBER(SND)) merge(BOOL_VAL(AS_NUMBER(SND) == num(TOP)));
-			else if (IS_ENUM(SND)) merge(BOOL_VAL(AS_ENUM(SND) == AS_ENUM(TOP)));  // Should handle booleans assuming bool overlaps int...
+			else if (IS_RUNE(SND)) merge(BOOL_VAL(AS_BOOL(SND) == AS_BOOL(TOP)));
 			else {
-				// For now, this must be a string.
 				assert(IS_GC_ABLE(SND));
 				assert(IS_GC_ABLE(TOP));
 				AS_GC(SND)->kind->compare();
-				TOP = BOOL_VAL(AS_ENUM(TOP) == SAME);
+				TOP = BOOL_VAL(TOP.bits == vm.same.bits);
 			}
 		NEXT;
 		case OP_GREATER:
 			if (IS_NUMBER(SND)) merge(BOOL_VAL(AS_NUMBER(SND) > num(TOP)));
 			else {
-				// For now, this must be a string.
 				assert(IS_GC_ABLE(SND));
 				assert(IS_GC_ABLE(TOP));
 				AS_GC(SND)->kind->compare();
-				TOP = BOOL_VAL(AS_ENUM(TOP) == MORE);
+				TOP = BOOL_VAL(TOP.bits == vm.more.bits);
 			}
 		NEXT;
 		case OP_LESS:
 			if (IS_NUMBER(SND)) merge(BOOL_VAL(num(SND) < num(TOP)));
 			else {
-				// For now, this must be a string.
 				assert(IS_GC_ABLE(SND));
 				assert(IS_GC_ABLE(TOP));
 				AS_GC(SND)->kind->compare();
-				TOP = BOOL_VAL(AS_ENUM(TOP) == LESS);
+				TOP = BOOL_VAL(TOP.bits == vm.less.bits);
 			}
 		NEXT;
 		case OP_CMP:
@@ -370,7 +370,7 @@ dispatch:
 			int tag;
 			switch (INDICATOR(TOP)) {
 			case IND_ENUM:
-				tag = AS_ENUM(TOP);
+				tag = AS_ENUM_TAG(TOP);
 				break;
 			case IND_GC: {
 				tag = AS_RECORD(TOP)->constructor->tag;
@@ -388,7 +388,7 @@ dispatch:
 			assert(is_record(TOP));
 			Record *record = AS_RECORD(TOP);
 			Table *field_offset = &record->constructor->field_offset;
-			int offset = AS_ENUM(tableGet(field_offset, AS_STRING(constants[READ_BYTE()])));
+			int offset = AS_RUNE(tableGet(field_offset, AS_STRING(constants[READ_BYTE()])));
 			TOP = record->fields[offset];
 			NEXT;
 		}

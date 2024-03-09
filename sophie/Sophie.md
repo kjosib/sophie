@@ -97,9 +97,7 @@ If there's a conflict between the global assumption and the annotation at a part
 then the per-function annotation wins. And if there's neither, then the parameter is constrained
 only by how you use it.
 
-*Note 1: Everything just said depends on the type constraints actually working. They will, soon enough.*
-
-*Note 2: One could imagine warning about unconstrained parameters, or even making it a stricture for large projects.*
+*One could imagine warning about unconstrained parameters, or even making it a stricture for large projects.*
 
 -----
 **The general structure of a function:**

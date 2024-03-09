@@ -22,15 +22,15 @@ static void display_string(String *string) {
 static void compare_string() {
 	// TODO: A comparison for equality alone ought not call strcmp,
 	// because strings are interned.
-	TotalOrder tag;
-	if (AS_STRING(SND) == AS_STRING(TOP)) tag = SAME;
+	Value result;
+	if (AS_STRING(SND) == AS_STRING(TOP)) result = vm.same;
 	else {
 		int direction = strcmp(AS_STRING(SND)->text, AS_STRING(TOP)->text);
-		if (direction < 0) tag = LESS;
-		else if (direction == 0) tag = SAME;
-		else tag = MORE;
+		if (direction < 0) result = vm.less;
+		else if (direction == 0) result = vm.same;
+		else result = vm.more;
 	}
-	merge(ENUM_VAL(tag));
+	merge(result);
 }
 
 GC_Kind KIND_String = {
@@ -90,13 +90,6 @@ String *import_C_string(const char *text, size_t length) {
 void push_C_string(const char *text) {
 	push(GC_VAL(import_C_string(text, strlen(text))));
 }
-
-void printObject(GC *item) {
-	Method display = item->kind->display;
-	if (display) display(item);
-	else printf("<{%s}>", item->kind->name);
-}
-void printObjectDeeply(GC *item) { item->kind->deeply(item); }
 
 bool is_string(void *item) {
 	return ((GC*)item)->kind == &KIND_String;
