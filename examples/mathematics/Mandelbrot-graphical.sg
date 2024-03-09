@@ -27,7 +27,7 @@ c_mul(a,b) = complex(a.re*b.re - a.im*b.im, a.im*b.re + b.im*a.re);
 
 escaped(c) = c.re*c.re + c.im*c.im > 4;
 
-color(n) = index(n mod palette_length, palette, black);
+color(n) = surely(index(n mod palette_length, palette));
 palette = [
 	rgb($00, $00, $00), rgb($99, $00, $00), rgb($99, $99, $00),
 	rgb($00, $99, $00), rgb($00, $99, $99), rgb($00, $00, $99),
@@ -40,7 +40,7 @@ palette_length = length(palette);
 cell(corner:xy, z:complex) : image_element@game
 = stroke(color(iterate(z_naught, z, max_steps)), [ fill_box(corner, box_scale) ] );
 
-row_for(y_scaled, im) : list[stroke_element@game] = map(brick, horizontal_steps) where
+row_for(y_scaled, im) : list[image_element@game] = map(brick, horizontal_steps) where
 	brick(x) = cell(corner, z) where
 		corner = xy(x*box_scale.x, y_scaled);
 		z = complex(re, im);

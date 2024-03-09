@@ -88,7 +88,7 @@ static void init_assembler() {
 	initTable(&globals);
 	gc_install_roots(grey_the_assembling_roots);
 	for (int index = 0; index < NR_OPCODES; index++) {
-		table_set_from_C(&lexicon, instruction[index].name, ENUM_VAL(index));
+		table_set_from_C(&lexicon, instruction[index].name, RUNE_VAL(index));
 	}
 	table_set_from_C(&lexicon, "hole", PTR_VAL(hole));
 	table_set_from_C(&lexicon, "come_from", PTR_VAL(come_from));
@@ -117,8 +117,8 @@ static void pop_scope() {
 
 
 static void perform_word(Value value) {
-	if (IS_ENUM(value)) {
-		int index = AS_ENUM(value);
+	if (IS_RUNE(value)) {
+		int index = AS_RUNE(value);
 		emit(index);
 		instruction[index].operand->assemble(&current->chunk);
 	}
@@ -234,7 +234,7 @@ static Value tag_definition(int tag) {
 	defineGlobal();
 }
 
-static parse_tagged_value() {
+static parse_tagged_value(int vt_idx) {
 	int tag = parseByte("tag");
 	String *name = parseString();
 	push(GC_VAL(name));
@@ -252,18 +252,18 @@ static int parse_zero_or_more_field_names_onto_the_stack() {
 	return nr_fields;
 }
 
-static void parse_record() {
+static void parse_record(int vt_idx) {
 	int nr_fields = parse_zero_or_more_field_names_onto_the_stack();
 	if (nr_fields) {
 		int tag = parseByte("tag");
 		push(GC_VAL(parseString()));
-		make_constructor(tag, nr_fields);
+		make_constructor(vt_idx, tag, nr_fields);
 		// new_constructor(...) pops all those strings off the VM stack,
 		// so there's no need to do it here.
 		push(GC_VAL(AS_CTOR(TOP)->name));
 	}
 	else {
-		push(ENUM_VAL(parseByte("tag")));
+		push(ENUM_VAL(vt_idx, parseByte("tag")));
 		push(GC_VAL(parseString()));
 	}
 	defineGlobal();
@@ -313,8 +313,9 @@ static void parse_actor_dfn() {
 static void parseScript() {
 	for (;;) {
 		if (maybe_token(TOKEN_LEFT_PAREN)) {
-			if (maybe_token(TOKEN_STAR)) parse_tagged_value();
-			else parse_record();
+			int vt_idx = (int)(parseDouble("vtable index here"));
+			if (maybe_token(TOKEN_STAR)) parse_tagged_value(vt_idx);
+			else parse_record(vt_idx);
 		}
 		else if (maybe_token(TOKEN_LEFT_BRACE)) {
 			parse_top_level_functions(defineGlobal);

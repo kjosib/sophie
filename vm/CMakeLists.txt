@@ -17,7 +17,7 @@ link_directories("/SDL2-2.28.5/lib/x64")
 add_executable (svm
 	"Source/chunk.c"  "Source/debug.c"  "Source/main.c" "Source/memory.c" "Source/value.c" 
 	"Source/vm.c" "Source/assembler.c" "Source/scanner.c" "Source/isa.c" "Source/parser.c"
-	"Source/object.c" "Source/table.c" "Source/gc.c" "Source/function.c" "Source/record.c"
+	"Source/string.c" "Source/table.c" "Source/gc.c" "Source/function.c" "Source/record.c"
 	"Source/native.c" "Source/actor.c" "Source/chacha.c" "Source/platform_specific.c"
 
 	"Source/common.h" "Source/opcodes.h" "Source/prep.h"
