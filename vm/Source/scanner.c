@@ -17,9 +17,9 @@ void initScanner(const char *source) {
 
 static bool isAlpha(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_'; }
 static bool isDigit(char c) { return c >= '0' && c <= '9'; }
-static bool isAtEnd() { return *scanner.current == '\0'; }
-static char ahead() { scanner.current++; return scanner.current[-1]; }
+static void ahead() { scanner.current++; }
 static char peek() { return *scanner.current; }
+static bool isAtEnd() { return peek() == '\0'; }
 static char peekNext() { return isAtEnd() ? '\0' : scanner.current[1]; }
 
 static bool match(char expected) {
@@ -65,8 +65,12 @@ static void skipWhitespace() {
 	}
 }
 
-static Token name() {
+static void takeAlphaNumeric() {
 	while (isAlpha(peek()) || isDigit(peek())) ahead();
+}
+
+static Token name() {
+	takeAlphaNumeric();
 	return makeToken(TOKEN_NAME);
 }
 
@@ -104,13 +108,44 @@ static Token string() {
 	return makeToken(TOKEN_STRING);
 }
 
+static TokenType directive() {
+	takeAlphaNumeric();
+	int64_t len = scanner.current - scanner.start;
+	switch (len) {
+	case 3:
+		if (!memcmp(scanner.start, ".fn", len)) return TOKEN_FN;
+		break;
+	case 4:
+		if (!memcmp(scanner.start, ".sub", len)) return TOKEN_SUB;
+		if (!memcmp(scanner.start, ".cap", len)) return TOKEN_CAPTURE;
+		if (!memcmp(scanner.start, ".end", len)) return TOKEN_END;
+		if (!memcmp(scanner.start, ".ffi", len)) return TOKEN_FFI;
+		break;
+	case 5:
+		if (!memcmp(scanner.start, ".line", len)) return TOKEN_LINE;
+		if (!memcmp(scanner.start, ".data", len)) return TOKEN_DATA;
+		if (!memcmp(scanner.start, ".file", len)) return TOKEN_FILE;
+		break;
+	case 6:
+		if (!memcmp(scanner.start, ".actor", len)) return TOKEN_ACTOR;
+		if (!memcmp(scanner.start, ".begin", len)) return TOKEN_BEGIN;
+		break;
+	case 7:
+		if (!memcmp(scanner.start, ".method", len)) return TOKEN_METHOD;
+		if (!memcmp(scanner.start, ".vtable", len)) return TOKEN_VTABLE;
+		break;
+	}
+	return TOKEN_ERROR;
+}
+
 Token scanToken() {
 	skipWhitespace();
 	scanner.start = scanner.current;
 
 	if (isAtEnd()) return makeToken(TOKEN_EOF);
 
-	char c = ahead();
+	char c = peek();
+	ahead();
 	if (isAlpha(c)) return name();
 	if (isDigit(c)) return number();
 
@@ -124,7 +159,7 @@ Token scanToken() {
 	case '}': return makeToken(TOKEN_RIGHT_BRACE);
 	case ';': return makeToken(TOKEN_SEMICOLON);
 	case ',': return makeToken(TOKEN_COMMA);
-	case '.': return makeToken(TOKEN_DOT);
+	case '.': return makeToken(isAlpha(peek()) ? directive() : TOKEN_DOT);
 	case '-': return isDigit(peek()) ? number() : makeToken(TOKEN_MINUS);
 	case '+': return makeToken(TOKEN_PLUS);
 	case '/': return makeToken(TOKEN_SLASH);
