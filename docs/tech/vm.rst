@@ -1684,3 +1684,133 @@ Then tail-recursion would be the standard case. However, you'd still need to mov
 arguments to their proper place in an activation record, so you'd get a "shift-stack" instruction.
 With that, ``RETURN`` could simplify to only pop an execution context.
 
+8 March 2024
+------------
+
+I decided it was time to start working on a modicum of dynamic dispatch.
+That will require some concept of a *vtable* in the VM.
+(It will also require it from the compiler, but I digress.)
+
+One thing that's perhaps a bit unusual among languages is that enumerated
+constants (enums) will be associated with a vtable, same as other objects.
+I do not want enums to become heap objects, so I decided on an alternative:
+The lower 8 bits of an enum-value are its tag for match-case instructions.
+The next higher-order bits represent a vtable index number.
+``common.h`` got macros adjusted accordingly.
+
+I don't want booleans to go through this because they're special in the VM,
+and I'm still entertaining the idea of adding ``rune`` and ``byte`` types,
+so I added a new NaN-box indicator to distinguish these kinds from enums.
+
+The VM now pulls ``less``, ``same``, and ``more`` out of the preamble,
+just like with ``nil`` and ``cons``, which simplified the comparison code.
+
+The ``Constructor`` structure also gained a vtable-index field.
+Last, I adjusted the assembler to populate these fields with
+numbers that the compiler is required to supply.
+We don't *do* anything interesting with the vtable-index just yet,
+but everything is back in working order at least.
+
+**Observation:** I will need some way to parse a vtable in the assembler.
+
+10 March 2024
+-------------
+
+Daylight saving time is an abomination.
+We should use standard time year-round,
+so that there is daylight in the morning
+and the children can sleep at night.
+That is all.
+
+11 March 2024
+-------------
+
+The VM's present input language is ad-hoc and awkward.
+I'm tempted to redesign it. It might even resemble assembler!
+
+The Grand Vision
+.................
+
+A fancy new assembler would not need a chunk stack.
+
+* Except for quoted strings, everything is delimited by whitespace.
+* If it starts with a period, it's a directive.
+* Directives may take arguments, which they will consume in the usual manner.
+* There is only one global symbol table. Name mangling provides scope.
+* Symbols are always given as quoted strings.
+* Symbols may be used before they are defined, but they must eventually be defined.
+* Generally some directive will be involved in defining each symbol.
+
+Directives will include:
+
+.file
+    Takes a string to indicate the filename associated with
+    subsequently-defined symbols.
+
+.line
+    Takes a number. Subsequent bytecodes will be associated with this line.
+    This is relevant for a panic traceback, whenever the VM gets this feature.
+
+.sub
+    Takes a name, arity, number of captures, and as many capture indicators.
+    Begins assembling into a new and un-closed function-object.
+    The name becomes the symbol for this function.
+    This is appropriate for functions that are subordinate to other functions.
+
+.fn
+    Similar to *sub* but starts a closed function (closure).
+    This is appropriate for top-level functions and methods.
+    As such, the number-of-captures is not a parameter:
+    It would be zero by definition.
+
+.begin
+    Starts assembling into a closure representing the ``begin:`` block
+    for the current file.
+
+.vtable
+    Takes (for now) six items: function names or the empty string.
+    (The empty string will get associated with a function that just panics.)
+    This becomes the next-numbered vtable.
+    Subsequent data definitions use this vtable.
+    Also, this resets the next tag-number to zero.
+
+.data
+    Takes a name followed by zero or more field names.
+    Composes either a record-constructor or an enum.
+    The vtable index is whatever is most recent.
+    The tag number is derived from a field on the vtable,
+    so it need not be given explicitly.
+
+.ffi
+    Takes a string, which is the "module name" for the FFI.
+    Then, takes as many symbols as the FFI module dictates,
+    and finally expects a semicolon.
+
+Byte-code instructions continue to be given as bare-words.
+One change is that ``THUNK`` and ``CLOSURE`` become normal instructions
+that take symbolic references to the ``.sub`` items they refer to.
+
+The Tempered Take
+..................
+
+In retrospect, the only thing that *really* has to
+change is to have a way to declare vtables.
+Everything else is *nice to have* but not necessary.
+
+As a first step toward the vision, though, I could make the parser recognize directives as such.
+A semantically-named token-type for each supported directive would be appropriate.
+At first, that just means ``.vtable``.
+Also, the interaction between vtable definitions and data definitions can stay.
+That simplifies some of the compiler.
+
+Closure capture is why it presently makes sense to
+have the apparently-awkward nested function definitions.
+You don't know what to capture until every local symbol
+has been assigned a stack slot, but stack-slot assignment
+is a consequence of compiling a function's body.
+What's worse, transitive captures mean you can't finish
+an outer function before the inner functions are finished.
+
+It might be possible to eliminate the context stack from the assembler,
+but at the moment that seems like more trouble than it's worth.
+
