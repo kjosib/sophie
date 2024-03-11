@@ -1758,7 +1758,7 @@ Directives will include:
     This is appropriate for functions that are subordinate to other functions.
 
 .fn
-    Similar to *sub* but starts a closed function (closure).
+    Similar to ``.sub`` but starts a closed function (closure).
     This is appropriate for top-level functions and methods.
     As such, the number-of-captures is not a parameter:
     It would be zero by definition.
@@ -1814,3 +1814,34 @@ an outer function before the inner functions are finished.
 It might be possible to eliminate the context stack from the assembler,
 but at the moment that seems like more trouble than it's worth.
 
+
+After Sleep
+.............
+
+The VM's scanner can now read directive tokens as described above.
+I figured I might as well do that much,
+since it's easy and makes some things a bit more clear. 
+
+Oh, and I also added:
+
+.actor
+    Introduce an actor.
+
+.method
+    Like ``.fn`` but for methods on actors.
+
+.cap
+    Indicates the *captures* part of a sub-function.
+
+.end
+    A generic end-marker for things that need it.
+
+
+What's Changed So Far
+......................
+
+Now, ``.vtable`` and ``.data`` declarations behave sensibly
+and everything is back in working order.
+The assembler doesn't use the six strings a ``.vtable`` expects for anything yet.
+It's now time to build out the run-time semantics for operator overloads.
+Then I can get back to making the VM support the rest of this stuff.

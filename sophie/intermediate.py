@@ -113,7 +113,7 @@ class VMActorScope(VMScope):
 		super().__init__(outer._prefix + dfn.nom.text + ":")
 		self._outer = outer
 		self.indent = outer.indent+"  "
-		emit("<", *dfn.field_names(), quote(MANGLED[dfn]))
+		emit(".actor", *dfn.field_names(), quote(MANGLED[dfn]))
 		self._field_map = {field:i for i,field in enumerate(dfn.field_names())}
 
 	def capture(self, symbol: ontology.Symbol) -> bool:
@@ -124,12 +124,6 @@ class VMActorScope(VMScope):
 	
 	def member_number(self, field: str):
 		return self._field_map[field]
-
-_do_count = 0
-def _gensym():
-	global _do_count
-	_do_count += 1
-	return "do:"+str(_do_count)
 
 class VMFunctionScope(VMScope):
 	""" Encapsulates VM mechanics around the stack, parameters, closure capture, jumps, etc. """
@@ -365,21 +359,33 @@ class VMFunctionScope(VMScope):
 		return self._outer.member_number(field)
 
 
-def write_record(names:Iterable[str], symbol:ontology.Symbol, tag:int):
-	emit("(")
-	emit(42) # Eventually this needs to be a vtable-index.
-	for name in names:
-		emit(name)
-	emit(tag)
-	emit(quote(MANGLED[symbol]))
-	emit(")")
+_do_count = 0
+def _gensym():
+	global _do_count
+	_do_count += 1
+	return "do:"+str(_do_count)
+
+def write_vtable():
+	emit(".vtable")
+	for x in range(6):
+		emit(quote(""))
+	emit(".end")
 	print()
 
-def write_enum(symbol:ontology.Symbol, tag:int):
-	write_record((), symbol, tag)
 
-def write_tagged_value(symbol:ontology.Symbol, tag:int):
-	write_record(["*"], symbol, tag)
+def write_record(names:Iterable[str], symbol:ontology.Symbol):
+	emit(".data")
+	for name in names:
+		emit(name)
+	emit(quote(MANGLED[symbol]))
+	emit(".end")
+	print()
+
+def write_enum(symbol:ontology.Symbol):
+	write_record((), symbol)
+
+def write_tagged_value(symbol:ontology.Symbol):
+	write_record(["*"], symbol)
 
 def symbol_harbors_thunks(sym:ontology.Symbol):
 	if isinstance(sym, syntax.FormalParameter): return not sym.is_strict
@@ -546,7 +552,8 @@ class EagerContext(Context):
 		scope.constant(expr.value)
 		self.answer(scope)
 	
-	def visit_LambdaForm(self, lf:syntax.LambdaForm, scope: VMFunctionScope):
+	@staticmethod
+	def visit_LambdaForm(lf:syntax.LambdaForm, scope: VMFunctionScope):
 		# Two steps:
 		# 1. Emit the function.
 		scope.declare(lf.function)
@@ -738,7 +745,7 @@ def mangle_foreign_symbols(foreign:list[syntax.ImportForeign]):
 def write_ffi_init(foreign: list[syntax.ImportForeign]):
 	for fi in foreign:
 		if fi.linkage is not None:
-			emit("!")
+			emit(".ffi")
 			emit(quote(fi.source.value))
 			for ref in fi.linkage:
 				emit(quote(MANGLED[ref.dfn]))
@@ -778,7 +785,7 @@ def write_one_actor(dfn:syntax.UserAgent, outer:VMGlobalScope):
 	last = dfn.behaviors[-1]
 	for b in dfn.behaviors:
 		write_one_behavior(b, inner)
-		emit(">" if b is last else ";")
+		emit(".end" if b is last else ";")
 	outer.nl()
 
 def write_actors(agent_definitions:list[syntax.UserAgent], outer:VMGlobalScope):
@@ -799,20 +806,22 @@ class StructureDefiner(Visitor):
 	
 	@staticmethod
 	def visit_Record(r:syntax.Record, scope:VMGlobalScope):
+		write_vtable()
 		scope.declare(r)
-		write_record(r.spec.field_names(), r, 0)
+		write_record(r.spec.field_names(), r)
 		
 	@staticmethod
 	def visit_Variant(variant:syntax.Variant, scope:VMGlobalScope):
+		write_vtable()
 		scope.declare_several(variant.subtypes)
 		for tag, st in enumerate(variant.subtypes):
 			_TAG_MAP[variant, st.nom.key()] = tag
 			if isinstance(st.body, syntax.RecordSpec):
-				write_record(st.body.field_names(), st, tag)
+				write_record(st.body.field_names(), st)
 			elif st.body is None:
-				write_enum(st, tag)
+				write_enum(st)
 			else:
-				write_tagged_value(st, tag)
+				write_tagged_value(st)
 
 STRUCTURE = StructureDefiner()
 
@@ -830,7 +839,7 @@ def translate(roadmap:RoadMap):
 		write_ffi_init(module.foreign)
 	
 	# Delimiter so it's possible to start a begin-expression with a do-block:
-	emit(".")
+	emit(".begin")
 
 	# Write all begin-expressions:
 	for scope, module in each_piece(roadmap):

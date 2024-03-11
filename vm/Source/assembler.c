@@ -20,8 +20,10 @@ static Table globals;
 
 static void parse_function_block();
 static void parse_thunk();
+static void parse_vtable();
 
-
+static int vtable_index;
+static byte next_tag;
 
 static void grey_the_assembling_roots() {
 	darkenTable(&globals);
@@ -84,6 +86,8 @@ static void come_from() {
 static void init_assembler() {
 	memset(holes, 0, sizeof(holes));
 	current = NULL;
+	vtable_index = -1;
+	next_tag = 0;
 	initTable(&lexicon);
 	initTable(&globals);
 	gc_install_roots(grey_the_assembling_roots);
@@ -129,6 +133,15 @@ static void perform_word(Value value) {
 	else crashAndBurn("Bogosity in the lexicon");
 }
 
+
+static void parse_vtable() {
+	vtable_index++;
+	next_tag = 0;
+	for (int i = 0; i < 6; i++) {
+		parseString();
+	}
+	consume(TOKEN_END, "Do please .end your vtables.");
+}
 
 static void parse_one_instruction() {
 	uint32_t hash = hashString(parser.previous.start, parser.previous.length);
@@ -229,16 +242,11 @@ static void parse_top_level_functions(Verb define) {
 	} while (maybe_token(TOKEN_SEMICOLON));
 }
 
-static Value tag_definition(int tag) {
-	crashAndBurn("Tagged Values are not yet fully supported");
-	defineGlobal();
-}
-
-static parse_tagged_value(int vt_idx) {
-	int tag = parseByte("tag");
+static parse_tagged_value() {
 	String *name = parseString();
 	push(GC_VAL(name));
-	tag_definition(tag);
+	crashAndBurn("Tagged Values are not yet fully supported");
+	defineGlobal();
 	pop();
 }
 
@@ -252,22 +260,23 @@ static int parse_zero_or_more_field_names_onto_the_stack() {
 	return nr_fields;
 }
 
-static void parse_record(int vt_idx) {
+static void parse_record() {
+	if (vtable_index < 0) crashAndBurn(".data before .vtable");
+	byte tag = next_tag++;
 	int nr_fields = parse_zero_or_more_field_names_onto_the_stack();
 	if (nr_fields) {
-		int tag = parseByte("tag");
 		push(GC_VAL(parseString()));
-		make_constructor(vt_idx, tag, nr_fields);
+		make_constructor(vtable_index, tag, nr_fields);
 		// new_constructor(...) pops all those strings off the VM stack,
 		// so there's no need to do it here.
 		push(GC_VAL(AS_CTOR(TOP)->name));
 	}
 	else {
-		push(ENUM_VAL(vt_idx, parseByte("tag")));
+		push(ENUM_VAL(vtable_index, tag));
 		push(GC_VAL(parseString()));
 	}
 	defineGlobal();
-	consume(TOKEN_RIGHT_PAREN, "expected ')'");
+	consume(TOKEN_END, "expected .end");
 }
 
 static void parse_ffi_init() {
@@ -312,22 +321,22 @@ static void parse_actor_dfn() {
 
 static void parseScript() {
 	for (;;) {
-		if (maybe_token(TOKEN_LEFT_PAREN)) {
-			int vt_idx = (int)(parseDouble("vtable index here"));
-			if (maybe_token(TOKEN_STAR)) parse_tagged_value(vt_idx);
-			else parse_record(vt_idx);
+		if (maybe_token(TOKEN_VTABLE)) parse_vtable();
+		else if (maybe_token(TOKEN_DATA)) {
+			if (maybe_token(TOKEN_STAR)) parse_tagged_value();
+			else parse_record();
 		}
 		else if (maybe_token(TOKEN_LEFT_BRACE)) {
 			parse_top_level_functions(defineGlobal);
 			consume(TOKEN_RIGHT_BRACE, "expected semicolon or right-brace.");
 		}
-		else if (maybe_token(TOKEN_LESS)) {
+		else if (maybe_token(TOKEN_ACTOR)) {
 			parse_actor_dfn();
-			consume(TOKEN_GREATER, "Expected semicolon or right angle bracket.");
+			consume(TOKEN_END, "Expected semicolon or .end directive.");
 		}
-		else if (maybe_token(TOKEN_BANG)) parse_ffi_init();
-		else if (maybe_token(TOKEN_DOT)) break;
-		else errorAtCurrent("Missing section delimiter (period).");
+		else if (maybe_token(TOKEN_FFI)) parse_ffi_init();
+		else if (maybe_token(TOKEN_BEGIN)) break;
+		else errorAtCurrent("Missing .begin section.");
 	}
 	initChunk(&current->chunk);
 	push(GC_VAL(import_C_string("<script>", 8)));
