@@ -19,10 +19,11 @@ add_executable (svm
 	"Source/vm.c" "Source/assembler.c" "Source/scanner.c" "Source/isa.c" "Source/parser.c"
 	"Source/string.c" "Source/table.c" "Source/gc.c" "Source/function.c" "Source/record.c"
 	"Source/native.c" "Source/actor.c" "Source/chacha.c" "Source/platform_specific.c"
+	"Source/ffi.c"   "Source/game.c"  "Source/dispatch.c"
 
 	"Source/common.h" "Source/opcodes.h" "Source/prep.h"
 	"Source/chacha.h" "Source/platform_specific.h"
- "Source/ffi.c"   "Source/game.c" )
+)
 
 target_link_libraries(svm SDL2)
 

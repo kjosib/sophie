@@ -52,7 +52,8 @@ typedef union {
 	void init   ## kind(kind* vec); \
 	void free   ## kind(kind* vec); \
 	void resize ## kind(kind* vec, size_t cap); \
-	size_t  append ## kind(kind* vec, type item);
+	size_t  append ## kind(kind* vec, type item); \
+	size_t  alloc ## kind(kind* vec);
 
 __declspec(noreturn) void crashAndBurn(const char *why, ...);
 
@@ -108,6 +109,9 @@ void gc_must_finalize(GC *item);
 
 #define DEFINE_VECTOR_APPEND(Kind, type) \
   size_t append ## Kind (Kind *vec, type item) { if (vec->cap <= vec->cnt) resize ## Kind (vec, GROW(vec->cap)); vec->at[vec->cnt++] = item; return vec->cnt - 1; }
+
+#define DEFINE_VECTOR_ALLOC(Kind, type) \
+  size_t alloc ## Kind (Kind *vec) { if (vec->cap <= vec->cnt) resize ## Kind (vec, GROW(vec->cap)); vec->cnt++; return vec->cnt - 1; }
 
 void *reallocate(void *pointer, size_t newSize);
 
@@ -330,6 +334,31 @@ extern GC_Kind KIND_Record;
 static inline bool is_record(Value value) {
 	return (INDICATOR(value) == IND_GC) && (&KIND_Record == AS_GC(value)->kind);
 }
+
+
+/* dispatch.h */
+
+typedef struct {
+	int type_index;
+	Value callable;
+} DispatchEntry;
+
+DEFINE_VECTOR_TYPE(DispatchTable, DispatchEntry)
+
+typedef struct {
+	String *type_name; // Probably handy for debugging.
+	Value neg;  // Single dispatch, so this is fine.
+	DispatchTable cmp, add, sub, mul, div, pow;
+} VTable;
+
+void init_VTable(VTable *vt, String *type_name);
+
+DEFINE_VECTOR_TYPE(VMap, VTable)
+
+extern VMap vmap;
+
+void init_dispatch();
+void dispose_dispatch();
 
 /* actor.h */
 

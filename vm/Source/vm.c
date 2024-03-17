@@ -37,6 +37,7 @@ void vm_init() {
 	initTable(&vm.strings);
 	vm.cons = vm.nil = vm.maybe_this = vm.maybe_nope = UNSET_VAL;
 	gc_install_roots(grey_the_vm_roots);
+	init_dispatch();
 }
 
 void vm_capture_preamble_specials(Table *globals) {
@@ -50,6 +51,8 @@ void vm_capture_preamble_specials(Table *globals) {
 }
 
 void vm_dispose() {
+	dispose_dispatch();
+	gc_forget_roots(grey_the_vm_roots);
 	freeTable(&vm.strings);
 }
 
@@ -271,7 +274,7 @@ dispatch:
 		case OP_CALL:
 			switch (INDICATOR(TOP)) {
 			case IND_CLOSURE:
-			case IND_GC:
+			case IND_GC:  // i.e. native function
 				push(AS_GC(TOP)->kind->apply());
 				NEXT;
 			default:
@@ -291,7 +294,7 @@ dispatch:
 				vm.stackTop = base + arity;
 				goto enter;
 			}
-			case IND_GC:
+			case IND_GC:  // i.e. native function
 				YIELD(AS_GC(TOP)->kind->apply());
 			default:
 				runtimeError(vpc, base, "EXEC needs a callable object; got val %s.", valKind(TOP));

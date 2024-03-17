@@ -25,8 +25,15 @@ static void parse_vtable();
 static int vtable_index;
 static byte next_tag;
 
+// During assembly, we'll need a symbol table for type names.
+// A hash table from strings to integers will be fine.
+
+static Table type_name_map;
+
+
 static void grey_the_assembling_roots() {
 	darkenTable(&globals);
+	darkenTable(&type_name_map);
 	darkenTable(&lexicon);
 	Scope *scope = current;
 	while (scope) {
@@ -90,6 +97,7 @@ static void init_assembler() {
 	next_tag = 0;
 	initTable(&lexicon);
 	initTable(&globals);
+	initTable(&type_name_map);
 	gc_install_roots(grey_the_assembling_roots);
 	for (int index = 0; index < NR_OPCODES; index++) {
 		table_set_from_C(&lexicon, instruction[index].name, RUNE_VAL(index));
@@ -101,6 +109,7 @@ static void init_assembler() {
 static void dispose_assembler() {
 	gc_forget_roots(grey_the_assembling_roots);
 	freeTable(&globals);
+	freeTable(&type_name_map);
 	freeTable(&lexicon);
 }
 
@@ -135,12 +144,11 @@ static void perform_word(Value value) {
 
 
 static void parse_vtable() {
-	vtable_index++;
 	next_tag = 0;
-	for (int i = 0; i < 6; i++) {
-		parseString();
-	}
-	consume(TOKEN_END, "Do please .end your vtables.");
+	String *type_name = parseString();
+	vtable_index = (int)allocVMap(&vmap);
+	init_VTable(&vmap.at[vtable_index], type_name);
+	tableSet(&type_name_map, type_name, RUNE_VAL(vtable_index));
 }
 
 static void parse_one_instruction() {
