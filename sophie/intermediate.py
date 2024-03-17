@@ -83,6 +83,7 @@ class VMScope:
 		raise NotImplementedError(type(self))
 
 	def declare(self, symbol: ontology.Symbol):
+		assert symbol not in MANGLED or symbol is ontology.SELF, symbol
 		MANGLED[symbol] = self._prefix + symbol.nom.key()
 	
 	def declare_several(self, symbols: Iterable[ontology.Symbol]):
@@ -365,11 +366,9 @@ def _gensym():
 	_do_count += 1
 	return "do:"+str(_do_count)
 
-def write_vtable():
+def write_vtable(symbol):
 	emit(".vtable")
-	for x in range(6):
-		emit(quote(""))
-	emit(".end")
+	emit(quote(MANGLED[symbol]))
 	print()
 
 
@@ -529,12 +528,6 @@ class EagerContext(Context):
 		emit(UNARY_INSTRUCTION[ux.op.text])  # No change to stack depth
 		self.answer(scope)
 
-	def visit_BinExp(self, it: syntax.BinExp, scope:VMFunctionScope):
-		FORCE.visit(it.lhs, scope)
-		FORCE.visit(it.rhs, scope)
-		scope.emit_ALU(it.op.text)
-		self.answer(scope)
-
 	def visit_ShortCutExp(self, it: syntax.ShortCutExp, scope: VMFunctionScope):
 		FORCE.visit(it.lhs, scope)
 		satisfied = SHORTCUTS[it.op.text]
@@ -622,6 +615,12 @@ class ForceContext(FunctionContext):
 			return scope.jump_always()
 	
 	@staticmethod
+	def visit_BinExp(it: syntax.BinExp, scope:VMFunctionScope):
+		FORCE.visit(it.lhs, scope)
+		FORCE.visit(it.rhs, scope)
+		scope.emit_ALU(it.op.text)
+
+	@staticmethod
 	def answer(scope: VMFunctionScope):
 		""" Just leave the answer on the stack. """
 		pass
@@ -654,6 +653,16 @@ class TailContext(FunctionContext):
 	def sequel(scope:VMFunctionScope, depth:int, more:bool):
 		pass
 	
+	@staticmethod
+	def visit_BinExp(it: syntax.BinExp, scope:VMFunctionScope):
+		FORCE.visit(it.lhs, scope)
+		FORCE.visit(it.rhs, scope)
+		if it.op.text == "<=>":
+			emit("TAIL_CMP")
+		else:
+			scope.emit_ALU(it.op.text)
+			scope.emit_return()
+
 	@staticmethod
 	def answer(scope:VMFunctionScope):
 		""" Have answer on stack; time to return it. """
@@ -789,7 +798,6 @@ def write_one_actor(dfn:syntax.UserAgent, outer:VMGlobalScope):
 	outer.nl()
 
 def write_actors(agent_definitions:list[syntax.UserAgent], outer:VMGlobalScope):
-	outer.declare_several(agent_definitions)
 	for dfn in agent_definitions:
 		write_one_actor(dfn, outer)
 	pass
@@ -806,13 +814,14 @@ class StructureDefiner(Visitor):
 	
 	@staticmethod
 	def visit_Record(r:syntax.Record, scope:VMGlobalScope):
-		write_vtable()
 		scope.declare(r)
+		write_vtable(r)
 		write_record(r.spec.field_names(), r)
 		
 	@staticmethod
 	def visit_Variant(variant:syntax.Variant, scope:VMGlobalScope):
-		write_vtable()
+		scope.declare(variant)
+		write_vtable(variant)
 		scope.declare_several(variant.subtypes)
 		for tag, st in enumerate(variant.subtypes):
 			_TAG_MAP[variant, st.nom.key()] = tag

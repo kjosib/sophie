@@ -1845,3 +1845,34 @@ and everything is back in working order.
 The assembler doesn't use the six strings a ``.vtable`` expects for anything yet.
 It's now time to build out the run-time semantics for operator overloads.
 Then I can get back to making the VM support the rest of this stuff.
+
+17 March 2024 - Course Correction
+----------------------------------
+
+After yet more sleep and reflection,
+I've decided to go ahead and make the VM support double-dispatch for operators.
+Indeed this was the original concept.
+It just took a while to figure out some reasonable and achievable plan.
+
+The idea now is that the left-argument type determines a dispatch table.
+Within that are sub-tables for each operator.
+The sub-tables map a right-argument type to a callable object.
+(Except for negation, which is unary and so just needs a single callable object.)
+The six-strings idea is out the window:
+I'll supply a type-name inline, and then refer back to it in overload definitions.
+(I'll probably add keywords for each kind of operator overload.)
+
+I'm sidestepping the problem of perfect-hashing for now.
+I'll just use a linear search in a list of candidates -- with one trick:
+If the right-argument type is not found in first position,
+move it up and slide everything else down.
+It's not the state of the art by any means,
+but if the LRU hypothesis holds, this should perform tolerably.
+
+(Maybe some day I'll invest the time to generate perfect-hashes for operator dispatch and field access.)
+
+Today I'm checking in some code for these dispatch tables.
+It's only minimally tested: it builds properly and there are no regressions.
+That's enough for today, I think.
+At this point, I can see a path toward filling the holes in the design.
+
