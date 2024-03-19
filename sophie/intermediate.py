@@ -81,10 +81,14 @@ class VMScope:
 
 	def member_number(self, field:str):
 		raise NotImplementedError(type(self))
+	
+	def mangle_names(self, syms:Iterable[ontology.Symbol]):
+		for symbol in syms:
+			assert symbol not in MANGLED
+			MANGLED[symbol] = self._prefix + symbol.nom.key()
 
 	def declare(self, symbol: ontology.Symbol):
-		assert symbol not in MANGLED or symbol is ontology.SELF, symbol
-		MANGLED[symbol] = self._prefix + symbol.nom.key()
+		raise NotImplementedError(type(self))
 	
 	def declare_several(self, symbols: Iterable[ontology.Symbol]):
 		for sym in symbols:
@@ -107,6 +111,9 @@ class VMGlobalScope(VMScope):
 			inner.nl()
 			FORCE.visit(expr, inner)
 			inner.display()
+
+	def declare(self, symbol: ontology.Symbol):
+		pass
 
 class VMActorScope(VMScope):
 	""" Specialized scope for the behaviors of an actor-definition """
@@ -151,7 +158,6 @@ class VMFunctionScope(VMScope):
 		self._depth += 1
 
 	def declare(self, symbol: ontology.Symbol):
-		super().declare(symbol)
 		self.alias(symbol)
 		self._push()
 	
@@ -549,6 +555,7 @@ class EagerContext(Context):
 	def visit_LambdaForm(lf:syntax.LambdaForm, scope: VMFunctionScope):
 		# Two steps:
 		# 1. Emit the function.
+		scope.mangle_names([lf.function])
 		scope.declare(lf.function)
 		emit("{")
 		write_one_function(lf.function, scope)
@@ -762,6 +769,7 @@ def write_ffi_init(foreign: list[syntax.ImportForeign]):
 
 def write_functions(fns, outer: VMScope):
 	if not fns: return
+	outer.mangle_names(fns)
 	outer.declare_several(fns)
 	emit("{")
 	last = fns[-1]
@@ -814,15 +822,15 @@ class StructureDefiner(Visitor):
 	
 	@staticmethod
 	def visit_Record(r:syntax.Record, scope:VMGlobalScope):
-		scope.declare(r)
+		scope.mangle_names([r])
 		write_vtable(r)
 		write_record(r.spec.field_names(), r)
 		
 	@staticmethod
 	def visit_Variant(variant:syntax.Variant, scope:VMGlobalScope):
-		scope.declare(variant)
+		scope.mangle_names([variant])
 		write_vtable(variant)
-		scope.declare_several(variant.subtypes)
+		scope.mangle_names(variant.subtypes)
 		for tag, st in enumerate(variant.subtypes):
 			_TAG_MAP[variant, st.nom.key()] = tag
 			if isinstance(st.body, syntax.RecordSpec):
@@ -838,11 +846,11 @@ def translate(roadmap:RoadMap):
 	# Write all types:
 	for scope, module in each_piece(roadmap):
 		STRUCTURE.write_types(module.types, scope)
-		scope.declare_several(module.agent_definitions)
-	
+		scope.mangle_names(module.agent_definitions)
+		mangle_foreign_symbols(module.foreign)
+
 	# Write all functions (including FFI):
 	for scope, module in each_piece(roadmap):
-		mangle_foreign_symbols(module.foreign)
 		write_functions(module.outer_functions, scope)
 		write_actors(module.agent_definitions, scope)
 		write_ffi_init(module.foreign)
