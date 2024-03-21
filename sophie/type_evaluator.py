@@ -602,7 +602,7 @@ class DeductionEngine(Visitor):
 		
 		for glyph in '^ * / DIV MOD + -'.split():
 			self._binary_types[glyph] = AdHocType(glyph, 2)
-			self._binary_types[glyph].cases.append(math_op)
+			self._binary_types[glyph].append_case(math_op)
 		
 		numeric = relop_type(primitive.literal_number)
 		stringy = relop_type(primitive.literal_string)
@@ -610,12 +610,12 @@ class DeductionEngine(Visitor):
 		
 		def eq(op):
 			rel(op)
-			self._binary_types[op].cases.append(flagged)
+			self._binary_types[op].append_case(flagged)
 		
 		def rel(op):
 			self._binary_types[op] = AdHocType(op, 2)
-			self._binary_types[op].cases.append(numeric)
-			self._binary_types[op].cases.append(stringy)
+			self._binary_types[op].append_case(numeric)
+			self._binary_types[op].append_case(stringy)
 		
 		eq("==")
 		eq("!=")
@@ -626,10 +626,10 @@ class DeductionEngine(Visitor):
 		
 		self._binary_types['<=>'] = spaceship = AdHocType('<=>', 2)
 		for ot in (primitive.literal_number, primitive.literal_string):
-			spaceship.cases.append(_binop_type(ot, self._order_type))
+			spaceship.append_case(_binop_type(ot, self._order_type))
 		
 		self._unary_types['-'] = AdHocType("-", 1)
-		self._unary_types["-"].cases.append(_arrow_of(primitive.literal_number, 1))
+		self._unary_types["-"].append_case(_arrow_of(primitive.literal_number, 1))
 		self._unary_types["NOT"] = _arrow_of(primitive.literal_flag, 1)
 
 	def visit_Module(self, module:syntax.Module):
@@ -800,13 +800,22 @@ class DeductionEngine(Visitor):
 			return self._call_static(callee_type, actual_types, args, env)
 		
 	def _call_dynamic(self, ad_hoc:AdHocType, actual_types, args:Sequence[ValExpr], env:TYPE_ENV):
-		for candidate in ad_hoc.cases:
-			binder = Binder(self, env).inputs(candidate.arg.fields, actual_types, args)
-			if binder.ok:
-				return candidate.res.visit(Rewriter(binder.gamma))
-		self._report.no_applicable_method(env, actual_types)
-		return ERROR
+		"""
+		In the new way of doing this, we need to find the type-symbols
+		associated with the actual types and let the ad-hoc type provide
+		the corresponding function-type (either arrow or UDF) to which we delegate.
 		
+		Probably an ad-hoc type should wrap a more syntax-oriented definition object
+		representing whatever dispatch will happen at runtime.
+		"""
+		if BOTTOM in actual_types: return BOTTOM
+		implementing_type = ad_hoc.dispatch(actual_types)
+		if implementing_type is ERROR:
+			self._report.no_applicable_method(env, actual_types)
+			return ERROR
+		else:
+			return self._call_static(implementing_type, actual_types, args, env)
+			
 	def _call_static(self, callee_type, actual_types, args:Sequence[ValExpr], env:TYPE_ENV):
 		
 		assert not isinstance(callee_type, AdHocType)
@@ -1085,3 +1094,4 @@ def _hypothesis(st:Symbol, type_args:Sequence[SophieType]) -> SubType:
 
 def _is_a_self_reference(expr:ValExpr) -> bool:
 	return isinstance(expr, syntax.Lookup) and expr.ref.dfn is SELF
+
