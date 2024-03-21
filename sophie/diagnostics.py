@@ -308,10 +308,13 @@ class Report:
 		self.issue(Pic(intro, trace_stack(env)+problem))
 
 	def no_applicable_method(self, env:TYPE_ENV, actual_types):
-		site = env.pc
-		intro = "I have no strategy for "+str(actual_types)
-		problem = [Annotation(env.path(), site, "Here")]
-		self.issue(Pic(intro, trace_stack(env)+problem))
+		intro = "A type-directed operation goes off the rails. Here's how:"
+		footer = [
+			"This operator has no method for "+str(tuple(actual_types))+".",
+			"If these are the types you mean to operate on,",
+			"then please define the operator for these types.",
+		]
+		self.issue(Pic(intro, trace_stack(env), footer))
 
 	# Some things for just in case:
 	

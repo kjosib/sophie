@@ -39,10 +39,14 @@ TYPE_ENV = Frame["SophieType"]
 
 _type_numbering_subsystem = EquivalenceClassifier()
 
+class ConflictingOverload(Exception): pass
+
 class SophieType:
 	"""Value objects so they can play well with the classifier"""
 	def visit(self, visitor:"TypeVisitor"): raise NotImplementedError(type(self))
 	def expected_arity(self) -> int: raise NotImplementedError(type(self))
+	def dispatch_signature(self) -> tuple[Symbol, ...]: raise NotImplementedError(type(self))
+	def token(self) -> Symbol: pass
 
 	def __init__(self, *key):
 		self._key = key
@@ -70,6 +74,7 @@ class OpaqueType(SophieType):
 		super().__init__(symbol)
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_opaque(self)
 	def expected_arity(self) -> int: return -1  # Not callable
+	def token(self): return self.symbol
 
 def _exemplargs(type_args: Iterable[SophieType], size) -> tuple[SophieType, ...]:
 	them = tuple(a.exemplar() for a in type_args)
@@ -84,6 +89,7 @@ class RecordType(SophieType):
 		super().__init__(self.symbol, *(a.number for a in self.type_args))
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_record(self)
 	def expected_arity(self) -> int: return -1  # Not callable. (There's a constructor arrow made.)
+	def token(self): return self.symbol
 
 class SumType(SophieType):
 	""" Either a record directly, or a variant-type. Details are in the symbol table. """
@@ -97,10 +103,12 @@ class SumType(SophieType):
 		super().__init__(self.variant, *(a.number for a in self.type_args))
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_sum(self)
 	def expected_arity(self) -> int: return -1  # Not callable directly.
+	def token(self): return self.variant
 
 class SubType(SophieType):
 	st : syntax.SubTypeSpec
 	def expected_arity(self) -> int: return -1  # Not callable. (There's a constructor arrow made.)
+	def token(self): return self.st.variant
 
 class EnumType(SubType):
 	def __init__(self, st: syntax.SubTypeSpec):
@@ -133,6 +141,7 @@ class ArrowType(SophieType):
 		super().__init__(self.arg, self.res)
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_arrow(self)
 	def expected_arity(self) -> int: return len(self.arg.fields)
+	def dispatch_signature(self) -> tuple[Symbol, ...]: return tuple(a.token() for a in self.arg.fields)
 
 class MessageType(SophieType):
 	def __init__(self, arg: ProductType):
@@ -162,9 +171,21 @@ class AdHocType(SophieType):
 		super().__init__(glyph, arity)
 		self.glyph = glyph
 		self._arity = arity
-		self.cases = []
+		self._cases = {}
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_ad_hoc(self)
 	def expected_arity(self) -> int: return self._arity
+	
+	def dispatch(self, arg_types:Iterable[SophieType]) -> SophieType:
+		arg_tokens = tuple(a.token() for a in arg_types)
+		assert len(arg_tokens) == self._arity
+		return self._cases.get(arg_tokens, ERROR)
+		
+	def append_case(self, case:SophieType):
+		arg_tokens = case.dispatch_signature()
+		if arg_tokens in self._cases or not all(arg_tokens):
+			raise ConflictingOverload
+		else:
+			self._cases[arg_tokens] = case
 
 class UserTaskType(SophieType):
 	""" The type of a task-ified user-defined (parametric) function. """
