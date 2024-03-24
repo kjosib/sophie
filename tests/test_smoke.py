@@ -1,5 +1,6 @@
 from pathlib import Path
 import unittest
+from unittest.mock import patch
 from sophie import executive, diagnostics, resolution, type_evaluator
 from sophie.intermediate import translate
 from sophie.demand import analyze_demand
@@ -16,7 +17,9 @@ def _good(folder, which) -> resolution.RoadMap:
 		type_evaluator.DeductionEngine(roadmap, report)
 		report.assert_no_issues()
 		analyze_demand(roadmap)
-		translate(roadmap)
+		with patch("sophie.intermediate.emit", lambda *args:None):
+			with patch("sophie.intermediate.newline", lambda indent="":None):
+				translate(roadmap)
 		return roadmap
 	except resolution.Yuck as ex:
 		assert report.sick()

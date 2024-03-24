@@ -122,7 +122,7 @@ class DisplayProxy:
 	
 	def draw(self, pic):
 		for step in iterate_list(pic):
-			tag = step.pop("")
+			tag = step.pop("").nom.text
 			getattr(self, "_"+tag)(*map(force, step.values()))
 		pygame.display.flip()
 	
@@ -132,7 +132,7 @@ class DisplayProxy:
 	def _stroke(self, color, strokes):
 		rgb = _force_rgb(color)
 		for stroke in iterate_list(strokes):
-			tag = stroke.pop("")
+			tag = stroke.pop("").nom.text
 			getattr(self, "_stroke_"+tag)(rgb, *map(force, stroke.values()))
 	
 	def _stroke_line(self, color, start, stop):

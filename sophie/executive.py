@@ -4,11 +4,12 @@ This is the overall control for the run-time.
 """
 import sys
 from collections import deque
-from . import syntax, primitive, runtime, ontology
+from . import syntax, primitive,  ontology
 from .stacking import Frame, RootFrame, Activation
 from .runtime import (
 	force, _strict, Constructor, Primitive, Thunk,
-	Action, ActorClass, ActorTemplate, iterate_list
+	Action, ActorClass, ActorTemplate, iterate_list,
+	reset, install_overrides
 )
 from .resolution import RoadMap
 from .scheduler import MAIN_QUEUE, SimpleTask
@@ -16,10 +17,12 @@ from .scheduler import MAIN_QUEUE, SimpleTask
 def run_program(roadmap:RoadMap):
 
 	drivers = {}
+	_set_strictures(roadmap.preamble)
 	preamble_scope = roadmap.module_scopes[roadmap.preamble]
 	root = _dynamic_root(preamble_scope)
 	result = None
 	for module in roadmap.each_module:
+		_set_strictures(module)
 		env = Activation.for_module(root, module)
 		_prepare(env, roadmap.module_scopes[module])
 		for d in module.foreign:
@@ -27,6 +30,7 @@ def run_program(roadmap:RoadMap):
 				py_module = sys.modules[d.source.value]
 				linkage = [env.fetch(ref.dfn) for ref in d.linkage]
 				drivers.update(py_module.sophie_init(*linkage) or ())
+		install_overrides(env, module.user_operators)
 		for expr in module.main:
 			env.pc = expr
 			result = _strict(expr, env)
@@ -46,28 +50,28 @@ def run_program(roadmap:RoadMap):
 		root.absorb(env)
 	return result
 
-def _dynamic_root(static_root) -> RootFrame:
+def _set_strictures(module):
+	for udf in module.all_functions:
+		udf.strictures = tuple(i for i, p in enumerate(udf.params) if p.is_strict)
+
+def _dynamic_root(preamble_scope) -> RootFrame:
 	root = RootFrame()
 	_prepare(root, primitive.root_namespace)
-	_prepare(root, static_root)
-	if 'nil' in static_root:
-		runtime.NIL = root.fetch(static_root['nil'])
-		runtime.CONS = root.fetch(static_root['cons'])
-	else:
-		runtime.NIL, runtime.CONS = None, None
+	_prepare(root, preamble_scope)
+	reset(lambda s:root.fetch(preamble_scope[s]))
 	return root
 
 def _prepare(env:Frame, namespace:ontology.NS):
 	for key, dfn in namespace.local.items():
 		if isinstance(dfn, syntax.Record):
-			env.assign(dfn, Constructor(key, dfn.spec.field_names()))
+			env.assign(dfn, Constructor(dfn, dfn.spec.field_names()))
 		elif isinstance(dfn, (syntax.SubTypeSpec, syntax.TypeAlias)):
 			if isinstance(dfn.body, (syntax.ArrowSpec, syntax.TypeCall)):
 				pass
 			elif isinstance(dfn.body, syntax.RecordSpec):
-				env.assign(dfn, Constructor(key, dfn.body.field_names()))
+				env.assign(dfn, Constructor(dfn, dfn.body.field_names()))
 			elif dfn.body is None:
-				env.assign(dfn, {"": key})
+				env.assign(dfn, {"": dfn})
 			else:
 				raise ValueError("Tagged scalars (%r) are not implemented."%key)
 		elif isinstance(dfn, syntax.FFI_Alias):

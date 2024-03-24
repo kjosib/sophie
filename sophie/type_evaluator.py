@@ -602,7 +602,7 @@ class DeductionEngine(Visitor):
 		
 		for glyph in '^ * / DIV MOD + -'.split():
 			self._binary_types[glyph] = AdHocType(glyph, 2)
-			self._binary_types[glyph].append_case(math_op)
+			self._binary_types[glyph].append_case(math_op, None)
 		
 		numeric = relop_type(primitive.literal_number)
 		stringy = relop_type(primitive.literal_string)
@@ -610,12 +610,12 @@ class DeductionEngine(Visitor):
 		
 		def eq(op):
 			rel(op)
-			self._binary_types[op].append_case(flagged)
+			self._binary_types[op].append_case(flagged, None)
 		
 		def rel(op):
 			self._binary_types[op] = AdHocType(op, 2)
-			self._binary_types[op].append_case(numeric)
-			self._binary_types[op].append_case(stringy)
+			self._binary_types[op].append_case(numeric, None)
+			self._binary_types[op].append_case(stringy, None)
 		
 		eq("==")
 		eq("!=")
@@ -626,18 +626,39 @@ class DeductionEngine(Visitor):
 		
 		self._binary_types['<=>'] = spaceship = AdHocType('<=>', 2)
 		for ot in (primitive.literal_number, primitive.literal_string):
-			spaceship.append_case(_binop_type(ot, self._order_type))
+			spaceship.append_case(_binop_type(ot, self._order_type), None)
 		
 		self._unary_types['-'] = AdHocType("-", 1)
-		self._unary_types["-"].append_case(_arrow_of(primitive.literal_number, 1))
+		self._unary_types["-"].append_case(_arrow_of(primitive.literal_number, 1), None)
 		self._unary_types["NOT"] = _arrow_of(primitive.literal_flag, 1)
-
+	
 	def visit_Module(self, module:syntax.Module):
 		self._report.info("Type-Check", module.source_path)
 		self._deps_pass.visit_Module(module)
 		for td in module.types: self.visit(td)
 		for fi in module.foreign: self.visit(fi)
 		local = Activation.for_module(self._root, module)
+		self.build_all_manifests(module, local)
+		self.install_operators(module, local)
+		self.visit_begin_block(module, local)
+		self._root.absorb(local)
+
+	def install_operators(self, module, local):
+		for udf in module.user_operators:
+			arity = len(udf.params)
+			if arity == 1: dispatch = self._unary_types
+			elif arity == 2: dispatch = self._binary_types
+			else:
+				self._report.bogus_operator_arity(udf)
+				continue
+			op_key = udf.nom.key()
+			try: adhoc = dispatch[op_key]
+			except KeyError: self._report.bogus_operator_arity(udf)
+			else: adhoc.append_case(UDFType(udf, local), self._report)
+		for sym in module.ffi_operators:
+			pass
+	
+	def build_all_manifests(self, module, local):
 		builder = ManifestBuilder([], [])
 		for udf in module.all_functions:
 			for fp in udf.params:
@@ -647,11 +668,12 @@ class DeductionEngine(Visitor):
 				self._types[udf] = builder.visit(udf.result_type_expr)
 		for uda in module.agent_definitions:
 			self._constructors[uda] = builder.make_agent_template(uda, local)
+	
+	def visit_begin_block(self, module, local):
 		for expr in module.main:
 			self._report.trace(" -->", expr)
 			result = self.visit(expr, local)
 			self._report.info(result)
-		self._root.absorb(local)
 
 	###############################################################################
 
@@ -874,11 +896,11 @@ class DeductionEngine(Visitor):
 			assert target is SELF or isinstance(target, (syntax.FormalParameter, syntax.Subject, syntax.NewAgent)), type(target)
 			return static_env.fetch(target)
 	
-	def visit_LambdaForm(self, lf:syntax.LambdaForm, env:TYPE_ENV) -> SophieType:
+	@staticmethod
+	def visit_LambdaForm(lf:syntax.LambdaForm, env:TYPE_ENV) -> SophieType:
 		# No need to chase to find a static environment:
 		# It's taken from the point-of-use by definition.
 		return UDFType(lf.function, env).exemplar()
-		
 		
 	@staticmethod
 	def visit_Absurdity(_:syntax.Absurdity, _env:TYPE_ENV) -> SophieType:
@@ -923,8 +945,7 @@ class DeductionEngine(Visitor):
 		def try_everything(type_args:Sequence[SophieType]):
 			uf = UnionFinder()
 			for alt in mx.alternatives:
-				subtype_symbol = mx.namespace[alt.nom.key()]
-				subtype = _hypothesis(subtype_symbol, type_args).exemplar()
+				subtype = _hypothesis(alt.dfn, type_args).exemplar()
 				case_result = try_one_alternative(alt, subtype)
 				if not uf.unify_with(env, alt.sub_expr, case_result, self._report):
 					return ERROR
@@ -944,7 +965,7 @@ class DeductionEngine(Visitor):
 			return try_everything([BOTTOM] * len(mx.variant.type_params))
 		
 		elif isinstance(subject_type, SubType) and subject_type.st.variant is mx.variant:
-			case_key = subject_type.st.nom.text
+			case_key = subject_type.st
 			if case_key in mx.dispatch:
 				return try_one_alternative(mx.dispatch[case_key], subject_type)
 			else:
@@ -1084,7 +1105,7 @@ class DeductionEngine(Visitor):
 			self._report.bad_type(env, at.sub, "procedure", inner, "Concurrent tasks cannot return a value.")
 			return ERROR
 
-def _hypothesis(st:Symbol, type_args:Sequence[SophieType]) -> SubType:
+def _hypothesis(st:syntax.SubTypeSpec, type_args:Sequence[SophieType]) -> SubType:
 	assert isinstance(st, syntax.SubTypeSpec)
 	body = st.body
 	if body is None:

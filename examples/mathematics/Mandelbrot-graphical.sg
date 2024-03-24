@@ -1,17 +1,32 @@
 # Mandelbrot set as graphics.
 # Most of the same concept as the text-mode version, but draw many small rectangles.
-# Maybe one row per tick.
+# Paints one row per tick of the game clock, assuming the machine can keep up.
+# The release-mode VM on the author's machine does keep up.
 
 import:
 sys."game" as game (events, xy, rgb, stroke, fill_box, black);
+sys."complex" (complex, squared_magnitude);
 
 type:
 
-complex is (re:number, im:number);
 range is (start:number, stop:number);
+
+assume:
+z, c: complex;
+n: number;
 
 define:
 
+# The key concept of the Mandelbrot set:
+classify(c) = f(max_steps, c) where
+    f(n, z) = case
+        when n <= 0 then 0;
+        when squared_magnitude(z) > 4 then max_steps - n;
+        else f(n-1, z*z + c);
+    esac;
+end classify;
+
+# Everything else is window dressing:
 res = xy(640, 480);
 box_scale = xy(2, 2);
 window_size = xy(res.x * box_scale.x, res.y * box_scale.y);
@@ -21,11 +36,6 @@ vertical = range(1.3, -1.3);
 max_steps = palette_length * 4;
 
 interpolate(r:range, t:number) = r.start * (1-t) + r.stop * t;
-
-c_add(a,b) = complex(a.re+b.re, a.im+b.im);
-c_mul(a,b) = complex(a.re*b.re - a.im*b.im, a.im*b.re + b.im*a.re);
-
-escaped(c) = c.re*c.re + c.im*c.im > 4;
 
 color(n) = surely(index(n mod palette_length, palette));
 palette = [
@@ -38,7 +48,7 @@ palette = [
 palette_length = length(palette);
 
 cell(corner:xy, z:complex) : image_element@game
-= stroke(color(iterate(z_naught, z, max_steps)), [ fill_box(corner, box_scale) ] );
+= stroke(color(classify(z)), [ fill_box(corner, box_scale) ] );
 
 row_for(y_scaled, im) : list[image_element@game] = map(brick, horizontal_steps) where
 	brick(x) = cell(corner, z) where
@@ -49,17 +59,6 @@ row_for(y_scaled, im) : list[image_element@game] = map(brick, horizontal_steps) 
 end row_for;
 
 horizontal_steps = iota(0, res.x);
-
-z_naught = complex(0,0);
-
-iterate(z, c, n) : number = case
-    when escaped(z) then max_steps - n;
-    when n <= 0 then 0;
-    else iterate(advance(z,c), c, n-1);
-esac;
-
-advance(z,c) = c_add(c, c_mul(z,z));
-
 
 agent painter(y:number) as
 	to tick(display) is case

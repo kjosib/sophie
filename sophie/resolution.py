@@ -28,15 +28,13 @@ class RoadMap:
 	order_symbol : syntax.Variant
 	module_scopes : dict[syntax.Module, NS]
 	import_alias : dict[syntax.Module, NS]
-	each_module : list[syntax.Module]
-	each_match : list[syntax.MatchExpr]
+	each_module : list[syntax.Module]  # Does not include the preamble, apparently.
 	import_map : dict[syntax.ImportModule, syntax.Module]
 
 	def __init__(self, main_path:Path, report:Report):
 		self.module_scopes = {}
 		self.import_alias = {}
 		self.each_module = []
-		self.each_match = []
 
 		def register(parent, module):
 			assert isinstance(module, syntax.Module)
@@ -57,13 +55,6 @@ class RoadMap:
 			check_constructors(resolver.dubious_constructors, report)
 			if report.sick(): raise Yuck("constructors")
 			
-			for mx in self.each_match:
-				_check_one_match_expression(mx, module_scope, report)
-			if report.sick(): raise Yuck("match_check")
-
-			self.build_match_dispatch_tables()
-			
-			self.each_match.clear()
 			return module
 
 		try: program = Program(main_path, report)
@@ -78,14 +69,6 @@ class RoadMap:
 		self.order_symbol = preamble_scope['order']
 		for path in program.module_sequence:
 			self.each_module.append(register(preamble_scope, path))
-
-	def build_match_dispatch_tables(self):
-		""" Both the type checker and the simple evaluator uses these. """
-		for mx in self.each_match:
-			mx.dispatch = {
-				alt.nom.key() : alt
-				for alt in mx.alternatives
-			}
 
 class TopDown(Visitor):
 	"""
@@ -207,10 +190,8 @@ class _WordDefiner(_ResolutionPass):
 
 	def visit_Variant(self, v:syntax.Variant):
 		self._declare_type(v)
-		ss = v.sub_space = NS(place=v)
 		for st in v.subtypes:
 			self._install(self.globals, st)
-			self._install(ss, st)
 			if st.body is not None:
 				self.visit(st.body)
 
@@ -248,7 +229,8 @@ class _WordDefiner(_ResolutionPass):
 	def visit_UserFunction(self, udf:syntax.UserFunction, env:NS):
 		udf.source_path = self.module.source_path
 		self.module.all_functions.append(udf)
-		self._install(env, udf)
+		if not isinstance(udf, syntax.UserOperator):
+			self._install(env, udf)
 		inner = udf.namespace = env.new_child(udf)
 		for param in udf.params:
 			self.visit(param, inner)
@@ -307,7 +289,6 @@ class _WordDefiner(_ResolutionPass):
 		return self.visit(af.expr, env)
 
 	def visit_MatchExpr(self, mx:syntax.MatchExpr, env:NS):
-		self.roadmap.each_match.append(mx)
 		self.visit(mx.subject.expr, env)
 		inner = mx.namespace = env.new_child(mx)
 		self._install(inner, mx.subject)
@@ -365,6 +346,10 @@ class _WordDefiner(_ResolutionPass):
 		except AttributeError:
 			self.report.undefined_name(sym.span_of_native_name())
 		else: self._install(self.globals, sym)
+	
+	def visit_FFI_Operator(self, sym:syntax.FFI_Operator, py_module):
+		self.visit_FFI_Alias(sym, py_module)
+		self.module.ffi_operators.append(sym)
 
 class _WordResolver(_ResolutionPass):
 	"""
@@ -490,6 +475,7 @@ class _WordResolver(_ResolutionPass):
 		self.visit(mx.subject.expr, env)
 		if mx.hint is not None:
 			self.visit(mx.hint, env)
+		_build_match_dispatch(mx, self.globals, self.report)
 		for alt in mx.alternatives:
 			self.visit(alt.sub_expr, mx.namespace)
 			for sub_ex in alt.where:
@@ -666,14 +652,14 @@ def check_constructors(dubious_constructors:list[syntax.Reference], report:Repor
 	bogons = [ref.head() for ref in dubious_constructors if not ref.dfn.has_value_domain()]
 	if bogons: report.error("Checking Constructors", bogons, "These type-names are not data-constructors.")
 
-def _check_one_match_expression(mx: syntax.MatchExpr, module_scope: NS, report: Report):
+def _build_match_dispatch(mx: syntax.MatchExpr, module_scope: NS, report: Report):
 	# Figure out what type of variant-record this MatchExpr is dissecting.
 	if mx.hint is None:
 		# Guess the variant based on the first alternative.
 		#
 		# Someday: Expand this to deal with local ambiguity
 		#          by consulting a larger amount of context.
-		first = mx.alternatives[0].nom
+		first = mx.alternatives[0].pattern
 		try: case = module_scope[first.key()]
 		except NoSuchSymbol:
 			report.undefined_name(first.head())
@@ -689,19 +675,21 @@ def _check_one_match_expression(mx: syntax.MatchExpr, module_scope: NS, report: 
 			return 
 
 	# Check for duplicate cases and typos.
-	seen = {}
+	mx.dispatch = {}
 	for alt in mx.alternatives:
-		key = alt.nom.key()
-		if key in seen:
-			report.redefined_name(seen[key], alt.nom)
-		else: seen[key] = alt
-		if key not in variant.sub_space:
-			report.not_a_case_of(alt.nom, variant)
+		try: st = variant.sub_space[alt.pattern.key()]
+		except KeyError: report.not_a_case_of(alt.pattern, variant)
+		else:
+			if st in mx.dispatch:
+				report.redundant_pattern(mx.dispatch[st], alt)
+			else:
+				alt.dfn = st
+				mx.dispatch[st] = alt
 	
 	# Check for exhaustiveness.
 
 	mx.variant = variant
-	exhaustive = len(seen) == len(variant.subtypes)
+	exhaustive = len(mx.dispatch) == len(variant.subtypes)
 	if      exhaustive and mx.otherwise : report.redundant_else(mx)
 	if not (exhaustive or  mx.otherwise): report.not_exhaustive(mx)
 

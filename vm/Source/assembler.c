@@ -216,7 +216,7 @@ static void parse_thunk() {
 static Value parse_normal_function() {
 	// The function's name goes in the first constant entry.
 	// That way the right garbage collection things happen automatically.
-	byte arity = parseByte("arity");
+	byte arity = parseByte("expected arity");
 	push(GC_VAL(parseString()));
 	return parse_rest_of_function(arity);
 }

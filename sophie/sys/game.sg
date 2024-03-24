@@ -66,7 +66,7 @@ type:
     esac;
 
 assume:
-    r : xy;
+    r, a, b : xy;
     scalar, theta: number;
     p, p1, p2 : polar;
 
@@ -77,11 +77,11 @@ define:
 
     # Simple 2-D vector math and trigonometry:
     
-    operator + (a:xy, b:xy) = xy(a.x+b.x, a.y+b.y);
-    operator - (a:xy, b:xy) = xy(a.x-b.x, a.y-b.y);
-    operator * (scalar:number, c:xy) = xy(scalar*c.x, scalar*c.y);
-    operator * (c:xy, scalar:number) = xy(scalar*c.x, scalar*c.y);
-    operator / (a:xy, scalar:number) = xy(c.x/scalar, c.y/scalar);
+    operator + (a, b) = xy(a.x+b.x, a.y+b.y);
+    operator - (a, b) = xy(a.x-b.x, a.y-b.y);
+    operator * (scalar, r) = xy(scalar*r.x, scalar*r.y);
+    operator * (r, scalar) = xy(scalar*r.x, scalar*r.y);
+    operator / (r, scalar) = xy(r.x/scalar, r.y/scalar);
     
     unit_vector(theta) = xy(cos(theta), sin(theta));
     as_cartesian(p) = p.magnitude * unit_vector(p.theta);
