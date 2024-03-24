@@ -217,7 +217,16 @@ class Report:
 		intro = pattern % mx.variant.nom.text
 		ann = Annotation(self._path, mx)
 		self.issue(Pic(intro, [ann]))
-		
+	
+	def redundant_pattern(self, prior:syntax.Alternative, new:syntax.Alternative):
+		intro = "These two patterns are the same, or overlap, or are redundant."
+		problem = [
+			Annotation(self._path, prior.pattern, "First"),
+			Annotation(self._path, new.pattern, "Not First")
+		]
+		footer = ["That's probably an oversight."]
+		self.issue(Pic(intro, problem, footer))
+
 	def redundant_else(self, mx:syntax.MatchExpr):
 		intro = "This case-block has an extra else-clause."
 		problem = [
@@ -315,6 +324,11 @@ class Report:
 			"then please define the operator for these types.",
 		]
 		self.issue(Pic(intro, trace_stack(env), footer))
+	
+	def bogus_operator_arity(self, udf):
+		intro = "Define most operators for two arguments. Negation (-) can also be defined for only one."
+		problem = [Annotation(udf.source_path, udf, "This one.")]
+		self.issue(Pic(intro, problem))
 
 	# Some things for just in case:
 	

@@ -9,11 +9,11 @@ static void errorAt(Token *token, const char *message) {
 	if (token->type == TOKEN_EOF) {
 		fprintf(stderr, " at end");
 	}
-	else if (token->type == TOKEN_ERROR) {
-		// Nothing.
-	}
+	//else if (token->type == TOKEN_ERROR) {
+	//	// Nothing.
+	//}
 	else {
-		fprintf(stderr, " at '%.*s'", (int)(token->length), token->start);
+		fprintf(stderr, " at '%.*s'", (int)(min(60, token->length)), token->start);
 	}
 
 	fprintf(stderr, ": %s\n", message);
@@ -35,7 +35,7 @@ void advance() {
 		parser.current = scanToken();
 		if (parser.current.type != TOKEN_ERROR) break;
 
-		errorAtCurrent(parser.current.start);
+		errorAtCurrent("Unrecognized Token.");
 	}
 }
 

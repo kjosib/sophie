@@ -13,11 +13,23 @@ but if that passes, then you get corresponding VM intermediate code on standard 
 
 from typing import Iterable, Optional, Sequence
 from boozetools.support.foundation import Visitor
-from . import syntax, ontology
+from . import syntax, ontology, primitive
 from .resolution import RoadMap
 
 class TooComplicated(Exception):
 	pass
+
+OPERATOR_DIRECTIVE = {
+	("-", 1): ".neg",
+	("+", 2): ".add",
+	("-", 2): ".sub",
+	("*", 2): ".mul",
+	("/", 2): ".div",
+	("^", 2): ".pow",
+	("DIV", 2): ".idiv",
+	("MOD", 2): ".mod",
+	("<=>", 2): ".cmp",
+}
 
 BINARY_INSTRUCTION = {
 	# glyph : (opcode, stack-effect)
@@ -50,6 +62,8 @@ SHORTCUTS = {
 
 def emit(*xs):
 	print(*xs, end=" ")
+def newline(indent=""):
+	print("\n", end=indent)
 def quote(x):
 	assert isinstance(x, str), x
 	assert '"' not in x
@@ -59,6 +73,13 @@ LABEL_QUEUE = list(reversed(range(4096)))
 LABEL_MAP = {}
 
 MANGLED = {}
+def _mangle_name(prefix:str, symbol:ontology.Symbol):
+	assert symbol not in MANGLED
+	MANGLED[symbol] = prefix + symbol.nom.key()
+
+def _mangle_user_operator(op: syntax.UserOperator):
+	assert op not in MANGLED
+	MANGLED[op] = op.nom.key() + '|'.join(MANGLED[t] for t in op.dispatch_vector())
 
 class VMScope:
 	""" Corresponds roughly to the Scope and/or Function structures in the VM. """
@@ -69,9 +90,7 @@ class VMScope:
 	def __init__(self, prefix:str):
 		self._prefix = prefix
 	
-	def nl(self):
-		print()
-		print("", end=self.indent)
+	def nl(self): newline(self.indent)
 
 	def capture(self, symbol: ontology.Symbol) -> bool:
 		raise NotImplementedError(type(self))
@@ -84,8 +103,8 @@ class VMScope:
 	
 	def mangle_names(self, syms:Iterable[ontology.Symbol]):
 		for symbol in syms:
-			assert symbol not in MANGLED
-			MANGLED[symbol] = self._prefix + symbol.nom.key()
+			if isinstance(symbol, syntax.UserOperator): _mangle_user_operator(symbol)
+			else: _mangle_name(self._prefix, symbol)
 
 	def declare(self, symbol: ontology.Symbol):
 		raise NotImplementedError(type(self))
@@ -375,7 +394,7 @@ def _gensym():
 def write_vtable(symbol):
 	emit(".vtable")
 	emit(quote(MANGLED[symbol]))
-	print()
+	newline()
 
 
 def write_record(names:Iterable[str], symbol:ontology.Symbol):
@@ -384,7 +403,7 @@ def write_record(names:Iterable[str], symbol:ontology.Symbol):
 		emit(name)
 	emit(quote(MANGLED[symbol]))
 	emit(".end")
-	print()
+	newline()
 
 def write_enum(symbol:ontology.Symbol):
 	write_record((), symbol)
@@ -409,7 +428,7 @@ def each_piece(roadmap:RoadMap):
 	for index, module in enumerate(roadmap.each_module):
 		yield VMGlobalScope(str(index+1) + ":"), module
 
-_TAG_MAP = {}  # For compiling type-cases.
+TYPE_CASE_INDEX = {}
 
 class Context(Visitor):
 	"""
@@ -508,7 +527,7 @@ class EagerContext(Context):
 		cases = scope.cases(nr_cases)
 		after = []
 		for alt in mx.alternatives:
-			tag = _TAG_MAP[mx.variant, alt.nom.key()]
+			tag = TYPE_CASE_INDEX[alt.dfn]
 			scope.come_from(cases[tag])
 			cases[tag] = None
 			write_functions(alt.where, scope)
@@ -779,6 +798,8 @@ def write_functions(fns, outer: VMScope):
 	outer.nl()
 
 def write_one_function(fn: syntax.UserFunction, outer: VMScope):
+	if isinstance(fn, syntax.UserOperator):
+		emit(OPERATOR_DIRECTIVE[fn.nom.key(), len(fn.params)])
 	inner = VMFunctionScope(outer, fn.nom.text, is_thunk=not fn.params)
 	inner.emit_preamble(fn.params, MANGLED[fn])
 	for param in fn.params:
@@ -832,7 +853,7 @@ class StructureDefiner(Visitor):
 		write_vtable(variant)
 		scope.mangle_names(variant.subtypes)
 		for tag, st in enumerate(variant.subtypes):
-			_TAG_MAP[variant, st.nom.key()] = tag
+			TYPE_CASE_INDEX[st] = tag
 			if isinstance(st.body, syntax.RecordSpec):
 				write_record(st.body.field_names(), st)
 			elif st.body is None:
@@ -843,6 +864,10 @@ class StructureDefiner(Visitor):
 STRUCTURE = StructureDefiner()
 
 def translate(roadmap:RoadMap):
+	# Mangle the built-in types
+	for name, symbol in primitive.root_namespace.local.items():
+		MANGLED[symbol] = name
+	
 	# Write all types:
 	for scope, module in each_piece(roadmap):
 		STRUCTURE.write_types(module.types, scope)
@@ -863,6 +888,7 @@ def translate(roadmap:RoadMap):
 		scope.write_begin_expressions(module)
 	
 	# All done:
-	_TAG_MAP.clear()
+	TYPE_CASE_INDEX.clear()
+	MANGLED.clear()
 
 

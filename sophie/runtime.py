@@ -1,21 +1,21 @@
 import operator
 from typing import Any, Union, Sequence, Optional, Reversible
-from . import syntax
+from . import syntax, primitive
 from .ontology import SELF
 from .stacking import Frame, Activation, RootFrame
 from .scheduler import Task, Actor
 from .diagnostics import trace_absurdity
 
-LESS = {"":"less"}
-SAME = {"":"same"}
-MORE = {"":"more"}
+LESS:Optional[dict] = None # Gets replaced at runtime.
+SAME:Optional[dict] = None # Gets replaced at runtime.
+MORE:Optional[dict] = None # Gets replaced at runtime.
 
 def _compare(a,b):
 	if a < b: return LESS
 	if a == b: return SAME
 	return MORE
 
-BINARY_IMPL = {
+PRIMITIVE_BINARY = {
 	"^"   : operator.pow,
 	"*"   : operator.mul,
 	"/"   : operator.truediv,
@@ -31,7 +31,7 @@ BINARY_IMPL = {
 	">" : operator.gt,
 	"<=>" : _compare
 }
-UNARY_IMPL = {
+PRIMITIVE_UNARY = {
 	"-" : operator.neg,
 	"NOT" : operator.not_,
 }
@@ -49,21 +49,29 @@ SHORTCUT = {
 
 THREADED_ROOT = RootFrame()
 
-def overloaded_bin_op(a, op, b, dynamic_env:ENV):
-	# TODO: Dispatch operator overloads
-	#  Probably use the first tag to look up a vtable.
+def overloaded_bin_op(a:STRICT_VALUE, op:str, b:STRICT_VALUE, dynamic_env:ENV):
+	signature = _type_class(a), _type_class(b)
 	if op in RELOP_MAP:
-		pass
-	raise NotImplementedError
+		order = OVERLOAD["<=>", signature].apply((a, b), dynamic_env)
+		return order[""] in RELOP_MAP[op]
+	else:
+		return OVERLOAD[op, signature].apply((a, b), dynamic_env)
+	
 
-RELOP_MAP = {
-	"<" : ("less",),
-	"==" : ("same",),
-	">" : ("more",),
-	"!=" : ("less", "more"),
-	"<=" : ("less", "same"),
-	">=" : ("more", "same"),
+RELOP_MAP = {}
+
+OVERLOAD = {}
+
+_PRIMITIVE_TYPE_CLASS = {
+	int: primitive.root_namespace['number'],
+	float: primitive.root_namespace['number'],
+	str: primitive.root_namespace['string'],
+	bool: primitive.root_namespace['flag'],
 }
+
+def _type_class(x:STRICT_VALUE):
+	try: return _PRIMITIVE_TYPE_CLASS[type(x)]
+	except KeyError: return x[""].as_token()
 
 ###############################################################################
 
@@ -126,12 +134,12 @@ def _eval_bin_exp(expr:syntax.BinExp, dynamic_env:ENV):
 	a = _strict(expr.lhs, dynamic_env)
 	b = _strict(expr.rhs, dynamic_env)
 	try:
-		return BINARY_IMPL[expr.op.text](a, b)
+		return PRIMITIVE_BINARY[expr.op.text](a, b)
 	except TypeError:
 		return overloaded_bin_op(a, expr.op.text, b, dynamic_env)
 
 def _eval_unary_exp(expr:syntax.UnaryExp, dynamic_env:ENV):
-	return UNARY_IMPL[expr.op.text](_strict(expr.arg, dynamic_env))
+	return PRIMITIVE_UNARY[expr.op.text](_strict(expr.arg, dynamic_env))
 
 def _eval_shortcut_exp(expr:syntax.ShortCutExp, dynamic_env:ENV):
 	lhs = _strict(expr.lhs, dynamic_env)
@@ -257,6 +265,7 @@ class Closure(Function):
 	""" The run-time manifestation of a sub-function: a callable value tied to its natal environment. """
 
 	def __init__(self, static_link:ENV, udf:syntax.UserFunction):
+		assert hasattr(udf, "strictures"), udf
 		self._static_link = static_link
 		self._udf = udf
 	
@@ -280,7 +289,7 @@ class Primitive(Function):
 		return self._fn(*map(force, args))
 
 class Constructor(Function):
-	def __init__(self, key:str, fields:list[str]):
+	def __init__(self, key:syntax.Symbol, fields:list[str]):
 		self.key = key
 		self.fields = fields
 	
@@ -434,10 +443,10 @@ CONS:Constructor
 
 def iterate_list(lst:LAZY_VALUE):
 	lst = force(lst)
-	while lst[""] == "cons":
+	while lst[""] == CONS.key:
 		yield force(lst['head'])
 		lst = force(lst['tail'])
-	assert lst[""] == "nil"
+	assert lst[""] == NIL[""]
 
 def as_sophie_list(items:Reversible):
 	lst = NIL
@@ -447,4 +456,22 @@ def as_sophie_list(items:Reversible):
 
 ###############################################################################
 
+def reset(fetch):
+	OVERLOAD.clear()
+	for k in 'nil', 'cons', 'less', 'same', 'more':
+		globals()[k.upper()] = fetch(k)
+	for relation, cases in {
+		"<":("less",),
+		"==":("same",),
+		">":("more",),
+		"!=":("less", "more"),
+		"<=":("less", "same"),
+		">=":("more", "same"),
+	}.items():
+		RELOP_MAP[relation] = tuple(fetch(order)[""] for order in cases)
 
+def install_overrides(env:ENV, overrides):
+	for udf in overrides:
+		assert isinstance(udf, syntax.UserOperator), "No FFI operator support just yet. Sorry."
+		signature = udf.dispatch_vector()
+		OVERLOAD[udf.nom.key(), signature] = Closure(env, udf)

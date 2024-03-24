@@ -58,6 +58,10 @@ class ZooOfFail(unittest.TestCase):
 			"bad_typecase_name",
 			"bogus_type_alias",
 			"undefined_symbol",
+			"not_exhaustive",
+			"confused",
+			"bad_else",
+			"duplicate_case",
 		])
 	
 	def test_03_alias(self):
@@ -81,15 +85,7 @@ class ZooOfFail(unittest.TestCase):
 			"instantiate_variant_indirect",
 		])
 	
-	def test_05_match_check(self):
-		self.expect("match_check", [
-			"not_exhaustive",
-			"confused",
-			"bad_else",
-			"duplicate_case",
-		])
-	
-	def test_06_type_check(self):
+	def test_05_type_check(self):
 		self.expect("type_check", [
 			"circular_function_mutually",
 			"circular_function_trivially",
@@ -105,7 +101,7 @@ class ZooOfFail(unittest.TestCase):
 			"assume_incorrectly",
 		])
 	
-	def test_07_import(self):
+	def test_06_import(self):
 		self.expect("import", [
 			"circular_import",
 			"missing_import",

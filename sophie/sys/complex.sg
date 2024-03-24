@@ -1,20 +1,12 @@
 # Complex-Number Arithmetic
 
-# This module is speculative. Some day I expect it to work as-is.
-# A first test driver will render a small Mandelbrot set as text.
-
 type:
 
 complex is (re:number, im:number);
 
 assume:
 
-# For the definitions below to make sense, the "assume:" directive will need to work.
-# I can start by tying it into the module structure.
-# Later, the type checker can build a dictionary and use that to infer the
-# intended types of formal parameters that lack explicit annotations.
-
-a, b: complex;
+a, b, c: complex;
 r: number;
 
 define:
@@ -34,3 +26,5 @@ conjugate(a) = complex(a.re, -a.im);
 operator - (a) = complex(-a.re, -a.im);
 
 # Sophie will do without implicit promotion rules, at least for now.
+
+squared_magnitude(c) = c.re*c.re + c.im*c.im;

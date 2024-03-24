@@ -39,8 +39,6 @@ TYPE_ENV = Frame["SophieType"]
 
 _type_numbering_subsystem = EquivalenceClassifier()
 
-class ConflictingOverload(Exception): pass
-
 class SophieType:
 	"""Value objects so they can play well with the classifier"""
 	def visit(self, visitor:"TypeVisitor"): raise NotImplementedError(type(self))
@@ -165,6 +163,9 @@ class UDFType(SophieType):
 		# TODO: It would be sufficient to key on the types captured in the lexical closure.
 		#       Only DeductionEngine.visit_Lookup creates these, so it could provide the capture.
 		super().__init__(object())
+	def dispatch_signature(self) -> tuple[Symbol, ...]:
+		assert isinstance(self.fn, syntax.UserOperator)
+		return self.fn.dispatch_vector()
 
 class AdHocType(SophieType):
 	def __init__(self, glyph:str, arity:int):
@@ -180,12 +181,15 @@ class AdHocType(SophieType):
 		assert len(arg_tokens) == self._arity
 		return self._cases.get(arg_tokens, ERROR)
 		
-	def append_case(self, case:SophieType):
+	def append_case(self, case:SophieType, report):
+		# FIXME: Cases need symbols so reporting can work right.
+		#  The slightly larger picture might be to move the concept
+		#  to the RoadMap object and make the resolver handle this.
 		arg_tokens = case.dispatch_signature()
-		if arg_tokens in self._cases or not all(arg_tokens):
-			raise ConflictingOverload
-		else:
-			self._cases[arg_tokens] = case
+		if arg_tokens in self._cases: report.conflicting_overload()
+		elif not all(arg_tokens): report.unsuported_overrload()
+		elif len(arg_tokens) != self._arity: report.conflicting_overload()
+		else: self._cases[arg_tokens] = case
 
 class UserTaskType(SophieType):
 	""" The type of a task-ified user-defined (parametric) function. """

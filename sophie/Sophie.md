@@ -131,7 +131,7 @@ You can define the meanings of (a small selection of) mathematical operators in 
 
 ```
 operator -> '+' | '-' | '*' | '/' | '^' | '<=>'
-operator_overload -> OPERATOR operator formals annotation '=' expr where_clause_for_operator     :OperatorOverload
+operator_overload -> OPERATOR operator formals annotation '=' expr where_clause_for_operator     :UserOperator
 where_clause_for_operator -> :nothing | WHERE semicolon_list(function) END OPERATOR operator     :WhereClause
 ```
 
@@ -305,8 +305,9 @@ import_directive -> FOREIGN short_string ffi_linkage ffi_body   :ImportForeign
 ffi_linkage -> round_list(reference)     |    '(' ')' :empty    |    :nothing
 ffi_body    -> WHERE semicolon_list(ffi_group)  END             |    :empty
 ffi_group   -> comma_list(ffi_symbol) ':' type_parameters simple_type  :FFI_Group
-ffi_symbol  -> name                    :FFI_Symbol
-             | name '@' short_string   :FFI_Alias
+ffi_symbol  -> name                                 :FFI_Symbol
+             | name '@' short_string                :FFI_Alias
+             | OPERATOR operator '@' short_string   :FFI_Operator
 ```
 
 -----

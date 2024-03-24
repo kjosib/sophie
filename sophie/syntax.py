@@ -33,6 +33,8 @@ class TypeDeclaration(Symbol):
 	def __init__(self, nom: Nom, type_params:tuple[TypeParameter, ...]):
 		super().__init__(nom)
 		self.type_params = type_params
+	
+	def as_token(self): raise NotImplementedError(type(self))
 
 def type_parameters(param_names:Sequence[Nom]):
 	return tuple(TypeParameter(n) for n in param_names)
@@ -41,6 +43,7 @@ def type_parameters(param_names:Sequence[Nom]):
 
 class SimpleType(Expr):
 	def can_construct(self) -> bool: raise NotImplementedError(type(self))
+	def dispatch_token(self): raise NotImplementedError(type(self))
 
 class ValExpr(Expr):
 	is_volatile: bool
@@ -72,6 +75,7 @@ class ArrowSpec(SimpleType):
 		self.rhs = rhs
 	def head(self) -> slice: return self._head.head()
 	def can_construct(self) -> bool: return False
+	def dispatch_token(self): return None
 
 class MessageSpec(SimpleType):
 	type_exprs: Sequence[ARGUMENT_TYPE]
@@ -80,6 +84,7 @@ class MessageSpec(SimpleType):
 		self.type_exprs = type_exprs or ()
 	def head(self): return self._head.head()
 	def can_construct(self) -> bool: return False
+	def dispatch_token(self): return None
 
 class TypeCall(SimpleType):
 	def __init__(self, ref: Reference, arguments: Optional[Sequence[ARGUMENT_TYPE]] = ()):
@@ -87,6 +92,10 @@ class TypeCall(SimpleType):
 		self.ref, self.arguments = ref, arguments or ()
 	def head(self) -> slice: return self.ref.head()
 	def can_construct(self) -> bool: return self.ref.dfn.has_value_domain()
+	def dispatch_token(self):
+		symbol = self.ref.dfn
+		assert isinstance(symbol, TypeDeclaration)
+		return symbol.as_token()
 
 class ImplicitTypeVariable:
 	""" Stand-in as the relevant type-expression for when the syntax doesn't bother. """
@@ -94,13 +103,17 @@ class ImplicitTypeVariable:
 		self._head = head
 	def head(self) -> slice:
 		return self._head.head()
-
+	@staticmethod
+	def dispatch_token(): return None
+	
 class ExplicitTypeVariable(Reference):
 	def __init__(self, _hook, nom:Nom):
 		super().__init__(nom)
 		self._hook = _hook
 	def head(self) -> slice:
 		return slice(self._hook.head().start, self.nom.head().stop)
+	@staticmethod
+	def dispatch_token(): return None
 
 class FormalParameter(Symbol):
 	def has_value_domain(self): return True
@@ -111,6 +124,10 @@ class FormalParameter(Symbol):
 	def head(self) -> slice: return self.nom.head()
 	def key(self): return self.nom.key()
 	def __repr__(self): return "<:%s:%s>"%(self.nom.text, self.type_expr)
+	def dispatch_token(self):
+		""" The outermost symbol in the type-expr, if at all possible. """
+		if self.type_expr:
+			return self.type_expr.dispatch_token()
 
 def FieldDefinition(nom:Nom, type_expr: Optional[ARGUMENT_TYPE]):
 	return FormalParameter(None, nom, type_expr)
@@ -128,6 +145,7 @@ class VariantSpec(NamedTuple):
 
 class Opaque(TypeDeclaration):
 	def has_value_domain(self): return False
+	def as_token(self): return self
 
 class TypeAlias(TypeDeclaration):
 	body: SimpleType
@@ -135,20 +153,27 @@ class TypeAlias(TypeDeclaration):
 		super().__init__(nom, type_params)
 		self.body = body
 	def has_value_domain(self) -> bool: return self.body.can_construct()
+	def as_token(self): return self.body.dispatch_token()
 
 class Record(TypeDeclaration):
 	def __init__(self, nom: Nom, type_params:tuple[TypeParameter, ...], spec:RecordSpec):
 		super().__init__(nom, type_params)
 		self.spec = spec
 	def has_value_domain(self) -> bool: return True
+	def as_token(self): return self
 
 class Variant(TypeDeclaration):
-	sub_space: NS  # WordDefiner pass fills this in.
+	sub_space: dict[str,"SubTypeSpec"]  # For checking match exhaustiveness.
+	
 	def __init__(self, nom: Nom, type_params:tuple[TypeParameter, ...], spec:VariantSpec):
 		super().__init__(nom, type_params)
 		self.subtypes = spec.subtypes
-		for s in spec.subtypes: s.variant = self
+		self.sub_space = {}
+		for st in spec.subtypes:
+			st.variant = self
+			self.sub_space[st.nom.key()] = st
 	def has_value_domain(self) -> bool: return False
+	def as_token(self): return self
 
 class MethodSpec(Symbol):
 	interface_decl : "Interface"
@@ -163,6 +188,7 @@ class Interface(TypeDeclaration):
 		super().__init__(nom, type_params)
 		self.spec = spec
 	def has_value_domain(self) -> bool: return False
+	def as_token(self): return None
 
 class SubTypeSpec(Symbol):
 	body: Optional[Union[RecordSpec, TypeCall, ArrowSpec]]
@@ -176,7 +202,8 @@ class SubTypeSpec(Symbol):
 		self.body = body
 	def head(self) -> slice: return self.nom.head()
 	def key(self): return self.nom.key()
-	def __repr__(self): return "<:%s:%s>"%(self.nom.text, self.body)
+	def __repr__(self): return "<%s>"%self.nom.text
+	def as_token(self): return self.variant
 
 class Assumption(NamedTuple):
 	names: list[Nom]
@@ -186,14 +213,11 @@ def _bookend(head: Nom, coda: Nom):
 	if head.text != coda.text:
 		raise MismatchedBookendsError(head.head(), coda.head())
 
-class Function(Term):
-	"""
-	Representation shared between two subclasses.
-	They differ only to distinguish semantics.
-	"""
+class UserFunction(Term):
 	namespace: NS
 	params: Sequence[FormalParameter]
 	where: Sequence["UserFunction"]
+	strictures: tuple[int, ...] # Tree-walking runtime uses this.
 	
 	def __init__(
 			self,
@@ -205,7 +229,6 @@ class Function(Term):
 	):
 		super().__init__(nom)
 		self.params = params or ()
-		self.strictures = tuple(i for i, p in enumerate(self.params) if p.is_strict)
 		self.result_type_expr = expr_type
 		self.expr = expr
 		if where:
@@ -224,11 +247,18 @@ class Function(Term):
 		p = ", ".join(map(str, self.params))
 		return "{fn|%s(%s)}" % (self.nom.text, p)
 
-class UserFunction(Function):
-	pass
-
-class OperatorOverload(Function):
-	pass
+class UserOperator(UserFunction):
+	"""
+	An operator is just a function with a funny name
+	and some special syntax and calling conventions. 
+	"""
+	def __init__(self, nom: Nom, params: Sequence[FormalParameter], expr_type: Optional[ARGUMENT_TYPE], expr: ValExpr, where: Optional["WhereClause"]):
+		super().__init__(nom, params, expr_type, expr, where)
+		for fp in self.params:
+			fp.is_strict = True
+	
+	def dispatch_vector(self):
+		return tuple(fp.dispatch_token() for fp in self.params)
 
 class WhereClause(NamedTuple):
 	sub_fns: Sequence[UserFunction]
@@ -382,14 +412,16 @@ class ExplicitList(ValExpr):
 	def head(self) -> slice:
 		return slice(self.elts[0].head().start, self.elts[-1].head().stop)
 
-class Alternative(Symbol):
+class Alternative:
+	pattern: Nom
+	dfn: SubTypeSpec  # Either the match-check pass or the type-checker fills this.
 	sub_expr: ValExpr
 	where: Sequence[UserFunction]
 	
 	namespace: NS  # WordDefiner fills
 
 	def __init__(self, pattern:Nom, _head:Nom, sub_expr:ValExpr, where:Optional[WhereClause]):
-		super().__init__(pattern)
+		self.pattern = pattern
 		self._head = _head
 		self.sub_expr = sub_expr
 		if where:
@@ -443,10 +475,10 @@ class MatchExpr(ValExpr):
 	alternatives: list[Alternative]
 	otherwise: Optional[ValExpr]
 	
-	namespace: NS  # WordDefiner fills
+	namespace: NS  # WordDefiner fills this
 	
-	variant:Variant  # Filled in match-check pass
-	dispatch: dict[Optional[str]:ValExpr]
+	variant:Variant  # Match-Check fills these two.
+	dispatch: dict[Symbol:Alternative] # It is now part of the WordResolver pass.
 	
 	def __init__(self, subject, hint, alternatives, otherwise):
 		self.subject = subject
@@ -525,6 +557,13 @@ class FFI_Alias(Term):
 def FFI_Symbol(nom:Nom):
 	return FFI_Alias(nom, None)
 
+class FFI_Operator(FFI_Alias):
+	"""
+	Similar to a UserOperator, this is just another foreign symbol
+	with fun semantics. For obvious reasons, it must have an alias. 
+	"""
+	pass
+
 class FFI_Group:
 	param_space: NS   # Will address the type parameters. Word-definer fills this.
 	def __init__(self, symbols:list[FFI_Alias], type_params:Optional[Sequence[TypeParameter]], type_expr:SimpleType):
@@ -546,10 +585,11 @@ class Module:
 	assumptions: list[Assumption]
 	outer_functions: list[UserFunction]
 	agent_definitions: list[UserAgent]
-	op_overloads: list[OperatorOverload]
+	user_operators: list[UserOperator]
 	
 	source_path: Path  # Module loader fills this.
-	all_functions: list[UserFunction]  # Resolver fills this.
+	all_functions: list[UserFunction]  # WordDefiner pass fills this.
+	ffi_operators: list[FFI_Operator]  # WordDefiner fills this too.
 
 	def __init__(self, exports:list, imports:list[ImportDirective], types:list[TypeDeclaration], assumptions:list[Assumption], top_levels:list, main:list):
 		self.exports = exports
@@ -559,12 +599,13 @@ class Module:
 		self.assumptions = assumptions
 		self.outer_functions = []
 		self.agent_definitions = []
-		self.op_overloads = []
+		self.user_operators = []
 		self.all_functions = []
+		self.ffi_operators = []
 		for item in top_levels:
+			if isinstance(item, UserOperator): self.user_operators.append(item)
 			if isinstance(item, UserFunction): self.outer_functions.append(item)
 			elif isinstance(item, UserAgent): self.agent_definitions.append(item)
-			elif isinstance(item, OperatorOverload): self.op_overloads.append(item)
 			else: assert False, type(item)
 		self.main = main
 	

@@ -116,15 +116,23 @@ static TokenType directive() {
 		if (!memcmp(scanner.start, ".fn", len)) return TOKEN_FN;
 		break;
 	case 4:
-		if (!memcmp(scanner.start, ".sub", len)) return TOKEN_SUB;
 		if (!memcmp(scanner.start, ".cap", len)) return TOKEN_CAPTURE;
 		if (!memcmp(scanner.start, ".end", len)) return TOKEN_END;
+		if (!memcmp(scanner.start, ".add", len)) return TOKEN_ADD;
+		if (!memcmp(scanner.start, ".sub", len)) return TOKEN_SUB;
+		if (!memcmp(scanner.start, ".mul", len)) return TOKEN_MUL;
+		if (!memcmp(scanner.start, ".div", len)) return TOKEN_DIV;
+		if (!memcmp(scanner.start, ".neg", len)) return TOKEN_NEG;
+		if (!memcmp(scanner.start, ".pow", len)) return TOKEN_POW;
+		if (!memcmp(scanner.start, ".mod", len)) return TOKEN_MOD;
+		if (!memcmp(scanner.start, ".cmp", len)) return TOKEN_CMP;
 		if (!memcmp(scanner.start, ".ffi", len)) return TOKEN_FFI;
 		break;
 	case 5:
 		if (!memcmp(scanner.start, ".line", len)) return TOKEN_LINE;
 		if (!memcmp(scanner.start, ".data", len)) return TOKEN_DATA;
 		if (!memcmp(scanner.start, ".file", len)) return TOKEN_FILE;
+		if (!memcmp(scanner.start, ".idiv", len)) return TOKEN_IDIV;
 		break;
 	case 6:
 		if (!memcmp(scanner.start, ".actor", len)) return TOKEN_ACTOR;
