@@ -351,6 +351,12 @@ static void parse_binop(BopType bop) {
 	install_binop(bop, lhs_tx, rhs_tx);
 }
 
+static void parse_neg() {
+	int vt_idx = parse_type_ref();
+	parse_closed_function();
+	vmap.at[vt_idx].neg = pop();
+}
+
 static void parseDefinitions() {
 	for (;;) {
 		advance();
@@ -378,6 +384,18 @@ static void parseDefinitions() {
 			break;
 		case TOKEN_DIV:
 			parse_binop(BOP_DIV);
+			break;
+		case TOKEN_POW:
+			parse_binop(BOP_POW);
+			break;
+		case TOKEN_IDIV:
+			parse_binop(BOP_IDIV);
+			break;
+		case TOKEN_MOD:
+			parse_binop(BOP_MOD);
+			break;
+		case TOKEN_NEG:
+			parse_neg();
 			break;
 		case TOKEN_ACTOR:
 			parse_actor_dfn();
@@ -426,6 +444,20 @@ static void snap_global_pointers(Function *fn) {
 	}
 }
 
+static void snap_dispatch_tables() {
+	for (int i = 0; i < vmap.cnt; i++) {
+		VTable *vt = &vmap.at[i];
+		if (IS_CLOSURE(vt->neg)) snap_global_pointers(AS_CLOSURE(vt->neg)->function);
+		for (int bop = 0; bop < NR_BOPS; bop++) {
+			DispatchTable *dt = &vt->dt[bop];
+			for (int j = 0; j < dt->cnt; j++) {
+				DispatchEntry *de = &dt->at[j];
+				if (IS_CLOSURE(de->callable)) snap_global_pointers(AS_CLOSURE(de->callable)->function);
+			}
+		}
+	}
+}
+
 void assemble(const char *source) {
 	initScanner(source);
 	init_assembler();
@@ -442,6 +474,7 @@ void assemble(const char *source) {
 	pop_scope();
 	close_function(&TOP);
 	snap_global_pointers(AS_CLOSURE(TOP)->function);
+	snap_dispatch_tables();
 	vm_capture_preamble_specials(&globals);
 	dispose_assembler();
 }

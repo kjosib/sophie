@@ -1910,3 +1910,23 @@ The Fibonacci benchmark takes a *small* performance hit with the new code,
 coming in at 4.85 seconds on a good run vs 4.7 seconds previously.
 But this is unavoidable: The VM must now be prepared for an only-half-numeric comparison overload.
 I expect that the remaining operator overloads will only add a few more percent drag.
+
+27 March 2024
+--------------
+
+I wired up the remaining operators for type-directed dispatch in the VM.
+Now the Fibonacci benchmark comes in at 5.75 seconds.
+That's a nontrivial performance hit, but again I see no alternative.
+It's still better than twice as fast as Python.
+
+I recently adjusted the graphical Mandelbrot demo to use the new
+complex-arithmetic package with overloaded operators.
+I'm glad to say that it works in the VM again.
+
+One minor issue: As of right now, the double-dispatch mechanism is not thread-safe
+because it shuffles the dispatch tables to keep recently-used cases near the
+beginning of a linear search. It's not a problem for the moment
+because there are no threads and relatively few overloads.
+Longer term, I will probably use offset-tables for instant perfect hashing.
+
+It's time to make a release.

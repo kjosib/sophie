@@ -4,6 +4,8 @@ Read this to get a general idea of what's new and nontrivial.
 
 ## March 2024
 
+* 27 Mar: Operator overloading now also works in the VM. Version 0.0.6 is published.
+* 24 Mar: Operator overloading works in the tree-walker.
 * 5 Mar: Sophie gains anonymous-function expressions, a.k.a. lambda forms. They work everywhere.
 * 3 Mar: The VM gets the `filesystem` actor built in, along with both methods.
 
