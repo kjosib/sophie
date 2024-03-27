@@ -19,18 +19,9 @@ static void display_string(String *string) {
 	printf("%s", string->text);
 }
 
-static void compare_string() {
-	// TODO: A comparison for equality alone ought not call strcmp,
-	// because strings are interned.
-	Value result;
-	if (AS_STRING(SND) == AS_STRING(TOP)) result = vm.same;
-	else {
-		int direction = strcmp(AS_STRING(SND)->text, AS_STRING(TOP)->text);
-		if (direction < 0) result = vm.less;
-		else if (direction == 0) result = vm.same;
-		else result = vm.more;
-	}
-	merge(result);
+static int type_index_string(String *string) {
+	// See in assembler.c where it creates the built-in types.
+	return TX_STRING;
 }
 
 GC_Kind KIND_String = {
@@ -38,7 +29,7 @@ GC_Kind KIND_String = {
 	.deeply = display_string,
 	.blacken = blacken_string,
 	.size = size_string,
-	.compare = compare_string,
+	.type_index = type_index_string,
 	.name = "String",
 };
 

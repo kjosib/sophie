@@ -112,7 +112,17 @@ class VMScope:
 	def declare_several(self, symbols: Iterable[ontology.Symbol]):
 		for sym in symbols:
 			self.declare(sym)
-	
+
+	def write_one_function(self, fn: syntax.UserFunction):
+		inner = VMFunctionScope(self, fn.nom.text, is_thunk=not fn.params)
+		inner.emit_preamble(fn.params, MANGLED[fn])
+		for param in fn.params:
+			if param.is_strict:
+				inner.make_strict(param)
+		inner.write_inner_functions(fn.where)
+		TAIL.visit(fn.expr, inner)
+		inner.emit_epilogue()
+
 class VMGlobalScope(VMScope):
 	""" Mainly a null-object that encloses a nest of scopes without itself being enclosed. """
 	
@@ -130,8 +140,30 @@ class VMGlobalScope(VMScope):
 			inner.nl()
 			FORCE.visit(expr, inner)
 			inner.display()
-
+	
+	def write_outer_functions(self, fns:list[syntax.UserFunction]):
+		self.mangle_names(fns)
+		for fn in fns:
+			self.nl()
+			if isinstance(fn, syntax.UserOperator):
+				emit(OPERATOR_DIRECTIVE[fn.nom.key(), len(fn.params)])
+				for token in fn.dispatch_vector():
+					emit(quote(MANGLED[token]))
+			else:
+				emit(".fn")
+			self.write_one_function(fn)
+	
 	def declare(self, symbol: ontology.Symbol):
+		pass
+	
+	def write_actors(self, agent_definitions:list[syntax.UserAgent]):
+		for dfn in agent_definitions:
+			last = dfn.behaviors[-1]
+			inner = VMActorScope(self, dfn)
+			for b in dfn.behaviors:
+				inner.write_one_behavior(b)
+				emit(".end" if b is last else ";")
+			self.nl()
 		pass
 
 class VMActorScope(VMScope):
@@ -151,6 +183,15 @@ class VMActorScope(VMScope):
 	
 	def member_number(self, field: str):
 		return self._field_map[field]
+
+	def write_one_behavior(self, b:syntax.Behavior):
+		# The way this works is similar to a function.
+		# However, there's a special "self" object implicitly the first parameter.
+		# Also, access to self-dot-foo will use actor-specific instructions.
+		inner = VMFunctionScope(self, b.nom.text, is_thunk=False)
+		inner.emit_preamble([ontology.SELF] + b.params, b.nom.text)
+		LAST.visit(b.expr, inner)
+		inner.emit_epilogue()
 
 class VMFunctionScope(VMScope):
 	""" Encapsulates VM mechanics around the stack, parameters, closure capture, jumps, etc. """
@@ -265,11 +306,9 @@ class VMFunctionScope(VMScope):
 		LABEL_QUEUE.append(label)
 
 	def emit_preamble(self, params:Sequence[syntax.FormalParameter], name:str):
-		self.nl()
 		emit(len(params))
 		emit(quote(name))
-		for param in params:
-			self.declare(param)
+		self.declare_several(params)
 
 	def make_strict(self, param):
 		emit("STRICT", self._local[param])
@@ -384,6 +423,17 @@ class VMFunctionScope(VMScope):
 	def member_number(self, field: str):
 		return self._outer.member_number(field)
 
+	def write_inner_functions(self, fns):
+		if not fns: return
+		self.mangle_names(fns)
+		self.declare_several(fns)
+		emit("{")
+		self.nl()
+		last = fns[-1]
+		for fn in fns:
+			self.write_one_function(fn)
+			emit("}" if fn is last else ";")
+			self.nl()
 
 _do_count = 0
 def _gensym():
@@ -530,7 +580,7 @@ class EagerContext(Context):
 			tag = TYPE_CASE_INDEX[alt.dfn]
 			scope.come_from(cases[tag])
 			cases[tag] = None
-			write_functions(alt.where, scope)
+			scope.write_inner_functions(alt.where)
 			self.visit(alt.sub_expr, scope)
 			after.append(self.sequel(scope, depth, True))
 		if mx.otherwise is not None:
@@ -577,7 +627,7 @@ class EagerContext(Context):
 		scope.mangle_names([lf.function])
 		scope.declare(lf.function)
 		emit("{")
-		write_one_function(lf.function, scope)
+		scope.write_one_function(lf.function)
 		emit("}")
 		# 2. Emit the code to load that function onto the stack.
 		scope.load(lf.function)
@@ -786,50 +836,6 @@ def write_ffi_init(foreign: list[syntax.ImportForeign]):
 				emit(quote(MANGLED[ref.dfn]))
 			emit(";")
 
-def write_functions(fns, outer: VMScope):
-	if not fns: return
-	outer.mangle_names(fns)
-	outer.declare_several(fns)
-	emit("{")
-	last = fns[-1]
-	for fn in fns:
-		write_one_function(fn, outer)
-		emit("}" if fn is last else ";")
-	outer.nl()
-
-def write_one_function(fn: syntax.UserFunction, outer: VMScope):
-	if isinstance(fn, syntax.UserOperator):
-		emit(OPERATOR_DIRECTIVE[fn.nom.key(), len(fn.params)])
-	inner = VMFunctionScope(outer, fn.nom.text, is_thunk=not fn.params)
-	inner.emit_preamble(fn.params, MANGLED[fn])
-	for param in fn.params:
-		if param.is_strict:
-			inner.make_strict(param)
-	write_functions(fn.where, inner)
-	TAIL.visit(fn.expr, inner)
-	inner.emit_epilogue()
-	
-def write_one_behavior(b:syntax.Behavior, outer:VMActorScope):
-	# The way this works is similar to a function.
-	# However, there's a special "self" object implicitly the first parameter.
-	# Also, access to self-dot-foo will use actor-specific instructions.
-	inner = VMFunctionScope(outer, b.nom.text, is_thunk=False)
-	inner.emit_preamble([ontology.SELF] + b.params, b.nom.text)
-	LAST.visit(b.expr, inner)
-	inner.emit_epilogue()
-
-def write_one_actor(dfn:syntax.UserAgent, outer:VMGlobalScope):
-	inner = VMActorScope(outer, dfn)
-	last = dfn.behaviors[-1]
-	for b in dfn.behaviors:
-		write_one_behavior(b, inner)
-		emit(".end" if b is last else ";")
-	outer.nl()
-
-def write_actors(agent_definitions:list[syntax.UserAgent], outer:VMGlobalScope):
-	for dfn in agent_definitions:
-		write_one_actor(dfn, outer)
-	pass
 
 class StructureDefiner(Visitor):
 	""" Just defines data structures. """
@@ -876,8 +882,8 @@ def translate(roadmap:RoadMap):
 
 	# Write all functions (including FFI):
 	for scope, module in each_piece(roadmap):
-		write_functions(module.outer_functions, scope)
-		write_actors(module.agent_definitions, scope)
+		scope.write_outer_functions(module.outer_functions)
+		scope.write_actors(module.agent_definitions)
 		write_ffi_init(module.foreign)
 	
 	# Delimiter so it's possible to start a begin-expression with a do-block:

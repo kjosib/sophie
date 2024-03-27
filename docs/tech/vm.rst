@@ -1876,3 +1876,37 @@ It's only minimally tested: it builds properly and there are no regressions.
 That's enough for today, I think.
 At this point, I can see a path toward filling the holes in the design.
 
+25 March 2024
+--------------
+
+The evening's hack session was mainly about updating the assembler to parse operator-overloads.
+This also meant fixing how the compiler emits information about them.
+
+I still don't have code to install overloads into a table,
+or to look them up at run-time.
+
+Over the last week, I've had an idea brewing:
+Perhaps it's time to exploit sparse-matrix compression techniques.
+The set of type-pairs that ever get used together in a
+binary-operator overload is a sparse (and square) matrix.
+The "graph-coloring" method of compressing such a matrix could yield rapid dispatch.
+Every constructor and native type would get a row-class and a column-class.
+The run-time representation of these would be such that adding them produces the address
+of (a ``Value`` referring to) the corresponding implementation whenever the combination is valid.
+The type-checker guarantees that invalid combinations won't come up in practice.
+
+26 March 2024
+--------------
+
+It's now clear that I'll need to reserve some VTable indexes for the built-in types.
+I'll reserve table index zero for the Booleans (``flag`` type) so I can treat them
+as a special ``ENUM`` with a convenient bit-pattern.
+
+I now have comparison operations routing through some new double-dispatch machinery,
+although there is still a special case for numeric comparison.
+The 2-3 Tree demo makes a fine test of this mechanic.
+
+The Fibonacci benchmark takes a *small* performance hit with the new code,
+coming in at 4.85 seconds on a good run vs 4.7 seconds previously.
+But this is unavoidable: The VM must now be prepared for an only-half-numeric comparison overload.
+I expect that the remaining operator overloads will only add a few more percent drag.
