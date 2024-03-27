@@ -37,11 +37,16 @@ static size_t size_record(Record *record) {
 	return size_for_nr_fields(record->constructor->nr_fields);
 }
 
+static int type_index_record(Record *record) {
+	return record->constructor->vt_idx;
+}
+
 GC_Kind KIND_Record = {
 	.display = display_record,
 	.deeply = display_record_deeply,
 	.blacken = blacken_record,
 	.size = size_record,
+	.type_index = type_index_record,
 	.name = "Record",
 };
 

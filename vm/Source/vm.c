@@ -120,19 +120,6 @@ static double knuth_mod(double numerator, double denominator) {
 	return C_is_wrong ? r + denominator : r;
 }
 
-#ifdef _DEBUG
-static double x_num(byte *vpc, Value *base, Value it) {
-	if (!IS_NUMBER(it)) {
-		char *ins = instruction[vpc[-1]].name;
-		runtimeError(vpc, base, "Needed number for %s; got %s", ins, valKind(it));
-	}
-	return AS_NUMBER(it);
-}
-#define num(it) x_num(vpc, base, it)
-#else
-#define num AS_NUMBER
-#endif // _DEBUG
-
 void perform() {
 	// Where all the action happens, so to speak.
 	if (IS_CLOSURE(TOP)) vm_run();
@@ -159,9 +146,9 @@ static int type_index_for_value(Value v) {
 	}
 }
 
-static void vm_compare() {
+static void vm_double_dispatch(BopType bop) {
 	VTable *vt = &vmap.at[type_index_for_value(SND)];
-	DispatchTable *dt = &vt->dt[BOP_CMP];
+	DispatchTable *dt = &vt->dt[bop];
 	push(find_dispatch(dt, type_index_for_value(TOP)));
 	assert(IS_GC_ABLE(TOP));
 	push(AS_GC(TOP)->kind->apply());
@@ -179,11 +166,23 @@ static Value compare_numbers(double lhs, double rhs) {
 	return vm.same;
 }
 
+static void vm_negate() {
+	VTable *vt = &vmap.at[type_index_for_value(TOP)];
+	push(vt->neg);
+	assert(IS_GC_ABLE(TOP));
+	push(AS_GC(TOP)->kind->apply());
+}
+
 #define NEXT goto dispatch
 #define READ_BYTE() (*vpc++)
 #define LEAP() do { vpc += word_at(vpc); } while (0)
 #define SKIP_AND_POP() do { pop(); vpc += 2; } while(0)
 #define YIELD(value) do { Value retval = (value); vm.stackTop = base; vm.trace--; return retval; } while (0)
+
+static bool is_two_numbers() { return IS_NUMBER(SND) && IS_NUMBER(TOP); }
+
+#define BIN_EXP(exp, bop) do { if (is_two_numbers()) merge(NUMBER_VAL(exp)); else vm_double_dispatch(bop); } while (0)
+#define BIN_OP(op, bop) BIN_EXP(AS_NUMBER(SND) op AS_NUMBER(TOP), bop)
 
 Value vm_run() {
 	Closure *closure = AS_CLOSURE(pop());
@@ -248,41 +247,42 @@ dispatch:
 		case OP_TRUE: push(BOOL_VAL(true)); NEXT;
 		case OP_FALSE: push(BOOL_VAL(false)); NEXT;
 		case OP_EQUAL:
-			if (IS_NUMBER(SND) && IS_NUMBER(TOP)) merge(BOOL_VAL(AS_NUMBER(SND) == AS_NUMBER(TOP)));
+			if (is_two_numbers()) merge(BOOL_VAL(AS_NUMBER(SND) == AS_NUMBER(TOP)));
 			else {
-				vm_compare();
+				vm_double_dispatch(BOP_CMP);
 				TOP = BOOL_VAL(TOP.bits == vm.same.bits);
 			}
 		NEXT;
 		case OP_GREATER:
-			if (IS_NUMBER(SND) && IS_NUMBER(TOP)) merge(BOOL_VAL(AS_NUMBER(SND) > AS_NUMBER(TOP)));
+			if (is_two_numbers()) merge(BOOL_VAL(AS_NUMBER(SND) > AS_NUMBER(TOP)));
 			else {
-				vm_compare();
+				vm_double_dispatch(BOP_CMP);
 				TOP = BOOL_VAL(TOP.bits == vm.more.bits);
 			}
 		NEXT;
 		case OP_LESS:
-			if (IS_NUMBER(SND) && IS_NUMBER(TOP)) merge(BOOL_VAL(AS_NUMBER(SND) < AS_NUMBER(TOP)));
+			if (is_two_numbers()) merge(BOOL_VAL(AS_NUMBER(SND) < AS_NUMBER(TOP)));
 			else {
-				vm_compare();
+				vm_double_dispatch(BOP_CMP);
 				TOP = BOOL_VAL(TOP.bits == vm.less.bits);
 			}
 		NEXT;
 		case OP_CMP:
-			if (IS_NUMBER(SND) && IS_NUMBER(TOP)) merge(compare_numbers(AS_NUMBER(SND), AS_NUMBER(TOP)));
-			else {
-				vm_compare();
-			}
+			if (is_two_numbers()) merge(compare_numbers(AS_NUMBER(SND), AS_NUMBER(TOP)));
+			else vm_double_dispatch(BOP_CMP);
 		NEXT;
-		case OP_POWER: merge(NUMBER_VAL(pow(num(SND), num(TOP)))); NEXT;
-		case OP_MULTIPLY: merge(NUMBER_VAL(num(SND) * num(TOP))); NEXT;
-		case OP_DIVIDE: merge(NUMBER_VAL(num(SND) / num(TOP))); NEXT;
-		case OP_INTDIV: merge(NUMBER_VAL(floor(num(SND) / num(TOP)))); NEXT;
-		case OP_MODULUS: merge(NUMBER_VAL(knuth_mod(num(SND), num(TOP)))); NEXT;
-		case OP_ADD: merge(NUMBER_VAL(num(SND) + num(TOP))); NEXT;
-		case OP_SUBTRACT: merge(NUMBER_VAL(num(SND) - num(TOP))); NEXT;
+		case OP_POWER: BIN_EXP(pow(AS_NUMBER(SND), AS_NUMBER(TOP)), BOP_POW); NEXT;
+		case OP_MULTIPLY: BIN_OP(*, BOP_MUL); NEXT;
+		case OP_DIVIDE: BIN_OP(/, BOP_DIV); NEXT;
+		case OP_INTDIV: BIN_EXP(floor(AS_NUMBER(SND) / AS_NUMBER(TOP)), BOP_IDIV); NEXT;
+		case OP_MODULUS: BIN_EXP(knuth_mod(AS_NUMBER(SND), AS_NUMBER(TOP)), BOP_MOD); NEXT;
+		case OP_ADD: BIN_OP(+, BOP_ADD); NEXT;
+		case OP_SUBTRACT: BIN_OP(-, BOP_SUB); NEXT;
 		case OP_NOT: TOP = BOOL_VAL(!AS_BOOL(TOP)); NEXT;
-		case OP_NEGATE: TOP = NUMBER_VAL(-num(TOP)); NEXT;
+		case OP_NEGATE:
+			if (IS_NUMBER(TOP)) TOP = NUMBER_VAL(-AS_NUMBER(TOP));
+			else vm_negate();
+			NEXT;
 		case OP_CALL:
 			switch (INDICATOR(TOP)) {
 			case IND_CLOSURE:

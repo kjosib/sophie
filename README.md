@@ -71,7 +71,8 @@ Some things are going well:
   It runs most of the examples just fine, but lags slightly behind on extensions.
 * Sophie has Turtle-graphics! (See [here](https://github.com/kjosib/sophie/blob/main/examples/turtle/turtle.sg) for examples.)
 * Sophie is interactive! See [this guessing game](https://github.com/kjosib/sophie/blob/main/examples/games/guess_the_number.sg) as an example.
-* The type-checker gives excellent feedback and cannot be fooled. Through abstract interpretation it completely rules out *type* errors.
+* The type-checker gives excellent feedback and cannot be fooled.
+  Through abstract interpretation it completely rules out *type* errors.
   (Domain errors, such as division by zero, are still possible.)
 * The module system got an upgrade: there is now a notion of a system-package and the beginnings of a standard library.
 * The FFI: Sophie can call Python; Python can call Sophie; and Python can install I/O drivers into Sophie.
