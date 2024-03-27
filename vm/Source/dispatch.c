@@ -47,12 +47,7 @@ static void darken_DispatchTable(DispatchTable *dt) {
 void init_VTable(VTable *vt, String *type_name) {
 	vt->type_name = type_name;
 	vt->neg = UNSET_VAL;
-	initDispatchTable(&vt->cmp);
-	initDispatchTable(&vt->add);
-	initDispatchTable(&vt->sub);
-	initDispatchTable(&vt->mul);
-	initDispatchTable(&vt->div);
-	initDispatchTable(&vt->pow);
+	for (int i = 0; i < NR_BOPS; i++) initDispatchTable(&vt->dt[i]);
 }
 
 // Run-time needs a vector of VTables.
@@ -63,24 +58,15 @@ DEFINE_VECTOR_ALLOC(VMap, VTable)
 static void darken_VTable(VTable *vt) {
 	darken_in_place(&vt->type_name);
 	darkenValue(&vt->neg);
-	darken_DispatchTable(&vt->cmp);
-	darken_DispatchTable(&vt->add);
-	darken_DispatchTable(&vt->sub);
-	darken_DispatchTable(&vt->mul);
-	darken_DispatchTable(&vt->div);
-	darken_DispatchTable(&vt->pow);
+	for (int i = 0; i < NR_BOPS; i++) darken_DispatchTable(&vt->dt[i]);
 }
 
 static void dispose_VTable(VTable *vt) {
-	freeDispatchTable(&vt->cmp);
-	freeDispatchTable(&vt->add);
-	freeDispatchTable(&vt->sub);
-	freeDispatchTable(&vt->mul);
-	freeDispatchTable(&vt->div);
-	freeDispatchTable(&vt->pow);
+	for (int i = 0; i < NR_BOPS; i++) freeDispatchTable(&vt->dt[i]);
 }
 
 // In concept, each new type gets a vtable entry.
+// Also, the built-in types need preconfigured vtables.
 
 VMap vmap;
 
@@ -96,4 +82,12 @@ void init_dispatch() {
 void dispose_dispatch() {
 	gc_forget_roots(grey_the_vmap);
 	for (size_t i = 0; i < vmap.cnt; i++) dispose_VTable(&vmap.at[i]);
+}
+
+void install_binop(BopType bop, int lhs_tx, int rhs_tx) {
+	VTable *vt = &vmap.at[lhs_tx];
+	DispatchTable *dt = &vt->dt[bop];
+	DispatchEntry item = { .callable = TOP, .type_index = rhs_tx };
+	appendDispatchTable(dt, item);
+	pop();
 }

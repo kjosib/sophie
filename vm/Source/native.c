@@ -25,6 +25,17 @@ static Value concatenate(Value *args) {
 	return GC_VAL(intern_String(dst));
 }
 
+static Value compare_string(Value *args) {
+	// NB: Forcing is not needed here because as an operator overload, the arguments are reliably strict.
+	if (AS_STRING(args[0]) == AS_STRING(args[1])) return vm.same;
+	else {
+		int direction = strcmp(AS_STRING(args[0])->text, AS_STRING(args[1])->text);
+		if (direction < 0) return vm.less;
+		else if (direction == 0) return vm.same;
+		else return vm.more;
+	}
+}
+
 static Value clock_native(Value *args) {
 	return NUMBER_VAL((double)clock() / CLOCKS_PER_SEC);
 }
@@ -291,18 +302,19 @@ static void create_native(const char *name, byte arity, NativeFn function) {  //
 	native->arity = arity;
 	native->function = function;
 	native->name = AS_STRING(TOP);
-	dup();
-	SND = GC_VAL(native);
+	TOP = GC_VAL(native);
 }
 
 void create_native_function(const char *name, byte arity, NativeFn function) {  // ( -- )
 	create_native(name, arity, function);
+	push(GC_VAL(AS_NATIVE(TOP)->name));
 	defineGlobal();
 }
 
 void create_native_method(const char *name, byte arity, NativeFn function) {  // ( ActorDfn -- ActorDfn )
 	assert(arity);
 	create_native(name, arity, function);
+	push(GC_VAL(AS_NATIVE(TOP)->name));
 	install_method();
 }
 
@@ -411,6 +423,9 @@ static void install_numerics() {
 /***********************************************************************************/
 
 static void install_strings() {
+	create_native("<=>|string|string", 2, compare_string);
+	install_binop(BOP_CMP, TX_STRING, TX_STRING);
+
 	create_native_function("strcat", 2, concatenate);
 	create_native_function("val", 1, val_native);
 	create_native_function("chr", 1, chr_native);

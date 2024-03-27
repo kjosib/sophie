@@ -64,13 +64,14 @@ typedef void (*Verb)();
 typedef void (*Method)(void *item);
 typedef size_t (*SizeMethod)(void *item); // Return the size of the payload.
 typedef Value(*Apply)(); // Expects self at TOS.
+typedef int (*TypeIndexFn)(void *item); // Return the type-index of the payload.
 
 typedef struct {
 	Method display;
 	Method deeply;
 	Method blacken;
 	SizeMethod size;
-	Verb compare;  // ( a b -- TotalOrder )
+	TypeIndexFn type_index;
 	Apply apply;     // Arguments on the stack.
 	Method finalize; // Must not gc_allocate; gets called mid-collection.
 	Method proceed; // Specifically for how a message runs itself.
@@ -158,7 +159,7 @@ void *reallocate(void *pointer, size_t newSize);
 
 #define UNSET_VAL	        PACK(IND_UNSET, 0)
 #define RUNE_VAL(value)     PACK(IND_RUNE, ((int32_t)(value)))	
-#define BOOL_VAL(value)     PACK(IND_RUNE, ((bool)(value)))
+#define BOOL_VAL(value)     PACK(IND_ENUM, ((bool)(value)))
 #define NUMBER_VAL(value)   ((Value){.number=value})
 #define ENUM_VAL(vt_idx, tag)     PACK(IND_ENUM, ((vt_idx)<<8|(tag)))
 #define PTR_VAL(object)     PACK(IND_PTR, object)
@@ -338,6 +339,26 @@ static inline bool is_record(Value value) {
 
 /* dispatch.h */
 
+typedef enum {
+	BOP_ADD,
+	BOP_SUB,
+	BOP_MUL,
+	BOP_DIV,
+	BOP_IDIV,
+	BOP_POW,
+	BOP_MOD,
+	BOP_CMP,
+
+	NR_BOPS,
+} BopType;
+
+// Some type-index numbers for primitive types:
+#define TX_FLAG 0
+#define TX_RUNE 1
+#define TX_NUMBER 2
+#define TX_STRING 3
+// See also install_builtin_vtables() in assembler.c.
+
 typedef struct {
 	int type_index;
 	Value callable;
@@ -348,7 +369,7 @@ DEFINE_VECTOR_TYPE(DispatchTable, DispatchEntry)
 typedef struct {
 	String *type_name; // Probably handy for debugging.
 	Value neg;  // Single dispatch, so this is fine.
-	DispatchTable cmp, add, sub, mul, div, pow;
+	DispatchTable dt[NR_BOPS];
 } VTable;
 
 void init_VTable(VTable *vt, String *type_name);
@@ -359,6 +380,8 @@ extern VMap vmap;
 
 void init_dispatch();
 void dispose_dispatch();
+void install_binop(BopType bop, int lhs_tx, int rhs_tx);
+Value find_dispatch(DispatchTable *dt, int type_index);
 
 /* actor.h */
 

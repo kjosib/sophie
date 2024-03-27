@@ -90,6 +90,20 @@ static void come_from() {
 	*hole_ptr = 0;
 }
 
+static void create_vtable(String *type_name) {
+	vtable_index = (int)allocVMap(&vmap);
+	init_VTable(&vmap.at[vtable_index], type_name);
+	tableSet(&type_name_map, type_name, RUNE_VAL(vtable_index));
+}
+
+static void install_builtin_vtables() {
+	// See also the TX_... constants.
+	create_vtable(import_C_string("flag", 4));
+	create_vtable(import_C_string("rune", 4));
+	create_vtable(import_C_string("number", 6));
+	create_vtable(import_C_string("string", 6));
+}
+
 static void init_assembler() {
 	memset(holes, 0, sizeof(holes));
 	current = NULL;
@@ -99,6 +113,7 @@ static void init_assembler() {
 	initTable(&globals);
 	initTable(&type_name_map);
 	gc_install_roots(grey_the_assembling_roots);
+	install_builtin_vtables();
 	for (int index = 0; index < NR_OPCODES; index++) {
 		table_set_from_C(&lexicon, instruction[index].name, RUNE_VAL(index));
 	}
@@ -145,10 +160,7 @@ static void perform_word(Value value) {
 
 static void parse_vtable() {
 	next_tag = 0;
-	String *type_name = parseString();
-	vtable_index = (int)allocVMap(&vmap);
-	init_VTable(&vmap.at[vtable_index], type_name);
-	tableSet(&type_name_map, type_name, RUNE_VAL(vtable_index));
+	create_vtable(parseString());
 }
 
 static void parse_one_instruction() {
@@ -237,18 +249,12 @@ static void parse_function_block() {
 	emit(fn_count);
 }
 
-static void parse_top_level_functions(Verb define) {
-	// Top-level functions all need to be pre-closed.
-	// They come in two varieties:
-	// Regular and Actor-Method.
-	// The caller passes in a "how-to-define" function.
-	do {
-		push(parse_normal_function());
-		close_function(&TOP);
-		push(GC_VAL(name_of_function(AS_CLOSURE(TOP)->function)));
-		define();
-	} while (maybe_token(TOKEN_SEMICOLON));
+static void parse_closed_function() {
+	push(parse_normal_function());
+	close_function(&TOP);
 }
+
+static void push_closure_name() { push(GC_VAL(name_of_function(AS_CLOSURE(TOP)->function))); }
 
 static parse_tagged_value() {
 	String *name = parseString();
@@ -314,7 +320,12 @@ static void parse_actor_dfn() {
 	push(GC_VAL(parseString()));  // In retrospect, this part is probably mostly pointless.
 	define_actor(nr_fields);     // The only thing that can see an actor's fields knows their offsets.
 
-	parse_top_level_functions(install_method);
+	do {
+		parse_closed_function();
+		push_closure_name();
+		install_method();
+	} while (maybe_token(TOKEN_SEMICOLON));
+	consume(TOKEN_END, "Expected semicolon or .end directive.");
 
 	// Define it as a global.
 	if (nr_fields) {
@@ -327,25 +338,62 @@ static void parse_actor_dfn() {
 	defineGlobal();
 }
 
-static void parseScript() {
+static int parse_type_ref() {
+	Value v = tableGet(&type_name_map, parseString());
+	assert(IS_RUNE(v)); // i.e. it's not undefined or some such.
+	return AS_RUNE(v);
+}
+
+static void parse_binop(BopType bop) {
+	int lhs_tx = parse_type_ref();
+	int rhs_tx = parse_type_ref();
+	parse_closed_function();
+	install_binop(bop, lhs_tx, rhs_tx);
+}
+
+static void parseDefinitions() {
 	for (;;) {
-		if (maybe_token(TOKEN_VTABLE)) parse_vtable();
-		else if (maybe_token(TOKEN_DATA)) {
+		advance();
+		switch (parser.previous.type) {
+		case TOKEN_VTABLE:
+			parse_vtable();
+			break;
+		case TOKEN_DATA:
 			if (maybe_token(TOKEN_STAR)) parse_tagged_value();
 			else parse_record();
-		}
-		else if (maybe_token(TOKEN_LEFT_BRACE)) {
-			parse_top_level_functions(defineGlobal);
-			consume(TOKEN_RIGHT_BRACE, "expected semicolon or right-brace.");
-		}
-		else if (maybe_token(TOKEN_ACTOR)) {
+			break;
+		case TOKEN_FN:
+			parse_closed_function();
+			push_closure_name();
+			defineGlobal();
+			break;
+		case TOKEN_ADD:
+			parse_binop(BOP_ADD);
+			break;
+		case TOKEN_SUB:
+			parse_binop(BOP_SUB);
+			break;
+		case TOKEN_MUL:
+			parse_binop(BOP_MUL);
+			break;
+		case TOKEN_DIV:
+			parse_binop(BOP_DIV);
+			break;
+		case TOKEN_ACTOR:
 			parse_actor_dfn();
-			consume(TOKEN_END, "Expected semicolon or .end directive.");
+			break;
+		case TOKEN_FFI:
+			parse_ffi_init();
+			break;
+		case TOKEN_BEGIN:
+			return;
+		default:
+			error("Missing .begin section.");
 		}
-		else if (maybe_token(TOKEN_FFI)) parse_ffi_init();
-		else if (maybe_token(TOKEN_BEGIN)) break;
-		else errorAtCurrent("Missing .begin section.");
 	}
+}
+
+static void parseScript() {
 	initChunk(&current->chunk);
 	push(GC_VAL(import_C_string("<script>", 8)));
 	parse_instructions();
@@ -387,6 +435,7 @@ void assemble(const char *source) {
 #endif // DEBUG_PRINT_GLOBALS
 	advance();
 	push_new_scope();
+	parseDefinitions();
 	parseScript();
 	consume(TOKEN_EOF, "expected end of file.");
 	push(GC_VAL(newFunction(TYPE_SCRIPT, &current->chunk, 0, 0)));

@@ -146,6 +146,27 @@ void perform() {
 	} else crashAndBurn("Can't perform a %s action.", valKind(TOP));
 }
 
+static int type_index_for_value(Value v) {
+	// There are five interesting cases:
+	// Enums, Runes, Numbers, Strings, and Records.
+	// The last two types are up to the GC kind to work out.
+	// See also install_builtin_vtables in assembler.c.
+	switch (INDICATOR(v)) {
+	case IND_ENUM: return AS_ENUM_VT_IDX(v);
+	case IND_RUNE: return TX_RUNE;
+	case IND_GC: return AS_GC(v)->kind->type_index(AS_GC(v));
+	default: return TX_NUMBER;
+	}
+}
+
+static void vm_compare() {
+	VTable *vt = &vmap.at[type_index_for_value(SND)];
+	DispatchTable *dt = &vt->dt[BOP_CMP];
+	push(find_dispatch(dt, type_index_for_value(TOP)));
+	assert(IS_GC_ABLE(TOP));
+	push(AS_GC(TOP)->kind->apply());
+}
+
 static Value compare_numbers(double lhs, double rhs) {
 	if (lhs < rhs) return vm.less;
 	if (lhs == rhs) return vm.same;
@@ -227,39 +248,30 @@ dispatch:
 		case OP_TRUE: push(BOOL_VAL(true)); NEXT;
 		case OP_FALSE: push(BOOL_VAL(false)); NEXT;
 		case OP_EQUAL:
-			if (IS_NUMBER(SND)) merge(BOOL_VAL(AS_NUMBER(SND) == num(TOP)));
-			else if (IS_RUNE(SND)) merge(BOOL_VAL(AS_BOOL(SND) == AS_BOOL(TOP)));
+			if (IS_NUMBER(SND) && IS_NUMBER(TOP)) merge(BOOL_VAL(AS_NUMBER(SND) == AS_NUMBER(TOP)));
 			else {
-				assert(IS_GC_ABLE(SND));
-				assert(IS_GC_ABLE(TOP));
-				AS_GC(SND)->kind->compare();
+				vm_compare();
 				TOP = BOOL_VAL(TOP.bits == vm.same.bits);
 			}
 		NEXT;
 		case OP_GREATER:
-			if (IS_NUMBER(SND)) merge(BOOL_VAL(AS_NUMBER(SND) > num(TOP)));
+			if (IS_NUMBER(SND) && IS_NUMBER(TOP)) merge(BOOL_VAL(AS_NUMBER(SND) > AS_NUMBER(TOP)));
 			else {
-				assert(IS_GC_ABLE(SND));
-				assert(IS_GC_ABLE(TOP));
-				AS_GC(SND)->kind->compare();
+				vm_compare();
 				TOP = BOOL_VAL(TOP.bits == vm.more.bits);
 			}
 		NEXT;
 		case OP_LESS:
-			if (IS_NUMBER(SND)) merge(BOOL_VAL(num(SND) < num(TOP)));
+			if (IS_NUMBER(SND) && IS_NUMBER(TOP)) merge(BOOL_VAL(AS_NUMBER(SND) < AS_NUMBER(TOP)));
 			else {
-				assert(IS_GC_ABLE(SND));
-				assert(IS_GC_ABLE(TOP));
-				AS_GC(SND)->kind->compare();
+				vm_compare();
 				TOP = BOOL_VAL(TOP.bits == vm.less.bits);
 			}
 		NEXT;
 		case OP_CMP:
-			if (IS_NUMBER(SND)) merge(compare_numbers(AS_NUMBER(SND), num(TOP)));
+			if (IS_NUMBER(SND) && IS_NUMBER(TOP)) merge(compare_numbers(AS_NUMBER(SND), AS_NUMBER(TOP)));
 			else {
-				assert(IS_GC_ABLE(SND));
-				assert(IS_GC_ABLE(TOP));
-				AS_GC(SND)->kind->compare();
+				vm_compare();
 			}
 		NEXT;
 		case OP_POWER: merge(NUMBER_VAL(pow(num(SND), num(TOP)))); NEXT;

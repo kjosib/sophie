@@ -5,9 +5,13 @@ DEFINE_VECTOR_APPEND(ValueArray, Value)
 
 void print_simply(Value value) {
 	if (IS_NUMBER(value)) printf(NUMBER_FORMAT, AS_NUMBER(value));
-	else if (IS_UNSET(value)) printf("nil");
+	else if (IS_UNSET(value)) printf("unset");
 	else if (IS_RUNE(value)) printf("<rune: %d>", AS_RUNE(value));
-	else if (IS_ENUM(value)) printf("<enum: %d/%d>", AS_ENUM_VT_IDX(value), AS_ENUM_TAG(value));
+	else if (IS_ENUM(value)) {
+		int vt_idx = AS_ENUM_VT_IDX(value);
+		VTable *vt = &vmap.at[vt_idx];
+		printf("<enum: %s/%d>", vt->type_name->text, AS_ENUM_TAG(value));
+	}
 	else if (IS_PTR(value)) printf("<ptr: %p>", AS_PTR(value));
 	else {
 		assert(IS_GC_ABLE(value));
