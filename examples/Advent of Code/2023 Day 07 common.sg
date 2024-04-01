@@ -1,5 +1,5 @@
 import:
-"common"(split_on_whitespace);
+"common"(split_on_whitespace, lex);
 
 type:
 game is (hand:list[number], bid:number, class:number);
@@ -10,18 +10,6 @@ card:string;
 e:entry;
 
 define:
-
-lexical_comparison(xs, ys) = case xs of
-	nil -> case ys of nil -> same; cons -> less; esac;
-	cons -> case ys of nil -> more; cons -> lex(xs.head <=> ys.head, lexical_comparison(xs.tail, ys.tail)); esac;
-esac;
-
-# I'm debating whether this concept should be promoted to an operator.
-# No particular glyph makes obvious sense for it,
-# but it's pretty clearly a candidate for an associative-commutatitive syntax.
-# There may also be a case for a VM super-instruction for this whole concept.
-# In any case, this will serve for now.
-lex(primary:order, break_ties:order) = case primary of same -> break_ties; else primary; esac;
 
 # Now for something specific to the actual puzzle:
 # How shall we identify the type of a hand?
@@ -63,7 +51,7 @@ evaluate(e) = e.key * e.value.bid;
 
 # Now to address the puzzle...
 
-weakest_first(x,y) = case lex(x.class <=> y.class, lexical_comparison(x.hand, y.hand)) of
+weakest_first(x,y) = case lex(x.class <=> y.class, x.hand <=> y.hand) of
 	less -> yes;
 	else no;
 esac;

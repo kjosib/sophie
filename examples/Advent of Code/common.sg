@@ -61,3 +61,14 @@ filter_maybe(xs:list[maybe[?x]]):list[?x] = case xs of
     end cons;
 esac;
 
+# I'm debating whether this concept should be promoted to an operator.
+# No particular glyph makes obvious sense for it,
+# but it's pretty clearly a candidate for an associative-commutatitive syntax.
+# There may also be a case for a VM super-instruction for this whole concept.
+# In any case, this will serve for now.
+lex(primary:order, break_ties:order) = case primary of same -> break_ties; else primary; esac;
+
+operator <=> (xs:list, ys:list) = case xs of
+	nil -> case ys of nil -> same; cons -> less; esac;
+	cons -> case ys of nil -> more; cons -> lex(xs.head <=> ys.head, xs.tail <=> ys.tail); esac;
+esac;

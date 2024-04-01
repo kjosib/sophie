@@ -6,10 +6,6 @@ from .stacking import Frame, Activation, RootFrame
 from .scheduler import Task, Actor
 from .diagnostics import trace_absurdity
 
-LESS:Optional[dict] = None # Gets replaced at runtime.
-SAME:Optional[dict] = None # Gets replaced at runtime.
-MORE:Optional[dict] = None # Gets replaced at runtime.
-
 def _compare(a,b):
 	if a < b: return LESS
 	if a == b: return SAME
@@ -439,7 +435,12 @@ class UserDefinedActor(Actor):
 ###############################################################################
 
 NIL:Optional[dict] = None # Gets replaced at runtime.
+LESS:Optional[dict] = None # Gets replaced at runtime.
+SAME:Optional[dict] = None # Gets replaced at runtime.
+MORE:Optional[dict] = None # Gets replaced at runtime.
+NOPE:Optional[dict] = None # Gets replaced at runtime.
 CONS:Constructor
+THIS:Constructor
 
 def iterate_list(lst:LAZY_VALUE):
 	lst = force(lst)
@@ -454,11 +455,14 @@ def as_sophie_list(items:Reversible):
 		lst = {"":CONS.key, "head":head, "tail":lst}
 	return lst
 
+def sophie_nope(): return NOPE
+def sophie_this(item): return {"":THIS.key, "item":item}
+
 ###############################################################################
 
 def reset(fetch):
 	OVERLOAD.clear()
-	for k in 'nil', 'cons', 'less', 'same', 'more':
+	for k in 'nil', 'cons', 'less', 'same', 'more', 'this', 'nope':
 		globals()[k.upper()] = fetch(k)
 	for relation, cases in {
 		"<":("less",),
