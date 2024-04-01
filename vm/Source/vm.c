@@ -151,7 +151,7 @@ static void vm_double_dispatch(BopType bop) {
 	DispatchTable *dt = &vt->dt[bop];
 	push(find_dispatch(dt, type_index_for_value(TOP)));
 	assert(IS_GC_ABLE(TOP));
-	push(AS_GC(TOP)->kind->apply());
+	push(apply());
 }
 
 static Value compare_numbers(double lhs, double rhs) {
@@ -170,7 +170,7 @@ static void vm_negate() {
 	VTable *vt = &vmap.at[type_index_for_value(TOP)];
 	push(vt->neg);
 	assert(IS_GC_ABLE(TOP));
-	push(AS_GC(TOP)->kind->apply());
+	push(apply());
 }
 
 #define NEXT goto dispatch
@@ -287,7 +287,7 @@ dispatch:
 			switch (INDICATOR(TOP)) {
 			case IND_CLOSURE:
 			case IND_GC:  // i.e. native function
-				push(AS_GC(TOP)->kind->apply());
+				push(apply());
 				NEXT;
 			default:
 				printValue(TOP);
@@ -307,7 +307,7 @@ dispatch:
 				goto enter;
 			}
 			case IND_GC:  // i.e. native function
-				YIELD(AS_GC(TOP)->kind->apply());
+				YIELD(apply());
 			default:
 				runtimeError(vpc, base, "EXEC needs a callable object; got val %s.", valKind(TOP));
 			}
