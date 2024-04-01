@@ -108,6 +108,16 @@ static Value mid_native(Value *args) {
 	return GC_VAL(intern_String(dst));
 }
 
+static Value trim_native(Value *args) {
+	*args = force(*args);
+	String *str = AS_STRING(*args);
+	char *text = str->text;
+	size_t left = 0, right = str->length;
+	while (left < right && isspace(text[left])) left++;
+	while (left < right && isspace(text[right-1])) right--;
+	return slice(args, left, right);
+}
+
 static Value join_native(Value *args) {
 	// Determine the total necessary size, which can be done by duplicating, then iterating across, the list.
 	size_t size = 0;
@@ -434,7 +444,7 @@ static void install_strings() {
 	create_native_function("ord", 1, ord_native);
 	create_native_function("mid", 3, mid_native);
 	create_native_function("join", 1, join_native);
-
+	create_native_function("trim", 1, trim_native);
 	create_native_function("split_lines", 1, split_lines);
 }
 
