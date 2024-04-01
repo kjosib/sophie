@@ -332,6 +332,17 @@ class Binder(Visitor):
 	def bind(self, formal: SophieType, actual: SophieType):
 		if actual in TRIVIAL_TYPES or formal in TRIVIAL_TYPES or formal.number == actual.number:
 			return
+		if isinstance(actual, TypeVariable):
+			# This should not be possible during concrete type-checking -- for now.
+			# It can only happen during signature-checking when you've done something
+			# particularly informative with type annotations and higher-order functions.
+			# Because Sophie types are not (currently) part of a covariance hierarchy,
+			# we can just treat this as backwards type-equality, which is symmetric.
+			#
+			# Signature-checking is allowed to say "maybe", because the concrete
+			# check with *actual* actual types will catch any leftovers. Probably.
+			# (There might be corner-cases involving generic data constructors.)
+			self.visit_TypeVariable(actual, formal)
 		else:
 			self.visit(formal, actual)
 	
@@ -341,8 +352,7 @@ class Binder(Visitor):
 			result = union_finder.do(self.gamma[formal], actual)
 			if result is ERROR:
 				self.fail("Unable to unify %s with %s"%(self.gamma[formal], actual))
-			else:
-				self.gamma[formal] = result
+			self.gamma[formal] = result
 		else:
 			self.gamma[formal] = actual
 	
