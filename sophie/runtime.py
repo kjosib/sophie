@@ -180,7 +180,7 @@ def _eval_match_expr(expr:syntax.MatchExpr, dynamic_env:ENV):
 		alternative = expr.dispatch[tag]
 	except KeyError:
 		branch = expr.otherwise
-		assert branch is not None, tag
+		assert branch is not None, (tag, type(tag))
 		return evaluate(branch, dynamic_env)
 	else:
 		for sub_fn in alternative.where:
@@ -451,7 +451,7 @@ def iterate_list(lst:LAZY_VALUE):
 def as_sophie_list(items:Reversible):
 	lst = NIL
 	for head in reversed(items):
-		lst = {"":"cons", "head":head, "tail":lst}
+		lst = {"":CONS.key, "head":head, "tail":lst}
 	return lst
 
 ###############################################################################
