@@ -629,8 +629,9 @@ class EagerContext(Context):
 		emit("{")
 		scope.write_one_function(lf.function)
 		emit("}")
-		# 2. Emit the code to load that function onto the stack.
-		scope.load(lf.function)
+		# No need to explicitly load the function;
+		# the assembler does it on account of the close-brace.
+		# do not call scope.load(lf.function)
 		
 	def visit_FieldReference(self, fr: syntax.FieldReference, scope: VMFunctionScope):
 		FORCE.visit(fr.lhs, scope)
