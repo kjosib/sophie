@@ -2,8 +2,13 @@
 
 Read this to get a general idea of what's new and nontrivial.
 
+## April 2024
+
+* Various and sundry bugs fixed, mainly relating to recent features. 
+
 ## March 2024
 
+* 31 Mar: Added ``trim`` function as built-in.
 * 29 Mar: Added ``split_lines`` function as built-in.
 * 27 Mar: Operator overloading now also works in the VM. Version 0.0.6 is published.
 * 24 Mar: Operator overloading works in the tree-walker.

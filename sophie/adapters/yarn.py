@@ -3,17 +3,15 @@ A host module for Sophie's nontrivial intrinsics, such as string functions,
 which have some impedance mismatch between the Sophie and Python conceptions.
 """
 
-from ..runtime import iterate_list, as_sophie_list
-
-nope = {"":"nope"}
+from ..runtime import iterate_list, as_sophie_list, sophie_nope, sophie_this
 
 def mid(aString, offset, size):
 	return aString[max(0, offset) : max(0, offset+size)]
 
 def val(aString):
 	try: answer = float(aString)
-	except ValueError: return nope
-	else: return {"":"this", "item":answer}
+	except ValueError: return sophie_nope()
+	else: return sophie_this(answer)
 
 def identity(x):
 	# This one's just for messing around with the type system.
