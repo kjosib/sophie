@@ -6,11 +6,11 @@ type:
 
 define:
 
-parse_line(line) : entry[string, node]
+parse_node(line) : entry[string, node]
 = entry(label, node(on_left, on_right)) where
 	label = left(line, 3);
 	on_left = mid(line, 7,3);
 	on_right = mid(line, 12, 3);
-end parse_line;
+end parse_node;
 
-parse_net(lines) = tree_of(map(parse_line, lines));
+parse_net(lines) = tree_of(map(parse_node, lines));
