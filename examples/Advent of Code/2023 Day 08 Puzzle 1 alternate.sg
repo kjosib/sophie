@@ -8,7 +8,7 @@ import:
 	"2023 Day 08 common" (parse_net);
 
 type:
-	camel is (label:string, distance:number);
+	camel is (label:string, steps_taken:number);
 
 assume:
 c: camel;
@@ -16,16 +16,16 @@ k:number;
 
 define:
 
-solution(lines) = until(at_end, advance, initial).distance where
+solution(lines) = until(at_end, advance, initial).steps_taken where
 	guide = trim(surely(head(lines)));
 	modulus = len(guide);
 	go_left(k) = mid(guide, k mod modulus, 1) == 'L';
 	
 	at_end(c) = c.label == 'ZZZ';
-	advance(c) = camel(turn(c), c.distance+1);
+	advance(c) = camel(turn(c), c.steps_taken+1);
 	initial = camel('AAA', 0);
 	
-	turn(c) = place.left if go_left(c.distance) else place.right where
+	turn(c) = place.left if go_left(c.steps_taken) else place.right where
 		place = surely(search(net, c.label));
 	end turn;
 	net = parse_net(drop(2, lines));
