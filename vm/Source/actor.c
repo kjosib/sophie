@@ -231,7 +231,7 @@ static void run_message(Message *msg) {
 	case IND_GC:
 		// Must be a native method.
 		// For now, rely on it to have side effects.
-		AS_GC(msg->method)->kind->apply();
+		apply();
 		break;
 	default:
 		crashAndBurn("Inconceivable!");

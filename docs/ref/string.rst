@@ -5,6 +5,7 @@ Text-String Functions
     :local:
     :depth: 2
 
+
 Predefined Constant Strings
 ============================
 
@@ -52,15 +53,20 @@ If there is a replacement string, it comes last.
 Composing Strings
 ==================
 
-* ``mid : (a:string, offset, length) : string;``: Extract a substring.
-* ``strcat : (a:string, b:string) : string;``: Concatenate a pair of strings.
+* ``mid(a:string, offset, length) : string;``: Extract a substring.
+* ``strcat(a:string, b:string) : string;``: Concatenate a pair of strings.
 * ``join(ss : list[string]) : string``: Concatenate an entire list of strings. (Runs in linear time.)
 * ``interleave(x:string, ys:list[string])``: Construct the string of ``ys`` concatenated but with ``x`` between them.
 
-* ``trim : (a:string) : string;``: Return a copy of ``a`` without leading or trailing whitespace.
-* ``ltrim : (a:string) : string;``: Return a copy of ``a`` without leading whitespace.
-* ``rtrim : (a:string) : string;``: Return a copy of ``a`` without trailing whitespace.
+* ``trim(a:string) : string;``: Return a copy of ``a`` without leading or trailing whitespace.
+* ``ltrim(a:string) : string;``: Return a copy of ``a`` without leading whitespace.
+* ``rtrim(a:string) : string;``: Return a copy of ``a`` without trailing whitespace.
 
+Taking Strings Apart
+=====================
+
+* ``split_lines(a:string) : list[string]``: Splits a string into lines by breaking it after line-feed characters.
+  Keeps the line-ending characters as part of the new string.
 
 Implementation Caveat
 ======================

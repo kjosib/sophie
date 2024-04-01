@@ -35,6 +35,7 @@ foreign "sophie.adapters.yarn" where
 	join: (list[string]) -> string;
 	is_match_at: (number, string, string) -> flag;
 	trim, ltrim, rtrim : (string) -> string;
+	split_lines : (string) -> list[string];
 end;
 
 foreign "operator" where

@@ -3,7 +3,7 @@ A host module for Sophie's nontrivial intrinsics, such as string functions,
 which have some impedance mismatch between the Sophie and Python conceptions.
 """
 
-from ..runtime import iterate_list
+from ..runtime import iterate_list, as_sophie_list
 
 nope = {"":"nope"}
 
@@ -29,4 +29,7 @@ def is_match_at(offset, needle, haystack):
 trim = str.strip
 ltrim = str.lstrip
 rtrim = str.rstrip
+
+def split_lines(s:str):
+	return as_sophie_list(s.splitlines(keepends=True))
 

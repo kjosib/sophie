@@ -434,6 +434,8 @@ static void install_strings() {
 	create_native_function("ord", 1, ord_native);
 	create_native_function("mid", 3, mid_native);
 	create_native_function("join", 1, join_native);
+
+	create_native_function("split_lines", 1, split_lines);
 }
 
 static void install_the_console() {
