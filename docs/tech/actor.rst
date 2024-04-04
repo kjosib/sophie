@@ -221,3 +221,45 @@ or at least change the shape of the playing field.
 
 Meanwhile, it's not (yet) a real-time system.
 Stop-The-World *is* a viable short-run solution.
+
+
+Phase Two: Snapshot Semantics
+===============================
+
+As of 3 April 2024, I have decided I'll try snapshot semantics to bridge the gap
+between lazy and mutable computation. This will require a plan.
+
+VM Changes
+------------
+
+The VM implementation concept might be to first push copies of all the fields that *any* local closures depend on,
+then perform closure-capture out of the stack instead of by reference to the actor-record.
+A reasonable alternative would be to invent a new type of capture that pulls right from the actor.
+The former has a nice advantage: even non-nested member-references pull from stack,
+meaning that the remainder of the code is free to scribble on the actor record
+with no separate "commit" phase, which seems like probably a win.
+
+Compiler Changes
+------------------
+
+To make this work, I'll want to treat member-references as *completely and obviously* distinct from
+ordinary field references. (Perhaps a change to the syntax is in order.)
+The point is to resolve members as *symbols in scope* rather than waiting for the type-checker to complain.
+I can even load each behavior with its set of used members (recursively) during reference resolution,
+which solves a problem of how to code the snapshot.
+
+Tree-Walker Changes
+---------------------
+
+Once the behavior has a *set of used symbols* attached to its syntax-object,
+the tree-walker can copy corresponding values into the stack frame for a behavior.
+Thenceforth, member reads need not go indirectly via the "self" object.
+
+Caveats
+---------
+
+One idea is to henceforth use undecorated names for members.
+It is concise and comes with a potential ergonomic benefit around *case-of* expressions.
+But I'm leery of this: It seems consistent *to a fault.*
+On the other hand, forms like ``self.foo`` make it *locally* clear which namespace ``foo`` comes from.
+
