@@ -201,8 +201,7 @@ static Value parse_rest_of_function(byte arity) {
 			function->captures[index] = (Capture){ .is_local = true, .offset=0 };
 		}
 		else {
-			byte is_local = predictToken(TOKEN_NAME);
-			if (is_local) consume(TOKEN_NAME, "");
+			byte is_local = maybe_token(TOKEN_NAME);
 			function->captures[index] = (Capture){ .is_local = is_local, .offset = parseByte("Capture") };
 		}
 	}
