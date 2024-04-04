@@ -30,15 +30,6 @@ There must also be run-time objects to represent actors.
 But perhaps confusingly, there must also be a third kind of run-time object:
 The *template* from which an actor may be spawned.
 
-Encapsulated Referential Opacity
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-The *spawn-actor* operation is at loggerheads with the notion of referential transparency.
-And what's more, actors mutate their own state. So we need a clear firewall between actor operations
-and the part of Sophie which *is* referentially-transparent, pure, lazy, functional.
-
-
-
 No Implicit Magic
 ~~~~~~~~~~~~~~~~~~
 
@@ -113,5 +104,70 @@ Maybe one among them comes to dominate.
 It might even work out that the real answer is to participate in some sort of polyglot microservices
 ecosystem and never mind about distributed-*Sophie*-per-se.
 
+Private Mutable State Has Consequences
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Lazy operations on (co)data structures can yield control before they are fully evaluated.
+The remainder of such evaluation must not depend on later mutations.
+The intended semantics are that any suspended computation in the scope of an actor can only
+access a consistent snapshot of the actor's state.
+
+*Which Snapshot?*
+
+One possible approach would be to take a new snapshot at each "semicolon".
+This produces reasonably intuitive behavior if you're used to procedural
+languages with the usual kind of assignment. However, it comes at a surprising cost.
+From an implementation perspective, different references to one sub-function could
+possibly end up producing different closures over different states.
+
+.. admonition:: Hypothesis
+
+    This implementation challenge reflects a corresponding intellectual puzzle
+    to weave time and space together in procedural notation: What a name means
+    depends on **when** the name means. I've gotten used to this from long practice,
+    but it does not seem consistent with the *pure-lazy-functional* ideal.
+
+An alternative model -- and perhaps a simpler one to reason about --
+decrees that updates take place atomically at the end of the message.
+The snapshot visible to all expressions is the state of the actor
+at the beginning of processing a message. Closures can capture any
+portion of that state in the natural way, but the effect of update/assignment
+operations would only be visible to subsequent messages.
+
+.. admonition:: Why not "Become"?
+
+    There's nothing you can't accomplish in the present model.
+    The ``become`` idea opens a whole new can of worms:
+    What other kinds of actor might it be valid to become,
+    and does this set depend on how the actor is used?
+    The type-checking alone seems devilishly complicated.
+
+    Maybe you want some sort of actor that can switch seamlessly
+    between different modes of behavior. As things stand,
+    you can have a ``mode`` field which each method depends on.
+    Organizing that concept inside-out might be cool,
+    but it's a rather low priority right now.
+
 Encapsulated Reliability Domains
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+*Right. At some point, talk about Erlang-style Process Monitors.*
+
+I think the theory goes that, if you have (a reference to) an actor,
+you can sign up to get a message about its demise.
+I've yet to think too deeply about the end of an actor.
+Perhaps an actor should be able to declare itself finished,
+and perhaps also include the payload of its parting message to its observers.
+But this is all distant future stuff.
+
+.. note::
+    The standard conception of the actor-model lacks any idea of "broadcast".
+    But in this scenario, I think we can get away with it.
+    Mechanically, you can imagine some other system-actor responsible
+    for reflecting a unicast message out to registered listener-actors.
+    Since a dead actor won't be sending any new messages,
+    all that's left is to ensure the usual space-time ordering
+    with respect to messages previously sent.
+    And this is no problem, because a death-knell is **causally** after
+    an actor's last act.
+

@@ -4,6 +4,7 @@ Read this to get a general idea of what's new and nontrivial.
 
 ## April 2024
 
+* 3 Apr: I have decided on snapshot semantics for actor member access, with associated doc updates.
 * Various and sundry bugs fixed, mainly relating to recent features. 
 
 ## March 2024
