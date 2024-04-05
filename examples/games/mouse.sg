@@ -1,10 +1,6 @@
 # The motivating example is to portray crossed lines that intersect at the mouse cursor.
 # That means carrying state from the mouse-move event through to the clock-tick event.
 
-# Sophie must evaluate things like `self.pos` eagerly instead of lazily.
-# Otherwise, the result (when finally computed) could reflect future changes,
-# which would be confusing, unpredictable, and undesirable.
-
 
 import:
 sys."game" as game (events, xy, rgb, fill, stroke, black, white, hlin, vlin, box, circle);
@@ -22,8 +18,8 @@ define:
         
         to tick(display) is display ! draw [
             fill(rgb(0,$99,0)),   # Apple ][ style hexadecimal with dollar-sign.
-            stroke(white, cat(cross_hairs(self.pos), lines_from_each_corner_to(self.pos))),
-            stroke(black, reticle(self.pos)),
+            stroke(white, cat(cross_hairs(my pos), lines_from_each_corner_to(my pos))),
+            stroke(black, reticle(my pos)),
         ];
         
     end mouse_chaser;

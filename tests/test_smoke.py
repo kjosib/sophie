@@ -14,17 +14,19 @@ def _good(folder, which) -> resolution.RoadMap:
 	report = diagnostics.Report(verbose=False)
 	try:
 		roadmap = resolution.RoadMap(folder / (which + ".sg"), report)
+	except resolution.Yuck as ex:
+		assert report.sick()
+		report.complain_to_console()
+		assert False, "Test failed %s phase"%ex.args[0]
+	else:
+		report.assert_no_issues("Ostensibly-good example broke before type-check, but failed to fail properly.")
 		type_evaluator.DeductionEngine(roadmap, report)
-		report.assert_no_issues()
+		report.assert_no_issues("Ostensibly-good example failed to type-check.")
 		analyze_demand(roadmap)
 		with patch("sophie.intermediate.emit", lambda *args:None):
 			with patch("sophie.intermediate.newline", lambda indent="":None):
 				translate(roadmap)
 		return roadmap
-	except resolution.Yuck as ex:
-		assert report.sick()
-		report.complain_to_console()
-		assert False, "Test failed %s phase"%ex.args[0]
 
 class ExampleSmokeTests(unittest.TestCase):
 	""" Run all the examples; Test for no smoke. """
@@ -46,6 +48,8 @@ class ExampleSmokeTests(unittest.TestCase):
 				_good(examples, "games/"+name)
 		with self.subTest("Mandelbrot"):
 			_good(examples, "mathematics/Mandelbrot")
+		with self.subTest("Mandelbrot-graphical"):
+			_good(examples, "mathematics/Mandelbrot-graphical")
 
 	def test_other_examples(self):
 		for name in [

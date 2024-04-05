@@ -79,7 +79,7 @@ def _prepare(env:Frame, namespace:ontology.NS):
 		elif isinstance(dfn, syntax.UserFunction):
 			env.declare(dfn)
 		elif isinstance(dfn, syntax.UserAgent):
-			env.assign(dfn, ActorClass(env, dfn) if dfn.fields else ActorTemplate(env, dfn, ()))
+			env.assign(dfn, ActorClass(env, dfn) if dfn.members else ActorTemplate(env, dfn, ()))
 		elif type(dfn) in _ignore_these:
 			pass
 		else:

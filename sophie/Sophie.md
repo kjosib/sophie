@@ -46,6 +46,7 @@ alias -> AS name | :nothing
 reference -> name     :PlainReference
   | .SELF             :PlainReference
   | name '@' name     :QualifiedReference
+  | MY name           :MemberReference
 ```
 
 **The grammar of type declarations**
@@ -249,7 +250,7 @@ observable outcomes, with just a few extra production rules.
 expr -> .SKIP       :Skip
       | '!' expr       :AsTask
       | expr '!' name       :BindMethod
-      | MY name ':=' expr      :AssignField
+      | MY name ':=' expr      :AssignMember
       | .with_agents .DO .semicolon_list(expr) END     :DoBlock
 
 with_agents -> :empty | CAST semicolon_list(new_agent)
@@ -286,7 +287,7 @@ The chief difference is that agent state is mutable (and so cannot be shared).
 There may be cause for stateless agents from time to time, so I'll make the state optional.
 ```
 agent_definition -> AGENT name optional(round_list(field_dfn)) AS semicolon_list(behavior) END name  :UserAgent
-behavior -> TO name formals IS expr   :Behavior
+behavior -> TO name formals IS expr where_clause  :Behavior
 ```
 The name gets repeated at the end of an `agent` definition.
 My motivation for this decision is the same as with functions that have subordinate `where` clauses.

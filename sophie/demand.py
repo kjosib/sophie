@@ -86,8 +86,8 @@ class DeterminedCallGraphPass(TopDown):
 		for step in do.steps:
 			self.visit(step, src)
 	
-	def visit_AssignField(self, af:syntax.AssignField, src):
-		self.visit(af.expr, src)
+	def visit_AssignMember(self, am:syntax.AssignMember, src):
+		self.visit(am.expr, src)
 
 EMPTY = set()
 
@@ -214,5 +214,5 @@ class DemandPass(Visitor):
 		assert False, "Absurd cases ought not influence demand analysis."
 	
 	@staticmethod
-	def visit_AssignField(_):
+	def visit_AssignMember(_):
 		assert False, "Only behaviors can assign fields, but only functions are subject to this analysis."

@@ -12,7 +12,7 @@ class DependencyPassTests(unittest.TestCase):
 	def test_map_depends_on_both_parameters(self):
 		report = Report(verbose=False)
 		roadmap = RoadMap(specimen_path, report)
-		report.assert_no_issues()
+		report.assert_no_issues("Test is subverted.")
 		sut = DependencyPass()
 		sut.visit(roadmap.preamble)
 		scope = roadmap.module_scopes[roadmap.preamble]

@@ -210,17 +210,16 @@ class InterfaceType(SophieType):
 	def expected_arity(self) -> int: return -1  # Not callable
 
 class _AgentDerived(SophieType):
-	def __init__(self, uda:syntax.UserAgent, args:ProductType, frame:TYPE_ENV):
+	def __init__(self, uda:syntax.UserAgent, args:ProductType, global_env:TYPE_ENV):
+		assert isinstance(args, ProductType), type(args)
 		self.uda = uda
-		self.args = args
-		# By definition the static link for a template is its own module's global scope.
-		# For a UDAType the proper static link should be an extension with a SELF link.
-		self.frame = frame
+		self.args = args.fields
+		self.global_env = global_env
 		super().__init__(uda, args)
 
 class ParametricTemplateType(_AgentDerived):
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_parametric_template(self)
-	def expected_arity(self) -> int: return len(self.uda.fields)
+	def expected_arity(self) -> int: return len(self.uda.members)
 
 class ConcreteTemplateType(_AgentDerived):
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_concrete_template(self)
@@ -229,6 +228,8 @@ class ConcreteTemplateType(_AgentDerived):
 class UDAType(_AgentDerived):
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_uda(self)
 	def expected_arity(self) -> int: return -1  # Not callable; instantiable.
+	def state_pairs(self):
+		return zip(self.uda.members, self.args)
 
 class BehaviorType(SophieType):
 	def __init__(self, uda_type:UDAType, behavior:syntax.Behavior):

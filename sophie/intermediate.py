@@ -115,8 +115,9 @@ class VMScope:
 
 	def write_one_function(self, fn: syntax.UserFunction):
 		inner = VMFunctionScope(self, fn.nom.text, is_thunk=not fn.params)
-		inner.emit_preamble(fn.params, MANGLED[fn])
+		emit(len(fn.params), quote(MANGLED[fn]))
 		for param in fn.params:
+			inner.declare(param)
 			if param.is_strict:
 				inner.make_strict(param)
 		inner.write_inner_functions(fn.where)
@@ -172,8 +173,8 @@ class VMActorScope(VMScope):
 		super().__init__(outer._prefix + dfn.nom.text + ":")
 		self._outer = outer
 		self.indent = outer.indent+"  "
-		emit(".actor", *dfn.field_names(), quote(MANGLED[dfn]))
-		self._field_map = {field:i for i,field in enumerate(dfn.field_names())}
+		emit(".actor", *dfn.member_names(), quote(MANGLED[dfn]))
+		self._field_map = {field:i for i,field in enumerate(dfn.member_names())}
 
 	def capture(self, symbol: ontology.Symbol) -> bool:
 		return False
@@ -189,7 +190,11 @@ class VMActorScope(VMScope):
 		# However, there's a special "self" object implicitly the first parameter.
 		# Also, access to self-dot-foo will use actor-specific instructions.
 		inner = VMFunctionScope(self, b.nom.text, is_thunk=False)
-		inner.emit_preamble([ontology.SELF] + b.params, b.nom.text)
+		emit(1+len(b.params), quote(b.nom.text))
+		inner.declare(ontology.SELF)
+		inner.declare_several(b.params)
+		for member in b.reads_members:
+			inner.emit_reads_member(member)
 		LAST.visit(b.expr, inner)
 		inner.emit_epilogue()
 
@@ -305,11 +310,6 @@ class VMFunctionScope(VMScope):
 			assert self._depth == depth, "Inconsistent Come-From %d != %d"%(self._depth, depth)
 		LABEL_QUEUE.append(label)
 
-	def emit_preamble(self, params:Sequence[syntax.FormalParameter], name:str):
-		emit(len(params))
-		emit(quote(name))
-		self.declare_several(params)
-
 	def make_strict(self, param):
 		emit("STRICT", self._local[param])
 	
@@ -417,8 +417,10 @@ class VMFunctionScope(VMScope):
 		emit("ASSIGN", self.member_number(field))
 		self._depth -= 2
 
-	def emit_read_member(self, field: str):
-		emit("MEMBER", self.member_number(field))
+	def emit_reads_member(self, member:syntax.FormalParameter):
+		assert isinstance(member, syntax.FormalParameter), type(member)
+		emit("MEMBER", self.member_number(member.nom.key()))
+		self.declare(member)
 		
 	def member_number(self, field: str):
 		return self._outer.member_number(field)
@@ -500,12 +502,11 @@ class Context(Visitor):
 class LazyContext(Context):
 	@staticmethod
 	def visit_FieldReference(fr: syntax.FieldReference, scope: VMFunctionScope):
-		if fr.is_volatile or is_eager(fr.lhs): FORCE.visit(fr, scope)
+		if is_eager(fr.lhs): FORCE.visit(fr, scope)
 		else: scope.make_thunk(fr)
 	
 	@staticmethod
 	def _thunk_it(expr:syntax.ValExpr, scope: VMFunctionScope):
-		if expr.is_volatile: FORCE.visit(expr, scope)
 		scope.make_thunk(expr)
 	
 	visit_Call = _thunk_it
@@ -531,10 +532,6 @@ class LazyContext(Context):
 	visit_LambdaForm = _force_it
 	visit_ExplicitList = _force_it
 
-def _delay(expr:syntax.ValExpr, scope: VMFunctionScope):
-	strict = expr.is_volatile  # There could be more reasons later, e.g. stricture analysis
-	(FORCE if strict else DELAY).visit(expr, scope)
-
 def _prepare_arguments_for_call(call: syntax.Call, scope: VMFunctionScope):
 	# If the thing we're calling is syntactically:
 	#     a function by name, then find and respect its strictness declarations.
@@ -549,12 +546,12 @@ def _prepare_arguments_for_call(call: syntax.Call, scope: VMFunctionScope):
 				if param.is_strict:
 					FORCE.visit(arg, scope)
 				else:
-					_delay(arg, scope)
+					DELAY.visit(arg, scope)
 			return
 	if isinstance(call.fn_exp, syntax.BindMethod):
 		for arg in call.args: FORCE.visit(arg, scope)
 		return
-	for arg in call.args: _delay(arg, scope)
+	for arg in call.args: DELAY.visit(arg, scope)
 
 class EagerContext(Context):
 	"""
@@ -635,17 +632,14 @@ class EagerContext(Context):
 		
 	def visit_FieldReference(self, fr: syntax.FieldReference, scope: VMFunctionScope):
 		FORCE.visit(fr.lhs, scope)
-		if syntax.is_self_reference(fr.lhs):
-			scope.emit_read_member(fr.field_name.key())
-		else:
-			scope.emit_read_field(fr.field_name.key())
-			emit("FORCE")
+		scope.emit_read_field(fr.field_name.key())
+		emit("FORCE")
 		self.answer(scope)
 	
 	def visit_ExplicitList(self, el:syntax.ExplicitList, scope:VMFunctionScope):
 		scope.emit_nil()
 		for item in reversed(el.elts):
-			_delay(item, scope)
+			DELAY.visit(item, scope)
 			scope.emit_snoc()
 		self.answer(scope)
 	
@@ -781,10 +775,10 @@ class ProcContext(EagerContext):
 		assert scope.depth() in (depth, None)
 		scope.emit_drop(len(do.agents))
 
-	def visit_AssignField(self, af:syntax.AssignField, scope:VMFunctionScope):
+	def visit_AssignMember(self, am:syntax.AssignMember, scope:VMFunctionScope):
 		scope.load(ontology.SELF)
-		FORCE.visit(af.expr, scope)
-		scope.emit_assign_member(af.nom.text)
+		FORCE.visit(am.expr, scope)
+		scope.emit_assign_member(am.nom.text)
 		self.semicolon(scope)
 	
 	def visit_Skip(self, _:syntax.Skip, scope:VMFunctionScope):

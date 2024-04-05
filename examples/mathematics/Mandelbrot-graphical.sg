@@ -62,9 +62,9 @@ horizontal_steps = iota(0, res.x);
 
 agent painter(y:number) as
 	to tick(display) is case
-		when self.y < res.y then do
-			display ! draw(row_for(self.y*box_scale.y, interpolate(vertical, (self.y+0.5) / res.y)));
-			my y := self.y + 1;
+		when my y < res.y then do
+			display ! draw(row_for(my y*box_scale.y, interpolate(vertical, (my y+0.5) / res.y)));
+			my y := my y + 1;
 		end;
 		else skip;
 	esac;
