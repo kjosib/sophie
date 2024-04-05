@@ -6,7 +6,7 @@ from which we can find the kind, type, and definition.
 from importlib import import_module
 from pathlib import Path
 from traceback import TracebackException
-from typing import Union
+from typing import Union, Optional
 from inspect import signature
 from boozetools.support.foundation import Visitor, strongly_connected_components_hashable
 from boozetools.support.symtab import NoSuchSymbol, SymbolAlreadyExists
@@ -60,7 +60,7 @@ class RoadMap:
 		try: program = Program(main_path, report)
 		except SophieParseError: raise Yuck("parse")
 		except SophieImportError: raise Yuck("import")
-		report.assert_no_issues()
+		report.assert_no_issues("Parser reported an error but failed to fail.")
 		self.import_map = program.import_map
 
 		self.preamble = register(primitive.root_namespace, program.preamble)
@@ -162,7 +162,7 @@ class _WordDefiner(_ResolutionPass):
 		for fn in module.outer_functions:
 			self.visit(fn, self.globals)
 		for uda in module.agent_definitions:
-			self.visit(uda, self.globals)
+			self.visit(uda)
 		for expr in module.main:  # Might need to define some case-match symbols here.
 			self.visit(expr, self.globals)
 		pass
@@ -240,19 +240,19 @@ class _WordDefiner(_ResolutionPass):
 			self.visit(sub_fn, inner)
 		self.visit(udf.expr, inner)
 
-	def visit_UserAgent(self, uda:syntax.UserAgent, env:NS):
+	def visit_UserAgent(self, uda:syntax.UserAgent):
 		uda.source_path = self.module.source_path
-		self._install(env, uda)
-		field_space = uda.field_space = env.new_child(uda)
-		for f in uda.fields:
-			self.visit(f, field_space)
-		message_space = uda.message_space = NS(place=uda)
+		self._install(self.globals, uda)
+		uda.member_space = self.globals.new_child(uda)
+		for f in uda.members:
+			self.visit(f, uda.member_space)
+		uda.message_space = NS(place=uda)
 		for behavior in uda.behaviors:
 			assert isinstance(behavior, syntax.Behavior)
 			behavior.source_path = self.module.source_path
-			self._install(message_space, behavior)
-			inner = behavior.namespace = env.new_child(behavior)
-			inner['SELF'] = SELF
+			self._install(uda.message_space, behavior)
+			inner = behavior.namespace = self.globals.new_child(behavior)
+			self._install(inner, SELF)
 			for param in behavior.params:
 				self.visit(param, inner)
 			self.visit(behavior.expr, inner)
@@ -285,8 +285,8 @@ class _WordDefiner(_ResolutionPass):
 		for s in db.steps:
 			self.visit(s, inner)
 	
-	def visit_AssignField(self, af:syntax.AssignField, env:NS):
-		return self.visit(af.expr, env)
+	def visit_AssignMember(self, am:syntax.AssignMember, env:NS):
+		return self.visit(am.expr, env)
 
 	def visit_MatchExpr(self, mx:syntax.MatchExpr, env:NS):
 		self.visit(mx.subject.expr, env)
@@ -351,6 +351,9 @@ class _WordDefiner(_ResolutionPass):
 		self.visit_FFI_Alias(sym, py_module)
 		self.module.ffi_operators.append(sym)
 
+def _is_a_self_reference(expr:syntax.ValExpr) -> bool:
+	return isinstance(expr, syntax.Lookup) and expr.ref.dfn is SELF
+
 class _WordResolver(_ResolutionPass):
 	"""
 	At the end of this action, every name-reference in the source text is visible where it's used.
@@ -371,7 +374,8 @@ class _WordResolver(_ResolutionPass):
 	"""
 	
 	dubious_constructors: list[syntax.Reference]
-	_current_uda = None
+	_current_uda : Optional[syntax.UserAgent] = None
+	_reads_members : set[Symbol] = set()
 	
 	def visit_Module(self):
 		self.dubious_constructors = []
@@ -412,6 +416,16 @@ class _WordResolver(_ResolutionPass):
 		except NoSuchSymbol:
 			self.report.undefined_name(nom.head())
 			return Bogon(nom)
+	
+	def _lookup_member(self, nom:syntax.Nom):
+		if self._current_uda is None:
+			self.report.can_only_see_member_within_behavior(nom)
+			return Bogon(nom)
+		try:
+			return self._current_uda.member_space.local[nom.key()]
+		except KeyError:
+			self.report.undefined_name(nom.head())
+			return Bogon(nom)
 
 	def visit_PlainReference(self, ref:syntax.PlainReference, env:NS):
 		# This kind of reference searches the local-scoped name-space
@@ -426,6 +440,11 @@ class _WordResolver(_ResolutionPass):
 			target_module = self.roadmap.import_map[im]
 			target_namespace = self.roadmap.module_scopes[target_module]
 			ref.dfn = self._lookup(ref.nom, target_namespace)
+	
+	def visit_MemberReference(self, ref:syntax.MemberReference, env:NS):
+		# Search among the members of the actor-scope.
+		ref.dfn = self._lookup_member(ref.nom)
+		self._reads_members.add(ref.dfn)
 	
 	def visit_Interface(self, i:syntax.Interface):
 		for ms in i.spec:
@@ -458,14 +477,16 @@ class _WordResolver(_ResolutionPass):
 		self.visit(sym.expr, sym.namespace)
 
 	def visit_UserAgent(self, uda:syntax.UserAgent):
-		for f in uda.fields:
-			self.visit(f.type_expr, uda.field_space)
+		for f in uda.members:
+			self.visit(f.type_expr, self.globals)
 		self._current_uda = uda
 		for b in uda.behaviors:
-			self.visit(b, uda.field_space)
+			self._reads_members = b.reads_members = set()
+			self.visit(b)
+			
 		self._current_uda = None
 	
-	def visit_Behavior(self, sym:syntax.Behavior, env:NS):
+	def visit_Behavior(self, sym:syntax.Behavior):
 		for param in sym.params:
 			if param.type_expr is not None:
 				self.visit(param.type_expr, sym.namespace)
@@ -489,6 +510,11 @@ class _WordResolver(_ResolutionPass):
 		if isinstance(dfn, syntax.TypeAlias) or not dfn.has_value_domain():
 			self.dubious_constructors.append(lu.ref)
 	
+	def visit_FieldReference(self, expr: syntax.FieldReference, env):
+		super().visit_FieldReference(expr, env)
+		if _is_a_self_reference(expr):
+			self.report.use_my_instead(env, expr)
+	
 	def visit_LambdaForm(self, lf: syntax.LambdaForm, env: NS):
 		pass
 	
@@ -498,13 +524,9 @@ class _WordResolver(_ResolutionPass):
 		for s in db.steps:
 			self.visit(s, db.namespace)
 
-	def visit_AssignField(self, af:syntax.AssignField, env:NS):
-		if self._current_uda is None:
-			self.report.can_only_assign_within_behavior(af)
-			af.dfn = Bogon(af.nom)
-		else:
-			af.dfn = self._lookup(af.nom, self._current_uda.field_space)
-		return self.visit(af.expr, env)
+	def visit_AssignMember(self, am:syntax.AssignMember, env:NS):
+		am.dfn = self._lookup_member(am.nom)
+		return self.visit(am.expr, env)
 	
 	def visit_ImportForeign(self, d:syntax.ImportForeign):
 		for ref in d.linkage or ():
@@ -638,7 +660,7 @@ class _AliasChecker(Visitor):
 			self.visit(sym.result_type_expr, True)
 
 	def visit_UserAgent(self, sym:syntax.UserAgent):
-		self._tour(sym.fields, True)
+		self._tour(sym.members, True)
 		self._tour(sym.behaviors)
 	
 	def visit_Behavior(self, b:syntax.Behavior):

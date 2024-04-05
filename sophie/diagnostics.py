@@ -90,11 +90,11 @@ class Report:
 		""" Emit all the issues to the console. """
 		_bemoan(self._issues)
 			
-	def assert_no_issues(self):
+	def assert_no_issues(self, message):
 		""" Does what it says on the tin """
 		if self._issues:
 			self.complain_to_console()
-			assert False, "This is supposed to be impossible."
+			assert False, "This is supposed to be impossible. "+message
 	
 	# Methods the front-end is likely to call:
 	def generic_parse_error(self, path: Path, lookahead, node:Nom, hint: str):
@@ -174,9 +174,14 @@ class Report:
 		where = [g.head() for g in guilty]
 		self.error("Defining Types", where, admonition)
 	
-	def can_only_assign_within_behavior(self, af:syntax.AssignField):
-		intro = "You can only assign to state within an actor's behaviors."
-		self.issue(Pic(intro, [Annotation(self._path, af)]))
+	def can_only_see_member_within_behavior(self, nom:Nom):
+		intro = "You can only refer to an actor's state within that actor's own behaviors."
+		self.issue(Pic(intro, [Annotation(self._path, nom)]))
+	
+	def use_my_instead(self, env: TYPE_ENV, fr: syntax.FieldReference):
+		intro = "To read an actor's own private state, use `my %s` here." % fr.field_name.text
+		problem = [Annotation(env.path(), fr)]
+		self.issue(Pic(intro, trace_stack(env) + problem))
 	
 	# Methods the Alias-checker calls
 	def these_are_not_types(self, non_types:Sequence[syntax.TypeCall]):

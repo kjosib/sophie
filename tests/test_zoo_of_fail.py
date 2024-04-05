@@ -27,7 +27,7 @@ def _identify_problem(folder:Path, filename:str):
 		assert report.sick()
 		return ex.args[0]
 	else:
-		report.assert_no_issues()
+		report.assert_no_issues("Roadmap generated errors, but failed to fail properly.")
 		DeductionEngine(roadmap, report)
 		if report.sick(): return "type_check"
 		else: return "failed to fail"

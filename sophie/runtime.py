@@ -201,9 +201,9 @@ def _eval_as_task(expr:syntax.AsTask, dynamic_env:ENV):
 		assert not isinstance(sub, BoundMethod)
 		return PlainTask(sub)
 
-def _eval_assign_field(expr:syntax.AssignField, dynamic_env:ENV):
-	state = dynamic_env.chase(SELF).fetch(SELF)
-	return AssignAction(state, expr.nom.key(), evaluate(expr.expr, dynamic_env))
+def _eval_assign_member(expr:syntax.AssignMember, dynamic_env:ENV):
+	uda = dynamic_env.chase(SELF).fetch(SELF)
+	return AssignAction(uda, expr.dfn, evaluate(expr.expr, dynamic_env))
 
 def _eval_absurdity(expr:syntax.Absurdity, dynamic_env:ENV):
 	trace_absurdity(dynamic_env, expr)
@@ -234,8 +234,6 @@ _NO_DELAY = {syntax.Literal, syntax.Lookup, syntax.DoBlock, syntax.LambdaForm}
 def delay(expr: syntax.ValExpr, dynamic_env: ENV) -> LAZY_VALUE:
 	# For certain kinds of expression, there is no profit to delay:
 	if type(expr) in _NO_DELAY: return evaluate(expr, dynamic_env)
-	# Volatile expressions (that depend on a field of SELF) must not delay:
-	if expr.is_volatile: return _strict(expr, dynamic_env)
 	# In less trivial cases, make a thunk and pass that instead.
 	return Thunk(expr, dynamic_env)
 
@@ -306,7 +304,7 @@ class ActorClass(Function):
 		self._uda = uda
 		
 	def apply(self, args: Sequence[LAZY_VALUE], dynamic_env:ENV) -> "ActorTemplate":
-		assert len(args) == len(self._uda.fields)
+		assert len(args) == len(self._uda.members)
 		return ActorTemplate(self._global_link, self._uda, args)
 
 
@@ -317,11 +315,9 @@ class ActorTemplate:
 		self._args = args
 	
 	def instantiate(self, dynamic_link:ENV):
-		private_state = dict(zip(self._uda.field_names(), map(force, self._args)))
-		private_state[VTABLE] = self._uda.message_space.local
-		frame = Activation(self._global_link, dynamic_link, self._uda)
-		frame.assign(SELF, private_state)
-		return UserDefinedActor(frame)
+		state = dict(zip(self._uda.members, map(force, self._args)))
+		vtable = self._uda.message_space.local
+		return UserDefinedActor(state, vtable, self._global_link)
 
 ###############################################################################
 
@@ -334,12 +330,12 @@ class Nop(Action):
 	def perform(self): pass
 
 class AssignAction(Action):
-	def __init__(self, state:dict[str,STRICT_VALUE], field_name:str, new_value:LAZY_VALUE):
-		self._state = state
-		self._field_name = field_name
+	def __init__(self, uda:"UserDefinedActor", field_sym:syntax.Symbol, new_value:LAZY_VALUE):
+		self._uda = uda
+		self._field_sym = field_sym
 		self._new_value = new_value
 	def perform(self):
-		self._state[self._field_name] = force(self._new_value)
+		self._uda.state[self._field_sym] = force(self._new_value)
 
 class CompoundAction(Action):
 	def __init__(self, block:syntax.DoBlock, dynamic_env:ENV):
@@ -421,16 +417,19 @@ class ParametricTask(Task):
 		action.perform()
 
 class UserDefinedActor(Actor):
-	def __init__(self, frame:ENV):
+	def __init__(self, state:dict, vtable:dict, global_env:ENV):
 		super().__init__()
-		self._frame = frame
+		self.state = state
+		self._vtable = vtable
+		self.global_env = global_env
 	
 	def handle(self, message, args):
-		state = self._frame.fetch(SELF)
-		behavior = state[VTABLE][message]
-		assert isinstance(behavior, syntax.Behavior)
-		frame = Activation.for_behavior(self._frame, THREADED_ROOT, behavior, args)
+		behavior = self._vtable[message]
+		frame = Activation.for_behavior(self, behavior, args, THREADED_ROOT)
 		_strict(behavior.expr, frame).perform()
+
+	def state_pairs(self):
+		return self.state
 
 ###############################################################################
 

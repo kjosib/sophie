@@ -115,7 +115,8 @@ class DependencyPass(TopDown):
 		if isinstance(env, syntax.Subject):
 			return self._is_in_scope(param, self._parent[env])
 		if isinstance(env, syntax.UserAgent):
-			return param in env.fields or self._is_in_scope(param, self._parent[env])
+			assert self._parent[env] is None
+			return param in env.members
 		assert False, (param, env)
 
 	@staticmethod
@@ -160,11 +161,16 @@ class DependencyPass(TopDown):
 		elif self._is_relevant(dfn):
 			self._outflows[dfn].add(env)
 	
-	def visit_AssignField(self, af:syntax.AssignField, env:Symbol):
-		dfn = af.dfn
+	def visit_MemberReference(self, mr:syntax.MemberReference, env:Symbol):
+		dfn = mr.dfn
 		assert isinstance(dfn, syntax.FormalParameter)
 		self._insert(dfn, env)
-		self.visit(af.expr, env)
+	
+	def visit_AssignMember(self, am:syntax.AssignMember, env:Symbol):
+		dfn = am.dfn
+		assert isinstance(dfn, syntax.FormalParameter)
+		self._insert(dfn, env)
+		self.visit(am.expr, env)
 	
 	def visit_QualifiedReference(self, ref:syntax.QualifiedReference, env:Symbol):
 		pass
@@ -268,8 +274,8 @@ class ManifestBuilder(Visitor):
 			return primitive.literal_msg
 		
 	def make_agent_template(self, uda:syntax.UserAgent, module_scope:TYPE_ENV):
-		if uda.fields:
-			product = self._make_product(field.type_expr for field in uda.fields)
+		if uda.members:
+			product = self._make_product(field.type_expr for field in uda.members)
 			return ParametricTemplateType(uda, product, module_scope)
 		else:
 			# In this case, we have a (stateless) template ready to go.
@@ -765,20 +771,21 @@ class DeductionEngine(Visitor):
 		return result_type
 	
 	def apply_behavior(self, bt:BehaviorType, arg_types: Sequence[SophieType], env:TYPE_ENV) -> SophieType:
-		env = Activation.for_behavior(bt.uda_type.frame, env, bt.behavior, arg_types)
-		memo_key = self._memo_key(bt.behavior, env)
+		behavior = bt.behavior
+		frame = Activation.for_behavior(bt.uda_type, behavior, arg_types, env)
+		memo_key = self._memo_key(behavior, frame)
 		if memo_key in self._memo:
 			return self._memo[memo_key]
 		elif memo_key in self._recursion:
 			return primitive.literal_msg
 		else:
 			self._recursion[memo_key] = False
-			got = self._memo[memo_key] = self.visit(bt.behavior.expr, env)
+			got = self._memo[memo_key] = self.visit(behavior.expr, frame)
 			self._recursion.pop(memo_key)
 			if _quacks_like_an_action(got):
 				return primitive.literal_act
 			else:
-				self._report.does_not_express_behavior(env, bt.behavior, got)
+				self._report.does_not_express_behavior(frame, behavior, got)
 				return ERROR
 	
 	def _memo_key(self, symbol:Symbol, env:TYPE_ENV):
@@ -864,9 +871,9 @@ class DeductionEngine(Visitor):
 			return self.apply_UDF(callee_type, actual_types, env)
 		
 		elif isinstance(callee_type, ParametricTemplateType):
-			binder = Binder(self, env).inputs(callee_type.args.fields, actual_types, args)
+			binder = Binder(self, env).inputs(callee_type.args, actual_types, args)
 			if binder.ok:
-				return ConcreteTemplateType(callee_type.uda, ProductType(actual_types), callee_type.frame)
+				return ConcreteTemplateType(callee_type.uda, ProductType(actual_types), callee_type.global_env)
 			else:
 				binder.complain(self._report)
 				return ERROR
@@ -985,28 +992,20 @@ class DeductionEngine(Visitor):
 			self._report.bad_type(env, mx.subject.expr, mx.variant, subject_type, "Square Peg; Round Hole.")
 			return ERROR
 
-	def visit_AssignField(self, af:syntax.AssignField, env:TYPE_ENV) -> SophieType:
-		field_type = env.chase(af.dfn).fetch(af.dfn)
-		expr_type = self.visit(af.expr, env)
+	def visit_AssignMember(self, am:syntax.AssignMember, env:TYPE_ENV) -> SophieType:
+		field_type = env.chase(am.dfn).fetch(am.dfn)
+		expr_type = self.visit(am.expr, env)
 		if expr_type == field_type or expr_type is ERROR:
 			return primitive.literal_act
 		else:
-			self._report.bad_type(env, af.expr, field_type, expr_type, "Assignment must match field type exactly.")
+			self._report.bad_type(env, am.expr, field_type, expr_type, "Assignment must match field type exactly.")
 			return ERROR
 	
 	def visit_FieldReference(self, fr:syntax.FieldReference, env:TYPE_ENV) -> SophieType:
 		lhs_type = self.visit(fr.lhs, env)
 		if isinstance(lhs_type, UDAType):
-			if _is_a_self_reference(fr.lhs):
-				try: symbol = lhs_type.uda.field_space[fr.field_name.key()]
-				except KeyError:
-					self._report.record_lacks_field(env, fr, lhs_type)
-					return ERROR
-				else:
-					return lhs_type.frame.fetch(symbol)
-			else:
-				self._report.no_telepathy_allowed(env, fr, lhs_type)
-				return ERROR
+			self._report.no_telepathy_allowed(env, fr, lhs_type)
+			return ERROR
 		elif isinstance(lhs_type, RecordType):
 			spec = lhs_type.symbol.spec
 			parameters = lhs_type.symbol.type_params
@@ -1074,11 +1073,7 @@ class DeductionEngine(Visitor):
 			assert isinstance(na, syntax.NewAgent)
 			tt = self.visit(na.expr, env)
 			if isinstance(tt, ConcreteTemplateType):
-				frame = Activation(tt.frame, inner, tt.uda)
-				agent_type = UDAType(tt.uda, tt.args, frame)
-				frame.assign(SELF, agent_type)
-				for f, t in zip(tt.uda.fields, tt.args.fields):
-					frame.assign(f, t)
+				agent_type = UDAType(tt.uda, ProductType(tt.args).exemplar(), tt.global_env)
 			else:
 				self._report.bad_type(env, na.expr, "Agent Template", tt, "Casting call will repeat next Thursday.")
 				agent_type = ERROR
@@ -1122,7 +1117,4 @@ def _hypothesis(st:syntax.SubTypeSpec, type_args:Sequence[SophieType]) -> SubTyp
 		return EnumType(st)
 	if isinstance(body, syntax.RecordSpec):
 		return TaggedRecord(st, type_args)
-
-def _is_a_self_reference(expr:ValExpr) -> bool:
-	return isinstance(expr, syntax.Lookup) and expr.ref.dfn is SELF
 

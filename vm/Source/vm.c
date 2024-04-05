@@ -448,8 +448,8 @@ dispatch:
 			NEXT;
 		case OP_MEMBER:
 		{
-			assert(is_actor(TOP));
-			TOP = AS_ACTOR(TOP)->fields[READ_BYTE()];
+			assert(is_actor(*base));
+			push(AS_ACTOR(*base)->fields[READ_BYTE()]);
 			NEXT;
 		}
 		case OP_ASSIGN:

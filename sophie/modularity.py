@@ -63,7 +63,7 @@ class Program:
 				enter(abs_path)
 				module = parse_text(text, abs_path, report)
 				if module:
-					report.assert_no_issues()
+					report.assert_no_issues("Parser reported errors but failed to fail.")
 					module.source_path = abs_path
 					chase_the_imports(abs_path.parent, module.imports)
 					parsed_modules[abs_path] = module

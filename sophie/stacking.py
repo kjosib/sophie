@@ -13,7 +13,7 @@ the upcoming message-passing semantics.
 
 from typing import TypeVar, Generic, Union
 from pathlib import Path
-from .ontology import Symbol
+from .ontology import Symbol, SELF
 from .syntax import UserFunction, Behavior, ValExpr, Subject, Module
 
 CRUMB = Union[Symbol, Module]
@@ -34,6 +34,8 @@ class Frame(Generic[T]):
 	def assign(self, key:Symbol, value:T):
 		self._bindings[key] = value
 		return value
+	def update(self, pairs):
+		self._bindings.update(pairs)
 	def fetch(self, key:Symbol) -> T:
 		item = self._bindings[key]
 		if item is PLACE_HOLDER: raise KeyError(key)
@@ -73,12 +75,12 @@ class Activation(Frame):
 	def trace(self, tracer):
 		self._dynamic_link.trace(tracer)
 		tracer.trace_frame(self.breadcrumb, self._bindings, self.pc)
-
+	
 	@staticmethod
 	def for_function(static_link: Frame[T], dynamic_link: Frame[T], udf: UserFunction, arguments) -> "Activation[T]":
 		assert len(udf.params) == len(arguments)
 		ar = Activation(static_link, dynamic_link, udf)
-		ar._bindings.update(zip(udf.params, arguments))
+		ar.update(zip(udf.params, arguments))
 		for key in udf.where:
 			ar.declare(key)
 		return ar
@@ -103,9 +105,11 @@ class Activation(Frame):
 		return Activation(static_link, static_link, static_link.breadcrumb)
 
 	@staticmethod
-	def for_behavior(static_link: Frame[T], dynamic_link: Frame[T], b:Behavior, arguments) -> "Activation[T]":
-		assert len(b.params) == len(arguments)
-		ar = Activation(static_link, dynamic_link, b)
-		ar._bindings.update(zip(b.params, arguments))
-		return ar
+	def for_behavior(actor, behavior:Behavior, arguments, dynamic_link: Frame[T]) -> "Activation[T]":
+		assert len(behavior.params) == len(arguments)
+		frame = Activation(actor.global_env, dynamic_link, behavior)
+		frame.assign(SELF, actor)
+		frame.update(actor.state_pairs())
+		frame.update(zip(behavior.params, arguments))
+		return frame
 
