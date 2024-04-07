@@ -185,17 +185,18 @@ class VMActorScope(VMScope):
 	def member_number(self, field: str):
 		return self._field_map[field]
 
-	def write_one_behavior(self, b:syntax.Behavior):
+	def write_one_behavior(self, behavior:syntax.Behavior):
 		# The way this works is similar to a function.
 		# However, there's a special "self" object implicitly the first parameter.
 		# Also, access to self-dot-foo will use actor-specific instructions.
-		inner = VMFunctionScope(self, b.nom.text, is_thunk=False)
-		emit(1+len(b.params), quote(b.nom.text))
+		inner = VMFunctionScope(self, behavior.nom.text, is_thunk=False)
+		emit(1 + len(behavior.params), quote(behavior.nom.text))
 		inner.declare(ontology.SELF)
-		inner.declare_several(b.params)
-		for member in b.reads_members:
+		inner.declare_several(behavior.params)
+		for member in behavior.reads_members:
 			inner.emit_reads_member(member)
-		LAST.visit(b.expr, inner)
+		inner.write_inner_functions(behavior.where)
+		LAST.visit(behavior.expr, inner)
 		inner.emit_epilogue()
 
 class VMFunctionScope(VMScope):
@@ -253,6 +254,7 @@ class VMFunctionScope(VMScope):
 		elif self.capture(symbol):
 			emit("CAPTIVE", self._captives[symbol])
 		else:
+			assert symbol in MANGLED, ("heck", symbol, self._prefix)
 			emit("GLOBAL", quote(MANGLED[symbol]))
 		self._push()
 
