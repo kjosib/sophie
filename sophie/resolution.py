@@ -6,7 +6,7 @@ from which we can find the kind, type, and definition.
 from importlib import import_module
 from pathlib import Path
 from traceback import TracebackException
-from typing import Union, Optional
+from typing import Union, Optional, Iterable
 from inspect import signature
 from boozetools.support.foundation import Visitor, strongly_connected_components_hashable
 from boozetools.support.symtab import NoSuchSymbol, SymbolAlreadyExists
@@ -162,7 +162,7 @@ class _WordDefiner(_ResolutionPass):
 		for fn in module.outer_functions:
 			self.visit(fn, self.globals)
 		for uda in module.agent_definitions:
-			self.visit(uda)
+			self.visit_UserAgent(uda)
 		for expr in module.main:  # Might need to define some case-match symbols here.
 			self.visit(expr, self.globals)
 		pass
@@ -248,14 +248,18 @@ class _WordDefiner(_ResolutionPass):
 			self.visit(f, uda.member_space)
 		uda.message_space = NS(place=uda)
 		for behavior in uda.behaviors:
-			assert isinstance(behavior, syntax.Behavior)
-			behavior.source_path = self.module.source_path
 			self._install(uda.message_space, behavior)
-			inner = behavior.namespace = self.globals.new_child(behavior)
-			self._install(inner, SELF)
-			for param in behavior.params:
-				self.visit(param, inner)
-			self.visit(behavior.expr, inner)
+			self.visit_Behavior(behavior)
+	
+	def visit_Behavior(self, behavior:syntax.Behavior):
+		behavior.source_path = self.module.source_path
+		inner = behavior.namespace = self.globals.new_child(behavior)
+		self._install(inner, SELF)
+		for param in behavior.params:
+			self.visit(param, inner)
+		for sub_fn in behavior.where:
+			self.visit(sub_fn, inner)
+		self.visit(behavior.expr, inner)
 	
 	def visit_FormalParameter(self, fp:syntax.FormalParameter, env:NS):
 		self._install(env, fp)
@@ -387,11 +391,14 @@ class _WordResolver(_ResolutionPass):
 		for item in module.foreign:
 			self.visit(item)
 		for item in module.agent_definitions:
-			self.visit(item)
-		for item in module.all_functions:
-			self.visit(item)
+			self.visit_UserAgent(item)
+		self.tour_where(module.outer_functions)
 		for expr in module.main:
 			self.visit(expr, self.globals)
+	
+	def tour_where(self, fns:Iterable[syntax.UserFunction]):
+		for fn in fns:
+			self.visit_UserFunction(fn)
 
 	def visit_Variant(self, v:syntax.Variant):
 		for st in v.subtypes:
@@ -468,13 +475,14 @@ class _WordResolver(_ResolutionPass):
 		assert gt.nom.key() in env
 		gt.dfn = self._lookup(gt.nom, env)
 
-	def visit_UserFunction(self, sym:syntax.UserFunction):
-		for param in sym.params:
+	def visit_UserFunction(self, fn:syntax.UserFunction):
+		for param in fn.params:
 			if param.type_expr is not None:
-				self.visit(param.type_expr, sym.namespace)
-		if sym.result_type_expr is not None:
-			self.visit(sym.result_type_expr, sym.namespace)
-		self.visit(sym.expr, sym.namespace)
+				self.visit(param.type_expr, fn.namespace)
+		if fn.result_type_expr is not None:
+			self.visit(fn.result_type_expr, fn.namespace)
+		self.visit(fn.expr, fn.namespace)
+		self.tour_where(fn.where)
 
 	def visit_UserAgent(self, uda:syntax.UserAgent):
 		for f in uda.members:
@@ -482,7 +490,7 @@ class _WordResolver(_ResolutionPass):
 		self._current_uda = uda
 		for b in uda.behaviors:
 			self._reads_members = b.reads_members = set()
-			self.visit(b)
+			self.visit_Behavior(b)
 			
 		self._current_uda = None
 	
@@ -491,6 +499,7 @@ class _WordResolver(_ResolutionPass):
 			if param.type_expr is not None:
 				self.visit(param.type_expr, sym.namespace)
 		self.visit(sym.expr, sym.namespace)
+		self.tour_where(sym.where)
 
 	def visit_MatchExpr(self, mx:syntax.MatchExpr, env:NS):
 		self.visit(mx.subject.expr, env)
@@ -499,8 +508,7 @@ class _WordResolver(_ResolutionPass):
 		_build_match_dispatch(mx, self.globals, self.report)
 		for alt in mx.alternatives:
 			self.visit(alt.sub_expr, mx.namespace)
-			for sub_ex in alt.where:
-				self.visit(sub_ex)
+			self.tour_where(alt.where)
 		if mx.otherwise is not None:
 			self.visit(mx.otherwise, mx.namespace)
 			
@@ -516,7 +524,7 @@ class _WordResolver(_ResolutionPass):
 			self.report.use_my_instead(env, expr)
 	
 	def visit_LambdaForm(self, lf: syntax.LambdaForm, env: NS):
-		pass
+		self.visit_UserFunction(lf.function)
 	
 	def visit_DoBlock(self, db: syntax.DoBlock, env:NS):
 		for new_agent in db.agents:
