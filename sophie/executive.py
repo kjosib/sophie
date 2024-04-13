@@ -51,7 +51,7 @@ def run_program(roadmap:RoadMap):
 	return result
 
 def _set_strictures(module):
-	for udf in module.all_functions:
+	for udf in module.all_subs:
 		udf.strictures = tuple(i for i, p in enumerate(udf.params) if p.is_strict)
 
 def _dynamic_root(preamble_scope) -> RootFrame:

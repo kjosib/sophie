@@ -287,9 +287,9 @@ class Report:
 		problem = [Annotation(env.path(), expr, complaint)]
 		self.issue(Pic(intro, trace_stack(env)+problem, (why,)))
 	
-	def does_not_express_behavior(self, env: TYPE_ENV, behavior:syntax.Behavior, got):
-		intro = "This definition express %s instead of behavior"%got
-		problem = [Annotation(env.path(), behavior)]
+	def does_not_express_behavior(self, env: TYPE_ENV, procedure:syntax.UserProcedure, got):
+		intro = "This definition expresses %s instead of behavior"%got
+		problem = [Annotation(env.path(), procedure)]
 		self.issue(Pic(intro, trace_stack(env)+problem))
 
 	def bad_message(self, env:TYPE_ENV, expr:syntax.BindMethod, agent_type:SophieType):

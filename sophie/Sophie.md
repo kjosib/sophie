@@ -32,7 +32,9 @@ assume_section  -> ASSUME ':' semicolon_list(assumption)       | :empty
 define_section  -> DEFINE ':' semicolon_list(top_level)        | :empty
 main_section    -> BEGIN ':' semicolon_list(expr)              | :empty
 
-top_level -> function | agent_definition | operator_overload
+top_level -> subroutine | agent_definition | operator_overload
+subroutine -> function | procedure
+
 ```
 
 Since I'd like Sophie to support a unit/module system,
@@ -104,7 +106,7 @@ only by how you use it.
 **The general structure of a function:**
 ```
 function -> name formals annotation '=' expr where_clause             :UserFunction
-where_clause -> :nothing | WHERE semicolon_list(function) END name    :WhereClause
+where_clause -> :nothing | WHERE semicolon_list(subroutine) END name  :WhereClause
 ```
 
 Parameters to a function allow things to be implied.
@@ -247,6 +249,8 @@ is just a special type of value which happens to express
 observable outcomes, with just a few extra production rules.
 
 ```
+procedure -> TO name formals IS expr where_clause  :UserProcedure
+
 expr -> .SKIP       :Skip
       | '!' expr       :AsTask
       | expr '!' name       :BindMethod
@@ -286,13 +290,12 @@ The chief difference is that agent state is mutable (and so cannot be shared).
 
 There may be cause for stateless agents from time to time, so I'll make the state optional.
 ```
-agent_definition -> AGENT name optional(round_list(field_dfn)) AS semicolon_list(behavior) END name  :UserAgent
-behavior -> TO name formals IS expr where_clause  :Behavior
+agent_definition -> AGENT name optional(round_list(field_dfn)) AS semicolon_list(procedure) END name  :UserAgent
 ```
 The name gets repeated at the end of an `agent` definition.
 My motivation for this decision is the same as with functions that have subordinate `where` clauses.
 
-At least for now, I'll not entertain nesting amongst agents or behaviors.
+At least for now, I'll not entertain nesting amongst agents.
 They're self-contained ... such as they are.
 
 -----

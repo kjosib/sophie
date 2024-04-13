@@ -185,7 +185,7 @@ class VMActorScope(VMScope):
 	def member_number(self, field: str):
 		return self._field_map[field]
 
-	def write_one_behavior(self, behavior:syntax.Behavior):
+	def write_one_behavior(self, behavior:syntax.UserProcedure):
 		# The way this works is similar to a function.
 		# However, there's a special "self" object implicitly the first parameter.
 		# Also, access to self-dot-foo will use actor-specific instructions.
@@ -879,7 +879,7 @@ def translate(roadmap:RoadMap):
 
 	# Write all functions (including FFI):
 	for scope, module in each_piece(roadmap):
-		scope.write_outer_functions(module.outer_functions)
+		scope.write_outer_functions(module.top_subs)
 		scope.write_actors(module.agent_definitions)
 		write_ffi_init(module.foreign)
 	

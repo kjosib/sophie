@@ -4,6 +4,12 @@ Read this to get a general idea of what's new and nontrivial.
 
 ## April 2024
 
+* 12 Apr: Decided to generalize method-syntax for global procedures and adjust semantics accordingly.
+  The type system will soon distinguish *parametric* messages from *functions-returning* messages,
+  creating a predictable *local* cost-model for high-order methods on actors. (Code to follow.)
+* 8 Apr: I watched the Total Solar Eclipse with excellent weather and a great view,
+  smack dab on the centerline of the path of totality,
+  with a handful of excellent friends in the heart of Texas hill country.
 * 4 Apr: Implemented snapshot semantics for actor member access. (Much code oddly simplified!)
   Syntax now always uses ``my foo`` instead of ``self.foo`` to refer to an actor's own private state.
 * 3 Apr: I have decided on snapshot semantics for actor member access, with associated doc updates.

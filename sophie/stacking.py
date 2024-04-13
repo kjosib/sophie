@@ -14,7 +14,7 @@ the upcoming message-passing semantics.
 from typing import TypeVar, Generic, Union
 from pathlib import Path
 from .ontology import Symbol, SELF
-from .syntax import UserFunction, Behavior, ValExpr, Subject, Module
+from .syntax import UserFunction, UserProcedure, ValExpr, Subject, Module
 
 CRUMB = Union[Symbol, Module]
 
@@ -94,7 +94,7 @@ class Activation(Frame):
 	@staticmethod
 	def for_module(static_link: Frame[T], module:Module) -> "Activation[T]":
 		ar = Activation(static_link, RootFrame(), module)
-		for udf in module.outer_functions:
+		for udf in module.top_subs:
 			ar.declare(udf)
 		for uda in module.agent_definitions:
 			ar.declare(uda)
@@ -105,11 +105,11 @@ class Activation(Frame):
 		return Activation(static_link, static_link, static_link.breadcrumb)
 
 	@staticmethod
-	def for_behavior(actor, behavior:Behavior, arguments, dynamic_link: Frame[T]) -> "Activation[T]":
-		assert len(behavior.params) == len(arguments)
-		frame = Activation(actor.global_env, dynamic_link, behavior)
+	def for_method(actor, method:UserProcedure, arguments, dynamic_link: Frame[T]) -> "Activation[T]":
+		assert len(method.params) == len(arguments)
+		frame = Activation(actor.global_env, dynamic_link, method)
 		frame.assign(SELF, actor)
 		frame.update(actor.state_pairs())
-		frame.update(zip(behavior.params, arguments))
+		frame.update(zip(method.params, arguments))
 		return frame
 

@@ -210,6 +210,8 @@ class InterfaceType(SophieType):
 	def expected_arity(self) -> int: return -1  # Not callable
 
 class _AgentDerived(SophieType):
+	args:tuple[SophieType, ...]
+	
 	def __init__(self, uda:syntax.UserAgent, args:ProductType, global_env:TYPE_ENV):
 		assert isinstance(args, ProductType), type(args)
 		self.uda = uda
@@ -231,13 +233,13 @@ class UDAType(_AgentDerived):
 	def state_pairs(self):
 		return zip(self.uda.members, self.args)
 
-class BehaviorType(SophieType):
-	def __init__(self, uda_type:UDAType, behavior:syntax.Behavior):
+class MethodType(SophieType):
+	def __init__(self, uda_type:UDAType, proc:syntax.UserProcedure):
 		self.uda_type = uda_type
-		self.behavior = behavior
-		super().__init__(uda_type, behavior)
-	def visit(self, visitor:"TypeVisitor"): return visitor.on_behavior(self)
-	def expected_arity(self) -> int: return len(self.behavior.params)
+		self.proc = proc
+		super().__init__(uda_type, proc)
+	def visit(self, visitor:"TypeVisitor"): return visitor.on_method(self)
+	def expected_arity(self) -> int: return len(self.proc.params)
 
 
 class _Bottom(SophieType):
@@ -276,7 +278,7 @@ class TypeVisitor:
 	def on_uda(self, a:UDAType): raise NotImplementedError(type(self))
 	def on_message(self, m:MessageType): raise NotImplementedError(type(self))
 	def on_user_task(self, t:UserTaskType): raise NotImplementedError(type(self))
-	def on_behavior(self, t:BehaviorType): raise NotImplementedError(type(self))
+	def on_method(self, t:MethodType): raise NotImplementedError(type(self))
 	def on_bottom(self): raise NotImplementedError(type(self))
 	def on_error_type(self): raise NotImplementedError(type(self))
 
@@ -307,7 +309,9 @@ class Render(TypeVisitor):
 	def on_arrow(self, a: ArrowType):
 		return a.arg.visit(self)+"->"+a.res.visit(self)
 	def on_product(self, p: ProductType):
-		return "(%s)"%(",".join(t.visit(self) for t in p.fields))
+		return self._args(p.fields)
+	def _args(self, args:Iterable[SophieType]):
+		return "(%s)"%(",".join(a.visit(self) for a in args))
 	def on_udf(self, f: UDFType):
 		return "<%s/%d>"%(f.fn.nom.text, f.expected_arity())
 	def on_ad_hoc(self, f: AdHocType):
@@ -317,15 +321,15 @@ class Render(TypeVisitor):
 	def on_parametric_template(self, t: ParametricTemplateType):
 		return "<template:%s/%d>"%(t.uda.nom.text, t.expected_arity())
 	def on_concrete_template(self, t: ConcreteTemplateType):
-		return "<template:%s%s>"%(t.uda.nom.text, t.args.visit(self))
+		return "<template:%s%s>"%(t.uda.nom.text, self._args(t.args))
 	def on_uda(self, a: UDAType):
-		return "<agent:%s%s>"%(a.uda.nom.text, a.args.visit(self))
+		return "<agent:%s%s>"%(a.uda.nom.text, self._args(a.args))
 	def on_message(self, m: MessageType):
 		return "<message:%s>"%m.arg.visit(self)
 	def on_user_task(self, t: UserTaskType):
 		return "<task:%s>"%t.udf_type.visit(self)
-	def on_behavior(self, t: BehaviorType):
-		return "<%s:%s/%d>"%(t.uda_type.uda.nom.text, t.behavior.nom.text, t.expected_arity())
+	def on_method(self, t: MethodType):
+		return "<%s:%s/%d>"%(t.uda_type.uda.nom.text, t.proc.nom.text, t.expected_arity())
 	def on_bottom(self):
 		return "?"
 	def on_error_type(self):

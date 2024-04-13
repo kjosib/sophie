@@ -159,7 +159,7 @@ class _WordDefiner(_ResolutionPass):
 		self.assume = NS(place=module.source_path)
 		for a in module.assumptions: self.visit_Assumption(a)
 		# Can't iterate all-functions yet; must build it first.
-		for fn in module.outer_functions:
+		for fn in module.top_subs:
 			self.visit(fn, self.globals)
 		for uda in module.agent_definitions:
 			self.visit_UserAgent(uda)
@@ -228,7 +228,7 @@ class _WordDefiner(_ResolutionPass):
 
 	def visit_UserFunction(self, udf:syntax.UserFunction, env:NS):
 		udf.source_path = self.module.source_path
-		self.module.all_functions.append(udf)
+		self.module.all_subs.append(udf)
 		if not isinstance(udf, syntax.UserOperator):
 			self._install(env, udf)
 		inner = udf.namespace = env.new_child(udf)
@@ -249,9 +249,9 @@ class _WordDefiner(_ResolutionPass):
 		uda.message_space = NS(place=uda)
 		for behavior in uda.behaviors:
 			self._install(uda.message_space, behavior)
-			self.visit_Behavior(behavior)
+			self.visit_UserProcedure(behavior)
 	
-	def visit_Behavior(self, behavior:syntax.Behavior):
+	def visit_UserProcedure(self, behavior:syntax.UserProcedure):
 		behavior.source_path = self.module.source_path
 		inner = behavior.namespace = self.globals.new_child(behavior)
 		self._install(inner, SELF)
@@ -392,7 +392,7 @@ class _WordResolver(_ResolutionPass):
 			self.visit(item)
 		for item in module.agent_definitions:
 			self.visit_UserAgent(item)
-		self.tour_where(module.outer_functions)
+		self.tour_where(module.top_subs)
 		for expr in module.main:
 			self.visit(expr, self.globals)
 	
@@ -490,11 +490,11 @@ class _WordResolver(_ResolutionPass):
 		self._current_uda = uda
 		for b in uda.behaviors:
 			self._reads_members = b.reads_members = set()
-			self.visit_Behavior(b)
+			self.visit_UserProcedure(b)
 			
 		self._current_uda = None
 	
-	def visit_Behavior(self, sym:syntax.Behavior):
+	def visit_UserProcedure(self, sym:syntax.UserProcedure):
 		for param in sym.params:
 			if param.type_expr is not None:
 				self.visit(param.type_expr, sym.namespace)
@@ -568,7 +568,7 @@ class _AliasChecker(Visitor):
 		self._tour(module.foreign)
 		self._tour(module.assumptions)
 		self._tour(module.agent_definitions)
-		self._tour(module.all_functions)
+		self._tour(module.all_subs)
 		if self.non_types:
 			self.report.these_are_not_types(self.non_types)
 		alias_order = []
@@ -671,7 +671,7 @@ class _AliasChecker(Visitor):
 		self._tour(sym.members, True)
 		self._tour(sym.behaviors)
 	
-	def visit_Behavior(self, b:syntax.Behavior):
+	def visit_UserProcedure(self, b:syntax.UserProcedure):
 		self._tour(b.params, True)
 
 	def visit_ImportForeign(self, d:syntax.ImportForeign):
