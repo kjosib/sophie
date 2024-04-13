@@ -24,7 +24,7 @@ from .calculus import (
 	OpaqueType, ProductType, ArrowType, TypeVariable,
 	RecordType, SumType, SubType, TaggedRecord, EnumType,
 	UDFType, UDAType, InterfaceType, MessageType, UserTaskType,
-	ParametricTemplateType, ConcreteTemplateType, BehaviorType,
+	ParametricTemplateType, ConcreteTemplateType, MethodType,
 	BOTTOM, ERROR, EMPTY_PRODUCT
 )
 
@@ -64,7 +64,7 @@ class DependencyPass(TopDown):
 		self._overflowing = set()
 		
 	def visit_Module(self, module: syntax.Module):
-		self._walk_children(module.outer_functions, None)
+		self._walk_children(module.top_subs, None)
 		self._walk_children(module.agent_definitions, None)
 		for expr in module.main:
 			self.visit(expr, None)
@@ -110,7 +110,7 @@ class DependencyPass(TopDown):
 	def _is_in_scope(self, param:syntax.FormalParameter, env:Symbol):
 		if env is None:
 			return False
-		if isinstance(env, (syntax.UserFunction, syntax.Behavior)):
+		if isinstance(env, syntax.Subroutine):
 			return param in env.params or self._is_in_scope(param, self._parent[env])
 		if isinstance(env, syntax.Subject):
 			return self._is_in_scope(param, self._parent[env])
@@ -121,7 +121,7 @@ class DependencyPass(TopDown):
 
 	@staticmethod
 	def _is_non_local(param:syntax.FormalParameter, env:Symbol):
-		if isinstance(env, (syntax.UserFunction, syntax.Behavior)):
+		if isinstance(env, syntax.Subroutine):
 			return param not in env.params
 		if isinstance(env, syntax.Subject):
 			return True
@@ -134,7 +134,7 @@ class DependencyPass(TopDown):
 		self._walk_children(udf.where, udf)
 		self.visit(udf.expr, udf)
 	
-	def visit_Behavior(self, b:syntax.Behavior, env:syntax.UserAgent):
+	def visit_UserProcedure(self, b:syntax.UserProcedure, env:syntax.UserAgent):
 		self._parent[b] = env
 		self.visit(b.expr, b)
 	
@@ -434,9 +434,9 @@ class Binder(Visitor):
 					self.fail("%s does not an action make."%result)
 			else:
 				self.fail("%s has different arity from %s"%(formal, actual))
-		elif isinstance(actual, BehaviorType):
+		elif isinstance(actual, MethodType):
 			if actual.expected_arity() == len(formal.arg.fields):
-				result = self._engine.apply_behavior(actual, formal.arg.fields, self._dynamic_link)
+				result = self._engine.apply_method(actual, formal.arg.fields, self._dynamic_link)
 				# At this point, either an act or another message will be acceptable.
 				if not _quacks_like_an_action(result):
 					self.fail("%s does not an action make."%result)
@@ -579,7 +579,7 @@ class ManifestEngine:
 		else:
 			return BOTTOM
 	
-	def apply_behavior(self, bt:BehaviorType, arg_types: Sequence[SophieType], env:TYPE_ENV) -> SophieType:
+	def apply_method(self, bt:MethodType, arg_types: Sequence[SophieType], env:TYPE_ENV) -> SophieType:
 		raise NotImplementedError("To do.")
 
 
@@ -672,11 +672,11 @@ class DeductionEngine(Visitor):
 			except KeyError: self._report.bogus_operator_arity(udf)
 			else: adhoc.append_case(UDFType(udf, local), self._report)
 		for sym in module.ffi_operators:
-			pass
+			raise NotImplementedError("Hadn't been needed yet.", sym)
 	
 	def build_all_manifests(self, module, local):
 		builder = ManifestBuilder([], [])
-		for udf in module.all_functions:
+		for udf in module.all_subs:
 			for fp in udf.params:
 				if fp.type_expr:
 					self._types[fp] = builder.visit(fp.type_expr)
@@ -770,9 +770,9 @@ class DeductionEngine(Visitor):
 		# If all went well:
 		return result_type
 	
-	def apply_behavior(self, bt:BehaviorType, arg_types: Sequence[SophieType], env:TYPE_ENV) -> SophieType:
-		behavior = bt.behavior
-		frame = Activation.for_behavior(bt.uda_type, behavior, arg_types, env)
+	def apply_method(self, bt:MethodType, arg_types: Sequence[SophieType], env:TYPE_ENV) -> SophieType:
+		behavior = bt.proc
+		frame = Activation.for_method(bt.uda_type, behavior, arg_types, env)
 		memo_key = self._memo_key(behavior, frame)
 		if memo_key in self._memo:
 			return self._memo[memo_key]
@@ -1054,12 +1054,12 @@ class DeductionEngine(Visitor):
 				self._report.bad_message(env, mr, lhs_type)
 				return ERROR
 			else:
-				assert isinstance(behavior, syntax.Behavior)
-				result = BehaviorType(lhs_type, behavior).exemplar()
+				assert isinstance(behavior, syntax.UserProcedure)
+				result = MethodType(lhs_type, behavior).exemplar()
 				if behavior.params:
 					return result
 				else:
-					return self.apply_behavior(result, (), env)
+					return self.apply_method(result, (), env)
 		else:
 			self._report.bad_message(env, mr, lhs_type)
 			return ERROR

@@ -425,7 +425,7 @@ class UserDefinedActor(Actor):
 	
 	def handle(self, message, args):
 		behavior = self._vtable[message]
-		frame = Activation.for_behavior(self, behavior, args, THREADED_ROOT)
+		frame = Activation.for_method(self, behavior, args, THREADED_ROOT)
 		_strict(behavior.expr, frame).perform()
 
 	def state_pairs(self):

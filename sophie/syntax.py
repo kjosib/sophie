@@ -214,7 +214,7 @@ class Assumption(NamedTuple):
 	names: list[Nom]
 	type_expr: SimpleType
 
-def _bookend(head: Nom, where: Optional["WhereClause"]) -> Sequence["UserFunction"]:
+def _bookend(head: Nom, where: Optional["WhereClause"]) -> Sequence["Subroutine"]:
 	if where is None: return ()
 	if head.text == where.coda.text:
 		return where.sub_fns
@@ -222,10 +222,12 @@ def _bookend(head: Nom, where: Optional["WhereClause"]) -> Sequence["UserFunctio
 		raise MismatchedBookendsError(head.head(), where.coda.head())
 	
 
-class UserFunction(Term):
-	namespace: NS
+class Subroutine(Term):
 	params: Sequence[FormalParameter]
-	where: Sequence["UserFunction"]
+	where: Sequence["Subroutine"]
+
+class UserFunction(Subroutine):
+	namespace: NS
 	strictures: tuple[int, ...] # Tree-walking runtime uses this.
 	
 	def __init__(
@@ -263,7 +265,7 @@ class UserOperator(UserFunction):
 		return tuple(fp.dispatch_token() for fp in self.params)
 
 class WhereClause(NamedTuple):
-	sub_fns: Sequence[UserFunction]
+	sub_fns: Sequence[Subroutine]
 	coda: Nom
 
 class UserAgent(Term):
@@ -275,7 +277,7 @@ class UserAgent(Term):
 		self,
 		nom: Nom,
 		members: Optional[Sequence[FormalParameter]],
-		behaviors: Sequence["Behavior"],
+		behaviors: Sequence["UserProcedure"],
 		coda: Nom,
 	):
 		super().__init__(nom)
@@ -288,10 +290,8 @@ class UserAgent(Term):
 		return [f.nom.text for f in self.members]
 
 
-class Behavior(Term):
+class UserProcedure(Subroutine):
 	namespace: NS
-	params: Sequence[FormalParameter]
-	where: Sequence["UserFunction"]
 	reads_members: set[FormalParameter]  # Resolver must fill this.
 	
 	def head(self) -> slice: return self.nom.head()
@@ -407,7 +407,7 @@ class Alternative:
 	pattern: Nom
 	dfn: SubTypeSpec  # Either the match-check pass or the type-checker fills this.
 	sub_expr: ValExpr
-	where: Sequence[UserFunction]
+	where: Sequence[Subroutine]
 	
 	namespace: NS  # WordDefiner fills
 
@@ -562,12 +562,12 @@ class Module:
 	imports: list[ImportModule]
 	foreign: list[ImportForeign]
 	assumptions: list[Assumption]
-	outer_functions: list[UserFunction]
+	top_subs: list[Subroutine]
 	agent_definitions: list[UserAgent]
 	user_operators: list[UserOperator]
 	
 	source_path: Path  # Module loader fills this.
-	all_functions: list[UserFunction]  # WordDefiner pass fills this.
+	all_subs: list[Subroutine]  # WordDefiner pass fills this.
 	ffi_operators: list[FFI_Operator]  # WordDefiner fills this too.
 
 	def __init__(self, exports:list, imports:list[ImportDirective], types:list[TypeDeclaration], assumptions:list[Assumption], top_levels:list, main:list):
@@ -576,14 +576,14 @@ class Module:
 		self.foreign = [i for i in imports if isinstance(i, ImportForeign)]
 		self.types = types
 		self.assumptions = assumptions
-		self.outer_functions = []
+		self.top_subs = []
 		self.agent_definitions = []
 		self.user_operators = []
-		self.all_functions = []
+		self.all_subs = []
 		self.ffi_operators = []
 		for item in top_levels:
 			if isinstance(item, UserOperator): self.user_operators.append(item)
-			if isinstance(item, UserFunction): self.outer_functions.append(item)
+			if isinstance(item, Subroutine): self.top_subs.append(item)
 			elif isinstance(item, UserAgent): self.agent_definitions.append(item)
 			else: assert False, type(item)
 		self.main = main

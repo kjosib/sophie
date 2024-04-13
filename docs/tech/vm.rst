@@ -52,8 +52,8 @@ Here are some open problems, in no particular order:
 * Source line numbers. In case of a run-time panic, a cross-reference is most helpful.
 * [PARTIAL] Numeric field offsets. This could save cycles where a record-type is statically known.
   *This is done for actor fields.*
-* Tuning the dial on eager evaluation. (This should further improve performance.)
-* NaN-boxing.
+* [DONE] Tuning the dial on eager evaluation. (This should further improve performance.)
+* [DONE] NaN-boxing.
 * Short-string representation: Very short strings fit in a value (and don't benefit from interning).
   Shorter than 4gb may benefit from a smaller header. It would make the string module a bit trickier,
   but save a metric boat-load of allocations in string-heavy code.
@@ -61,13 +61,13 @@ Here are some open problems, in no particular order:
 * Actual threads.
 * Arrays. (The semantics would be tied into the actor-oriented side.)
 * (More) Useful libraries of bindings, data types, and subroutines.
-* Affordances such as keyword highlighting in a few common editors.
+* [DONE] Affordances such as keyword highlighting in a few common editors.
 * A more direct connection between the VM and the compiler. (Perhaps the one invokes the other?)
 * Self-hosting some or all of the compiler.
 * A means to install the VM as any other language runtime.
 * A killer app.
-* Multiple Dispatch.
-* Operator Overloading.
+* [DONE] Operator Overloading via Multiple Dispatch.
+* Generalized Multiple Dispatch.
 
 Some ideas for bindings:
 
@@ -1930,3 +1930,31 @@ because there are no threads and relatively few overloads.
 Longer term, I will probably use offset-tables for instant perfect hashing.
 
 It's time to make a release.
+
+6 April 2024
+-------------
+
+While champaign-ing (the new term for dogfooding) I wrote some code that wouldn't compile
+because the compiler raised ``NotImplementedException``.
+Unsurprisingly, the problematic code had to do with some of the finer points of message passing.
+Despite a few minutes of contemplation, no quick fix did I feel confident in.
+I had to pack for a journey anyway, so I left the problem to percolate.
+
+7 April 2024
+-------------
+
+Beautiful drive through the Texas hill-country to meet friends and see the eclipse the following day.
+
+
+8 April 2024
+-------------
+
+Utter and complete lunacy for the total solar eclipse. Also, hung out with friends and ate sushi.
+
+9 April 2024
+-------------
+
+While driving home, I figured the problem must be that I hadn't yet clearly codified
+all the semantics around the intersection of procedural abstraction with (a-)synchrony.
+So probably the next step is to make a nice state chart.
+That will have to live in the *tech* section of the manual.

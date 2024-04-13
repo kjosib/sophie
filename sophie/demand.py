@@ -1,3 +1,11 @@
+"""
+Just to be absolutely clear, this module does not have to be perfect.
+It has to be fit for its purpose, which is to find the clearly-demanded.
+This is allowed to underestimate. It's just not allowed to overestimate,
+as that could potentially change the run-time semantics away from what
+pure call-by-need (i.e. thunk-everything) would have done.
+"""
+
 from typing import Optional
 from boozetools.support.foundation import Visitor, strongly_connected_components_hashable
 from . import syntax
@@ -26,9 +34,10 @@ class DeterminedCallGraphPass(TopDown):
 		del self.graph[None]
 	
 	def analyze_module(self, module:syntax.Module):
-		for udf in module.all_functions:
-			self.graph[udf] = set()
-		self.tour(module.outer_functions)
+		for udf in module.all_subs:
+			if isinstance(udf, syntax.UserFunction):
+				self.graph[udf] = set()
+		self.tour(module.top_subs)
 		self.tour(module.agent_definitions)
 		for expr in module.main:
 			self.visit(expr, None)
@@ -37,15 +46,16 @@ class DeterminedCallGraphPass(TopDown):
 		for i in items:
 			self.visit(i)
 	
-	def visit_UserFunction(self, udf:syntax.UserFunction):
-		self.tour(udf.where)
-		self.visit(udf.expr, udf)
+	def visit_UserFunction(self, func:syntax.UserFunction):
+		self.tour(func.where)
+		self.visit(func.expr, func)
 	
-	def visit_UserAgent(self, uda:syntax.UserAgent):
-		self.tour(uda.behaviors)
+	def visit_UserAgent(self, actor:syntax.UserAgent):
+		self.tour(actor.behaviors)
 	
-	def visit_Behavior(self, b:syntax.Behavior):
-		self.visit(b.expr, None)
+	def visit_UserProcedure(self, proc:syntax.UserProcedure):
+		self.tour(proc.where)
+		self.visit(proc.expr, None)
 	
 	def visit_Call(self, call: syntax.Call, src):
 		if isinstance(call.fn_exp, syntax.Lookup):
