@@ -263,3 +263,37 @@ It is concise and comes with a potential ergonomic benefit around *case-of* expr
 But I'm leery of this: It seems consistent *to a fault.*
 On the other hand, forms like ``self.foo`` make it *locally* clear which namespace ``foo`` comes from.
 
+
+Phase Three: Clean Local Cost Model
+=====================================
+
+On 12 April 2024, I decided on a way to address (part of) a looming problem:
+Sophie should distinguish *parametric* messages from *functions-returning* messages.
+This is important for things like keeping long-running computations off the U/I thread.
+It should also be possible to hold a reference to a non-parametric procedure.
+
+To this end, I have/will:
+
+* Given the ``!`` operator higher precedence than calling a function.
+* Generalized the method-definition syntax so that global procedures are clearly distinct from functions.
+* Adjust the type checker, runtime, and compiler so that looking up a procedure *always* returns a reference.
+* Repair the constraint that a normal function's body cannot encode the performance of a side effect.
+  Probably this involves a bit of work on the type system to distinguish procedures from commands.
+  The trick is that non-parametric procedures are acceptable where a command is expected.
+  Fully-populated messages are also acceptable as commands, but not the other way around.
+
+Proper tail-recursion will be a bit of a challenge. Here are some cases:
+
+* Ending with a call to something parametric: It could be a parametric procedure, a parametric message,
+  or even a function returning a nonparametric item.
+* Ending with a nonparametric item: It could be a procedure, a message, or even a thunk.
+* Intentional no-op, such as a base-case in a recursive procedure.
+* Any of the above three cases, but in the middle of a procedure.
+
+What seems reasonable is, in procedural context, to recognize the first case by appeal to syntax.
+(The AST type ``syntax.Call`` is what to look for.)
+Parametric tail-calls become ``OP_PERFORM_EXEC``. All other tail items just get returned.
+And then the action of a regular ``OP_PERFORM`` instruction becomes a loop until top-of-stack
+is either a message (which it sends) or ``UNDEF`` which is a no-op.
+And ``OP_DISPLAY`` is basically ``OP_PERFORM`` with the additional ability to display things,
+so it's not strictly necessary to have a separate VM instruction for this. 
