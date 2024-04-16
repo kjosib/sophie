@@ -2,26 +2,26 @@
 
 define:
 intro = ["I have chosen a random number from 1 to 100.", EOL, EOL];
-game(r) = turn(1) where
+to game(r) is turn(1) where
     goal = int(r*100)+1;
-    turn(score) = do
+    to turn(score) is do
         console ! echo ["What is your guess? "];
         console ! read(!guess);
     end where
-        guess(g) = case val(g) as v of
+        to guess(g) is case val(g) as v of
             this -> consider(int(v.item));
             nope -> do
                 console ! echo ["I didn't grok that number.", EOL];
                 turn(score);
             end;
         esac;
-        consider(g:number) = case
+        to consider(g:number) is case
             when g > goal then go_again('Too high. Try a lower number.');
             when g < goal then go_again('Too low. Try a higher number.');
             else win;
         esac;
-        go_again(text) = do console ! echo [text, EOL]; turn(score+1); end;
-        win = console ! echo ["You win after ", str(score), " guesses!", EOL];
+        to go_again(text) is do console ! echo [text, EOL]; turn(score+1); end;
+        to win is console ! echo ["You win after ", str(score), " guesses!", EOL];
     end turn;
 end game;
 

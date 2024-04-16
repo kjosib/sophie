@@ -4,21 +4,7 @@ These bits represent the data over which the type-checker operates.
 To understand better, start by reading the "High-Order Type Checking"
 section at https://sophie.readthedocs.io/en/latest/mechanics.html
 
-This file is enumerates all kinds of types, which include first-order types like:
-	Type Variables (i.e. known-unknowns)
-	Nominal types (which refer back to symbols, and do by definition have exactly however many arguments as the symbol)
-	Arrow types (which generally have a product on the left)
-	Product types (which are generally found on the left side of an arrow)
-	Bottom (about which the algebraic laws are written at the link above)
-	Error: The type that means something went off the rails.
-	
-and also some additional type-operators:
-	FieldType: represents field-access as a function-like type.
-	UnionType: represents selection points which depend on run-time data, and a related concept with list syntax.
-	UDFType: Deals with user-defined functions which may be polymorphic in weird ways.
-	CallSiteType: Combines an arrow-type (or UDF) with an argument to get a result.
-
-I originally thought he type-numbering subsystem would mediate all interaction with concrete types.
+I originally thought the type-numbering subsystem would mediate all interaction with concrete types.
 Clients would call for what they mean to compose, and the subsystem would give back a type-number.
 Or, given a type-number, the subsystem could return a smart object.
 But then I remembered the rest of the world is only readable in terms of smart objects.
@@ -32,7 +18,7 @@ I can reuse the one from booze-tools.
 from typing import Iterable
 from boozetools.support.foundation import EquivalenceClassifier
 from . import syntax
-from .ontology import Symbol
+from .ontology import Symbol, SELF
 from .stacking import Frame
 
 TYPE_ENV = Frame["SophieType"]
@@ -58,14 +44,23 @@ class SophieType:
 		assert isinstance(it, str), (it, type(self))
 		return it
 
-class TypeVariable(SophieType):
+# Now, purely as an aid to understanding and recollection,
+# I divide the space of types into:
+# * Formal types, which exist independent of values in a simple Platonic algebra.
+# * Computed types, the projection of value-domain code into the realm of types.
+
+class FormalType(SophieType): pass
+class ComputedType(SophieType): pass
+
+class TypeVariable(FormalType):
 	"""Did I say value-object? Not for type variables! These have identity."""
 	def __init__(self):
 		super().__init__(len(_type_numbering_subsystem.catalog))
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_variable(self)
 	def expected_arity(self) -> int: return -1  # Not callable
 
-class OpaqueType(SophieType):
+
+class OpaqueType(FormalType):
 	def __init__(self, symbol:syntax.Opaque):
 		assert type(symbol) is syntax.Opaque
 		self.symbol = symbol
@@ -79,7 +74,7 @@ def _exemplargs(type_args: Iterable[SophieType], size) -> tuple[SophieType, ...]
 	assert len(them) == size, (len(them), size)
 	return them
 
-class RecordType(SophieType):
+class RecordType(FormalType):
 	def __init__(self, r:syntax.Record, type_args: Iterable[SophieType]):
 		assert type(r) is syntax.Record
 		self.symbol = r
@@ -89,7 +84,7 @@ class RecordType(SophieType):
 	def expected_arity(self) -> int: return -1  # Not callable. (There's a constructor arrow made.)
 	def token(self): return self.symbol
 
-class SumType(SophieType):
+class SumType(FormalType):
 	""" Either a record directly, or a variant-type. Details are in the symbol table. """
 	# NB: The arguments here are actual arguments, not formal parameters.
 	#     The corresponding formal parameters are listed in the symbol,
@@ -103,7 +98,7 @@ class SumType(SophieType):
 	def expected_arity(self) -> int: return -1  # Not callable directly.
 	def token(self): return self.variant
 
-class SubType(SophieType):
+class SubType(FormalType):
 	st : syntax.SubTypeSpec
 	def expected_arity(self) -> int: return -1  # Not callable. (There's a constructor arrow made.)
 	def token(self): return self.st.variant
@@ -126,14 +121,14 @@ class TaggedRecord(SubType):
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_tag_record(self)
 	def family(self) -> Symbol: return self.st.variant
 
-class ProductType(SophieType):
+class ProductType(FormalType):
 	def __init__(self, fields: Iterable[SophieType]):
 		self.fields = tuple(p.exemplar() for p in fields)
 		super().__init__(*(p.number for p in self.fields))
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_product(self)
 	def expected_arity(self) -> int: return -1  # Not callable
 
-class ArrowType(SophieType):
+class ArrowType(FormalType):
 	def __init__(self, arg: ProductType, res: SophieType):
 		self.arg, self.res = arg.exemplar(), res.exemplar()
 		super().__init__(self.arg, self.res)
@@ -141,21 +136,39 @@ class ArrowType(SophieType):
 	def expected_arity(self) -> int: return len(self.arg.fields)
 	def dispatch_signature(self) -> tuple[Symbol, ...]: return tuple(a.token() for a in self.arg.fields)
 
-class MessageType(SophieType):
+class MessageType(FormalType):
 	def __init__(self, arg: ProductType):
-		assert arg.fields
 		self.arg = arg
 		super().__init__(self.arg)
 	def visit(self, visitor: "TypeVisitor"): return visitor.on_message(self)
-	def expected_arity(self) -> int: return -1  # Not callable; sendable.
+	def expected_arity(self) -> int:
+		return len(self.arg.fields) or -1
 
-class UDFType(SophieType):
-	fn: syntax.UserFunction
+class InterfaceType(FormalType):
+	def __init__(self, symbol:syntax.Interface, type_args: Iterable[SophieType]):
+		assert type(symbol) is syntax.Interface
+		self.symbol = symbol
+		self.type_args = _exemplargs(type_args, len(symbol.type_params))
+		super().__init__(self.symbol, *(a.number for a in self.type_args))
+	def visit(self, visitor: "TypeVisitor"): return visitor.on_interface(self)
+	def expected_arity(self) -> int: return -1  # Not callable
+
+class SubroutineType(ComputedType):
+	"""
+	Supertype for those of procedures and functions,
+	because they have much structure in common.
+	"""
+	sub: syntax.Subroutine
 	static_link: TYPE_ENV
-	def visit(self, visitor:"TypeVisitor"): return visitor.on_udf(self)
-	def expected_arity(self) -> int: return len(self.fn.params)
-	def __init__(self, fn:syntax.UserFunction, static_link:TYPE_ENV):
-		self.fn = fn
+	
+	# Factoid: The static-link will contain a self-link in exactly the right cases,
+	# and then there's no need for separate task and message types.
+	# There's just a message type, always pointing to a UserProcType.
+	
+	def visit(self, visitor:"TypeVisitor"): return visitor.on_subroutine(self)
+	def expected_arity(self) -> int: return len(self.sub.params)
+	def __init__(self, sub:syntax.Subroutine, static_link:TYPE_ENV):
+		self.sub = sub
 		self.static_link = static_link
 		# NB: The uniqueness notion here is excessive, but there's a plan to deal with that.
 		#     Whatever instantiates a nested function must enter it in the static scope without duplication.
@@ -163,11 +176,23 @@ class UDFType(SophieType):
 		# TODO: It would be sufficient to key on the types captured in the lexical closure.
 		#       Only DeductionEngine.visit_Lookup creates these, so it could provide the capture.
 		super().__init__(object())
-	def dispatch_signature(self) -> tuple[Symbol, ...]:
-		assert isinstance(self.fn, syntax.UserOperator)
-		return self.fn.dispatch_vector()
 
-class AdHocType(SophieType):
+class UserFnType(SubroutineType):
+	sub: syntax.UserFunction
+	def __init__(self, sub:syntax.UserFunction, static_link:TYPE_ENV):
+		assert isinstance(sub, syntax.UserFunction)
+		super().__init__(sub, static_link)
+	def dispatch_signature(self) -> tuple[Symbol, ...]:
+		assert isinstance(self.sub, syntax.UserOperator)
+		return self.sub.dispatch_vector()
+
+class UserProcType(SubroutineType):
+	sub: syntax.UserProcedure
+	def __init__(self, sub:syntax.UserProcedure, static_link:TYPE_ENV):
+		assert isinstance(sub, syntax.UserProcedure)
+		super().__init__(sub, static_link)
+
+class AdHocType(ComputedType):
 	def __init__(self, glyph:str, arity:int):
 		super().__init__(glyph, arity)
 		self.glyph = glyph
@@ -191,25 +216,16 @@ class AdHocType(SophieType):
 		elif len(arg_tokens) != self._arity: report.conflicting_overload()
 		else: self._cases[arg_tokens] = case
 
-class UserTaskType(SophieType):
-	""" The type of a task-ified user-defined (parametric) function. """
-	def __init__(self, udf_type:UDFType):
-		assert udf_type.fn.params
-		self.udf_type = udf_type.exemplar()
-		super().__init__(self.udf_type)
+class UserTaskType(ComputedType):
+	""" The type of a task-ified user-defined (maybe-parametric) procedure. """
+	def __init__(self, proc_type:UserProcType):
+		assert isinstance(proc_type.sub, syntax.UserProcedure), type(proc_type.sub)
+		self.proc_type = proc_type.exemplar()
+		super().__init__(self.proc_type)
 	def visit(self, visitor: "TypeVisitor"): return visitor.on_user_task(self)
-	def expected_arity(self) -> int: return self.udf_type.expected_arity()
+	def expected_arity(self) -> int: return self.proc_type.expected_arity()
 
-class InterfaceType(SophieType):
-	def __init__(self, symbol:syntax.Interface, type_args: Iterable[SophieType]):
-		assert type(symbol) is syntax.Interface
-		self.symbol = symbol
-		self.type_args = _exemplargs(type_args, len(symbol.type_params))
-		super().__init__(self.symbol, *(a.number for a in self.type_args))
-	def visit(self, visitor: "TypeVisitor"): return visitor.on_interface(self)
-	def expected_arity(self) -> int: return -1  # Not callable
-
-class _AgentDerived(SophieType):
+class _AgentDerived(ComputedType):
 	args:tuple[SophieType, ...]
 	
 	def __init__(self, uda:syntax.UserAgent, args:ProductType, global_env:TYPE_ENV):
@@ -233,16 +249,7 @@ class UDAType(_AgentDerived):
 	def state_pairs(self):
 		return zip(self.uda.members, self.args)
 
-class MethodType(SophieType):
-	def __init__(self, uda_type:UDAType, proc:syntax.UserProcedure):
-		self.uda_type = uda_type
-		self.proc = proc
-		super().__init__(uda_type, proc)
-	def visit(self, visitor:"TypeVisitor"): return visitor.on_method(self)
-	def expected_arity(self) -> int: return len(self.proc.params)
-
-
-class _Bottom(SophieType):
+class _Bottom(FormalType):
 	"""
 	The completely unrestricted type:
 	It unifies with anything to become that other thing.
@@ -250,7 +257,7 @@ class _Bottom(SophieType):
 	"""
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_bottom()
 
-class _Error(SophieType):
+class _Error(FormalType):
 	""" The type of things that make no sense or otherwise do not compute. """
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_error_type()
 
@@ -270,7 +277,7 @@ class TypeVisitor:
 	def on_tag_record(self, t: TaggedRecord): raise NotImplementedError(type(self))
 	def on_arrow(self, a:ArrowType): raise NotImplementedError(type(self))
 	def on_product(self, p:ProductType): raise NotImplementedError(type(self))
-	def on_udf(self, f:UDFType): raise NotImplementedError(type(self))
+	def on_subroutine(self, sub:SubroutineType): raise NotImplementedError(type(self))
 	def on_ad_hoc(self, f:AdHocType): raise NotImplementedError(type(self))
 	def on_interface(self, it:InterfaceType): raise NotImplementedError(type(self))
 	def on_parametric_template(self, t:ParametricTemplateType): raise NotImplementedError(type(self))
@@ -278,7 +285,6 @@ class TypeVisitor:
 	def on_uda(self, a:UDAType): raise NotImplementedError(type(self))
 	def on_message(self, m:MessageType): raise NotImplementedError(type(self))
 	def on_user_task(self, t:UserTaskType): raise NotImplementedError(type(self))
-	def on_method(self, t:MethodType): raise NotImplementedError(type(self))
 	def on_bottom(self): raise NotImplementedError(type(self))
 	def on_error_type(self): raise NotImplementedError(type(self))
 
@@ -312,8 +318,15 @@ class Render(TypeVisitor):
 		return self._args(p.fields)
 	def _args(self, args:Iterable[SophieType]):
 		return "(%s)"%(",".join(a.visit(self) for a in args))
-	def on_udf(self, f: UDFType):
-		return "<%s/%d>"%(f.fn.nom.text, f.expected_arity())
+	def on_subroutine(self, sub: SubroutineType):
+		try:
+			layer = sub.static_link.chase(SELF)
+		except KeyError:
+			return "<%s/%d>"%(sub.sub.nom.text, sub.expected_arity())
+		else:
+			uda_type = layer.fetch(SELF)
+			return "<%s:%s/%d>" % (uda_type.uda.nom.text, sub.sub.nom.text, sub.expected_arity())
+			
 	def on_ad_hoc(self, f: AdHocType):
 		return "<%s/%d>"%(f.glyph, f.expected_arity())
 	def on_interface(self, it:InterfaceType):
@@ -327,9 +340,7 @@ class Render(TypeVisitor):
 	def on_message(self, m: MessageType):
 		return "<message:%s>"%m.arg.visit(self)
 	def on_user_task(self, t: UserTaskType):
-		return "<task:%s>"%t.udf_type.visit(self)
-	def on_method(self, t: MethodType):
-		return "<%s:%s/%d>"%(t.uda_type.uda.nom.text, t.proc.nom.text, t.expected_arity())
+		return "<task:%s>"%t.proc_type.visit(self)
 	def on_bottom(self):
 		return "?"
 	def on_error_type(self):

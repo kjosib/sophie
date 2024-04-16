@@ -39,7 +39,7 @@ esac;
 
 advance(z,c) = c_add(c, c_mul(z,z));
 
-display(output, pic) = case pic of
+to display(output, pic) is case pic of
     nil -> skip;
     cons -> do output!echo(pic.head) ; output!echo[EOL]; display(output, pic.tail); end;
 esac;

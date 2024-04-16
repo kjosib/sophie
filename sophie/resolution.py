@@ -120,7 +120,7 @@ class TopDown(Visitor):
 			self.visit(e, env)
 	
 	def visit_AsTask(self, at: syntax.AsTask, env):
-		self.visit(at.sub, env)
+		self.visit(at.proc_ref, env)
 
 class _ResolutionPass(TopDown):
 	globals: NS
@@ -226,9 +226,13 @@ class _WordDefiner(_ResolutionPass):
 			fp = syntax.FieldDefinition(nom, a.type_expr)
 			self._install(self.assume, fp)
 
+	def tour_where(self, fns:Iterable[syntax.Subroutine], env:NS):
+		for fn in fns:
+			self.visit(fn, env)
+
 	def visit_UserFunction(self, udf:syntax.UserFunction, env:NS):
 		udf.source_path = self.module.source_path
-		self.module.all_subs.append(udf)
+		self.module.all_fns.append(udf)
 		if not isinstance(udf, syntax.UserOperator):
 			self._install(env, udf)
 		inner = udf.namespace = env.new_child(udf)
@@ -236,8 +240,7 @@ class _WordDefiner(_ResolutionPass):
 			self.visit(param, inner)
 		if udf.result_type_expr is not None:
 			self.visit(udf.result_type_expr, inner)
-		for sub_fn in udf.where:
-			self.visit(sub_fn, inner)
+		self.tour_where(udf.where, inner)
 		self.visit(udf.expr, inner)
 
 	def visit_UserAgent(self, uda:syntax.UserAgent):
@@ -247,19 +250,20 @@ class _WordDefiner(_ResolutionPass):
 		for f in uda.members:
 			self.visit(f, uda.member_space)
 		uda.message_space = NS(place=uda)
+		inner = self.globals.new_child(uda)
 		for behavior in uda.behaviors:
 			self._install(uda.message_space, behavior)
-			self.visit_UserProcedure(behavior)
+			self.visit_UserProcedure(behavior, inner)
 	
-	def visit_UserProcedure(self, behavior:syntax.UserProcedure):
-		behavior.source_path = self.module.source_path
-		inner = behavior.namespace = self.globals.new_child(behavior)
-		self._install(inner, SELF)
-		for param in behavior.params:
+	def visit_UserProcedure(self, proc:syntax.UserProcedure, env:NS):
+		proc.source_path = self.module.source_path
+		self.module.all_procs.append(proc)
+		self._install(env, proc)
+		inner = proc.namespace = env.new_child(proc)
+		for param in proc.params:
 			self.visit(param, inner)
-		for sub_fn in behavior.where:
-			self.visit(sub_fn, inner)
-		self.visit(behavior.expr, inner)
+		self.tour_where(proc.where, inner)
+		self.visit(proc.expr, inner)
 	
 	def visit_FormalParameter(self, fp:syntax.FormalParameter, env:NS):
 		self._install(env, fp)
@@ -297,14 +301,10 @@ class _WordDefiner(_ResolutionPass):
 		inner = mx.namespace = env.new_child(mx)
 		self._install(inner, mx.subject)
 		for alt in mx.alternatives:
-			self.visit(alt, inner)
+			self.tour_where(alt.where, inner)
+			self.visit(alt.sub_expr, inner)
 		if mx.otherwise is not None:
 			self.visit(mx.otherwise, inner)
-
-	def visit_Alternative(self, alt: syntax.Alternative, env: NS):
-		for sub_ex in alt.where:
-			self.visit(sub_ex, env)
-		self.visit(alt.sub_expr, env)
 
 	def visit_ImportModule(self, im:syntax.ImportModule):
 		source_module = self.roadmap.import_map[im]
@@ -396,9 +396,9 @@ class _WordResolver(_ResolutionPass):
 		for expr in module.main:
 			self.visit(expr, self.globals)
 	
-	def tour_where(self, fns:Iterable[syntax.UserFunction]):
+	def tour_where(self, fns:Iterable[syntax.Subroutine]):
 		for fn in fns:
-			self.visit_UserFunction(fn)
+			self.visit(fn)
 
 	def visit_Variant(self, v:syntax.Variant):
 		for st in v.subtypes:
@@ -547,6 +547,7 @@ class Bogon(syntax.Symbol):
 		return False
 
 class _AliasChecker(Visitor):
+	# TODO: Split this into two separate passes.
 	"""
 	Check the arity of TypeCall forms.
 	Check for aliases being well-founded, up front before getting caught in a loop later:
@@ -568,7 +569,7 @@ class _AliasChecker(Visitor):
 		self._tour(module.foreign)
 		self._tour(module.assumptions)
 		self._tour(module.agent_definitions)
-		self._tour(module.all_subs)
+		self._tour(module.all_fns)
 		if self.non_types:
 			self.report.these_are_not_types(self.non_types)
 		alias_order = []

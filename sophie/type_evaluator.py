@@ -23,8 +23,8 @@ from .calculus import (
 	SophieType, TypeVisitor, AdHocType,
 	OpaqueType, ProductType, ArrowType, TypeVariable,
 	RecordType, SumType, SubType, TaggedRecord, EnumType,
-	UDFType, UDAType, InterfaceType, MessageType, UserTaskType,
-	ParametricTemplateType, ConcreteTemplateType, MethodType,
+	SubroutineType, UserFnType, UserProcType, UDAType, UserTaskType,
+	InterfaceType, MessageType, ParametricTemplateType, ConcreteTemplateType,
 	BOTTOM, ERROR, EMPTY_PRODUCT
 )
 
@@ -127,16 +127,12 @@ class DependencyPass(TopDown):
 			return True
 		assert False, type(env)
 
-	def visit_UserFunction(self, udf: syntax.UserFunction, env):
+	def visit_Subroutine(self, sub: syntax.Subroutine, env):
 		# Params refer to themselves in this arrangement.
 		# The "breadcrumb" serves to indicate the nearest enclosing symbol.
-		self._parent[udf] = env
-		self._walk_children(udf.where, udf)
-		self.visit(udf.expr, udf)
-	
-	def visit_UserProcedure(self, b:syntax.UserProcedure, env:syntax.UserAgent):
-		self._parent[b] = env
-		self.visit(b.expr, b)
+		self._parent[sub] = env
+		self._walk_children(sub.where, sub)
+		self.visit(sub.expr, sub)
 	
 	def visit_UserAgent(self, uda:syntax.UserAgent, env):
 		assert env is None
@@ -386,7 +382,7 @@ class Binder(Visitor):
 			result = actual.res.visit(Rewriter(self.gamma))
 			self.gamma = save_gamma
 			self.bind(formal.res, result)
-		elif isinstance(actual, UDFType):
+		elif isinstance(actual, UserFnType):
 			if actual.expected_arity() != len(formal.arg.fields):
 				self.fail("Arity mismatch between formal function and user-defined function.")
 			else:
@@ -428,15 +424,7 @@ class Binder(Visitor):
 			return self.visit(formal.arg, actual.arg)
 		elif isinstance(actual, UserTaskType):
 			if actual.expected_arity() == len(formal.arg.fields):
-				result = self._engine.apply_UDF(actual.udf_type, formal.arg.fields, self._dynamic_link)
-				# At this point, either an act or another message will be acceptable.
-				if not _quacks_like_an_action(result):
-					self.fail("%s does not an action make."%result)
-			else:
-				self.fail("%s has different arity from %s"%(formal, actual))
-		elif isinstance(actual, MethodType):
-			if actual.expected_arity() == len(formal.arg.fields):
-				result = self._engine.apply_method(actual, formal.arg.fields, self._dynamic_link)
+				result = self._engine.apply_procedure(actual.proc_type, formal.arg.fields, self._dynamic_link)
 				# At this point, either an act or another message will be acceptable.
 				if not _quacks_like_an_action(result):
 					self.fail("%s does not an action make."%result)
@@ -445,10 +433,13 @@ class Binder(Visitor):
 		else:
 			self.fail("Not sure how to use a %s as a %s"%(actual, formal))
 
-def _quacks_like_an_action(result:SophieType) -> bool:
-	assert isinstance(result, SophieType), result
+def _quacks_like_an_action(typ:SophieType) -> bool:
+	assert isinstance(typ, SophieType), typ
+	if isinstance(typ, UserProcType): return not typ.sub.params
+	if isinstance(typ, UserTaskType): return not typ.proc_type.sub.params
+	if isinstance(typ, MessageType): return not typ.arg.fields
 	# Let ERROR quack to stop cascades of messages.
-	return result in (primitive.literal_act, primitive.literal_msg, ERROR)
+	return typ in (primitive.literal_act, ERROR)
 
 class UnionFinder(Visitor):
 	def __init__(self):
@@ -475,6 +466,8 @@ class UnionFinder(Visitor):
 	def do(self, this: SophieType, that: SophieType):
 		if this.number == that.number or that is BOTTOM: return this
 		elif that is ERROR: return that
+		elif _quacks_like_an_action(this) and _quacks_like_an_action(that):
+			return primitive.literal_act
 		else:
 			typ = self.visit(this, that)
 			if typ is None:
@@ -531,9 +524,9 @@ class UnionFinder(Visitor):
 				type_args = tuple(BOTTOM for _ in this.st.variant.type_params)
 				return SumType(this.st.variant, type_args)
 
-	def visit_UDFType(self, this:UDFType, that: SophieType):
-		if isinstance(that, UDFType):
-			if len(this.fn.params) == len(that.fn.params):
+	def visit_UDFType(self, this:UserFnType, that: SophieType):
+		if isinstance(that, UserFnType):
+			if len(this.sub.params) == len(that.sub.params):
 				# In principle, we take the intersection of the parameters to the union of the results.
 				# In practice, that means some sort of "try both" logic,
 				# and it's entirely too complicated for a five-minute hack session.
@@ -565,24 +558,23 @@ class ManifestEngine:
 		self._types = types
 		self._report = report
 	
-	def apply_UDF(self, fn_type: UDFType, arg_types: Sequence[SophieType], env:TYPE_ENV) -> SophieType:
-		udf = fn_type.fn
+	def _apply_subroutine(self, subroutine_type: SubroutineType, arg_types: Sequence[SophieType], env:TYPE_ENV) -> SophieType:
+		symbol = subroutine_type.sub
 		binder = Binder(self, env)
-		for param, actual in zip(udf.params, arg_types):
+		for param, actual in zip(symbol.params, arg_types):
 			if param in self._types:
 				binder.bind(self._types[param], actual)
 				if not binder.ok:
-					self._report.bad_argument(env, udf, param, actual, binder.why)
+					self._report.bad_argument(env, symbol, param, actual, binder.why)
 					return ERROR
-		if udf in self._types:
-			return self._types[udf].visit(Rewriter(binder.gamma))
+		if symbol in self._types:
+			return self._types[symbol].visit(Rewriter(binder.gamma))
 		else:
 			return BOTTOM
 	
-	def apply_method(self, bt:MethodType, arg_types: Sequence[SophieType], env:TYPE_ENV) -> SophieType:
-		raise NotImplementedError("To do.")
-
-
+	apply_UDF = _apply_subroutine
+	apply_procedure = _apply_subroutine
+	
 class DeductionEngine(Visitor):
 	_types: dict[Symbol, SophieType]
 	
@@ -608,7 +600,7 @@ class DeductionEngine(Visitor):
 	
 	def _init_types(self):
 		
-		for ot in [primitive.literal_act, *_literal_type_map.values()]:
+		for ot in _literal_type_map.values():
 			self._types[ot.symbol] = ot
 		
 		def relop_type(src):
@@ -670,18 +662,22 @@ class DeductionEngine(Visitor):
 			op_key = udf.nom.key()
 			try: adhoc = dispatch[op_key]
 			except KeyError: self._report.bogus_operator_arity(udf)
-			else: adhoc.append_case(UDFType(udf, local), self._report)
+			else: adhoc.append_case(UserFnType(udf, local), self._report)
 		for sym in module.ffi_operators:
 			raise NotImplementedError("Hadn't been needed yet.", sym)
 	
 	def build_all_manifests(self, module, local):
-		builder = ManifestBuilder([], [])
-		for udf in module.all_subs:
-			for fp in udf.params:
+		def install_params(sub:syntax.Subroutine):
+			for fp in sub.params:
 				if fp.type_expr:
 					self._types[fp] = builder.visit(fp.type_expr)
+		builder = ManifestBuilder([], [])
+		for udf in module.all_fns:
+			install_params(udf)
 			if udf.result_type_expr:
 				self._types[udf] = builder.visit(udf.result_type_expr)
+		for udp in module.all_procs:
+			install_params(udp)
 		for uda in module.agent_definitions:
 			self._constructors[uda] = builder.make_agent_template(uda, local)
 	
@@ -746,16 +742,16 @@ class DeductionEngine(Visitor):
 	def visit_Literal(expr: syntax.Literal, _env:TYPE_ENV) -> SophieType:
 		return _literal_type_map[type(expr.value)]
 	
-	def apply_UDF(self, fn_type: UDFType, arg_types: Sequence[SophieType], env:TYPE_ENV) -> SophieType:
-		udf = fn_type.fn
-		
+	def apply_UDF(self, fn_type: UserFnType, arg_types: Sequence[SophieType], env:TYPE_ENV) -> SophieType:
 		# Sanity-check the argument-types against any manifest-type expressions
 		checker = ManifestEngine(self._types, self._report)
 		expect = checker.apply_UDF(fn_type, arg_types, env)
 		if expect is ERROR: return ERROR
 		
+		udf = fn_type.sub
+		
 		# Evaluate the body-expression to determine the actual result-type
-		inner = Activation.for_function(fn_type.static_link, env, fn_type.fn, arg_types)
+		inner = Activation.for_subroutine(fn_type.static_link, env, udf, arg_types)
 		result_type = self.exec_UDF(udf, inner)
 		if result_type is ERROR: return ERROR
 		
@@ -767,25 +763,34 @@ class DeductionEngine(Visitor):
 				self._report.bad_result(inner, udf, result_type, binder.why)
 				return ERROR
 		
+		if result_type == primitive.literal_act:
+			self._report.must_not_express_behavior(env, fn_type.sub)
+		
 		# If all went well:
 		return result_type
 	
-	def apply_method(self, bt:MethodType, arg_types: Sequence[SophieType], env:TYPE_ENV) -> SophieType:
-		behavior = bt.proc
-		frame = Activation.for_method(bt.uda_type, behavior, arg_types, env)
-		memo_key = self._memo_key(behavior, frame)
+	def apply_procedure(self, proc_type:UserProcType, arg_types: Sequence[SophieType], env:TYPE_ENV) -> SophieType:
+		# TODO: There's probably a lot more that could be shared with apply_UDF.
+		# Sanity-check the argument-types against any manifest-type expressions
+		checker = ManifestEngine(self._types, self._report)
+		expect = checker.apply_procedure(proc_type, arg_types, env)
+		if expect is ERROR: return ERROR
+		
+		procedure = proc_type.sub
+		frame = Activation.for_subroutine(proc_type.static_link, env, procedure, arg_types)
+		memo_key = self._memo_key(procedure, frame)
 		if memo_key in self._memo:
 			return self._memo[memo_key]
 		elif memo_key in self._recursion:
-			return primitive.literal_msg
+			return primitive.literal_act
 		else:
 			self._recursion[memo_key] = False
-			got = self._memo[memo_key] = self.visit(behavior.expr, frame)
+			got = self._memo[memo_key] = self.visit(procedure.expr, frame)
 			self._recursion.pop(memo_key)
 			if _quacks_like_an_action(got):
 				return primitive.literal_act
 			else:
-				self._report.does_not_express_behavior(frame, behavior, got)
+				self._report.does_not_express_behavior(frame, procedure, got)
 				return ERROR
 	
 	def _memo_key(self, symbol:Symbol, env:TYPE_ENV):
@@ -799,9 +804,9 @@ class DeductionEngine(Visitor):
 		)
 		return symbol, memo_types
 	
-	def exec_UDF(self, fn:syntax.UserFunction, env:TYPE_ENV):
+	def exec_UDF(self, sub:syntax.Subroutine, env:TYPE_ENV):
 		# The part where memoization must happen.
-		memo_key = self._memo_key(fn, env)
+		memo_key = self._memo_key(sub, env)
 		if memo_key in self._memo:
 			return self._memo[memo_key]
 		elif memo_key in self._recursion:
@@ -811,14 +816,14 @@ class DeductionEngine(Visitor):
 		else:
 			# TODO: Pass around judgements, not just types.
 			self._recursion[memo_key] = False
-			self._memo[memo_key] = self.visit(fn.expr, env)
+			self._memo[memo_key] = self.visit(sub.expr, env)
 			if self._recursion.pop(memo_key):
 				prior = BOTTOM
 				while prior != self._memo[memo_key]:
 					prior = self._memo[memo_key]
-					self._memo[memo_key] = self.visit(fn.expr, env)
+					self._memo[memo_key] = self.visit(sub.expr, env)
 				if prior is BOTTOM:
-					self._report.ill_founded_function(env, fn)
+					self._report.ill_founded_function(env, sub)
 				# self._report.trace("<Resolved:", fn)
 					
 		return self._memo[memo_key]
@@ -830,7 +835,7 @@ class DeductionEngine(Visitor):
 		
 		env.pc = site
 		if callee_type.expected_arity() != len(args):
-			self._report.wrong_arity(env, site, callee_type.expected_arity(), args)
+			self._report.wrong_arity(env, site, callee_type, args)
 			return ERROR
 		
 		if isinstance(callee_type, AdHocType):
@@ -867,8 +872,19 @@ class DeductionEngine(Visitor):
 				binder.complain(self._report)
 				return ERROR
 		
-		elif isinstance(callee_type, UDFType):
+		elif isinstance(callee_type, MessageType):
+			binder = Binder(self, env).inputs(callee_type.arg.fields, actual_types, args)
+			if binder.ok:
+				return MessageType(EMPTY_PRODUCT).exemplar()
+			else:
+				binder.complain(self._report)
+				return ERROR
+		
+		elif isinstance(callee_type, UserFnType):
 			return self.apply_UDF(callee_type, actual_types, env)
+		
+		elif isinstance(callee_type, UserProcType):
+			return self.apply_procedure(callee_type, actual_types, env)
 		
 		elif isinstance(callee_type, ParametricTemplateType):
 			binder = Binder(self, env).inputs(callee_type.args, actual_types, args)
@@ -905,10 +921,14 @@ class DeductionEngine(Visitor):
 		static_env = env.chase(target)
 		if isinstance(target, syntax.UserFunction):
 			if target.params:
-				return UDFType(target, static_env).exemplar()
+				return UserFnType(target, static_env).exemplar()
 			else:
-				inner = Activation.for_function(static_env, env, target, ())
+				inner = Activation.for_subroutine(static_env, env, target, ())
 				return self.exec_UDF(target, inner)
+		elif isinstance(target, syntax.UserProcedure):
+			# The concept here is not to call procedures upon mention,
+			# but only when they're expressly called or used as a step.
+			return UserProcType(target, static_env).exemplar()
 		else:
 			assert target is SELF or isinstance(target, (syntax.FormalParameter, syntax.Subject, syntax.NewAgent)), type(target)
 			return static_env.fetch(target)
@@ -917,7 +937,7 @@ class DeductionEngine(Visitor):
 	def visit_LambdaForm(lf:syntax.LambdaForm, env:TYPE_ENV) -> SophieType:
 		# No need to chase to find a static environment:
 		# It's taken from the point-of-use by definition.
-		return UDFType(lf.function, env).exemplar()
+		return UserFnType(lf.function, env).exemplar()
 		
 	@staticmethod
 	def visit_Absurdity(_:syntax.Absurdity, _env:TYPE_ENV) -> SophieType:
@@ -1030,38 +1050,35 @@ class DeductionEngine(Visitor):
 		return ManifestBuilder(parameters, lhs_type.type_args).visit(field_spec.type_expr)
 
 	def visit_BindMethod(self, mr:syntax.BindMethod, env:TYPE_ENV) -> SophieType:
-		lhs_type = self.visit(mr.receiver, env)
-		if lhs_type is ERROR: return ERROR
-		if isinstance(lhs_type, InterfaceType):
+		actor_type = self.visit(mr.receiver, env)
+		if actor_type is ERROR: return ERROR
+		if isinstance(actor_type, InterfaceType):
 			try:
-				ms = lhs_type.symbol.method_space[mr.method_name.key()]
+				ms = actor_type.symbol.method_space[mr.method_name.key()]
 			except KeyError:
-				self._report.bad_message(env, mr, lhs_type)
+				self._report.bad_message(env, mr, actor_type)
 				return ERROR
 			else:
 				assert isinstance(ms, syntax.MethodSpec)
-				parameters = lhs_type.symbol.type_params
-				builder = ManifestBuilder(parameters, lhs_type.type_args)
-				if ms.type_exprs:
-					args = ProductType(builder.visit(tx) for tx in ms.type_exprs)
-					return ArrowType(args, primitive.literal_msg)
-				else:
-					return primitive.literal_act
-		elif isinstance(lhs_type, UDAType):
+				parameters = actor_type.symbol.type_params
+				builder = ManifestBuilder(parameters, actor_type.type_args)
+				args = ProductType(builder.visit(tx) for tx in ms.type_exprs)
+				return MessageType(args)
+		elif isinstance(actor_type, UDAType):
 			try:
-				behavior = lhs_type.uda.message_space[mr.method_name.key()]
+				procedure = actor_type.uda.message_space[mr.method_name.key()]
 			except KeyError:
-				self._report.bad_message(env, mr, lhs_type)
+				self._report.bad_message(env, mr, actor_type)
 				return ERROR
 			else:
-				assert isinstance(behavior, syntax.UserProcedure)
-				result = MethodType(lhs_type, behavior).exemplar()
-				if behavior.params:
-					return result
-				else:
-					return self.apply_method(result, (), env)
+				assert isinstance(procedure, syntax.UserProcedure)
+				inner = Activation.for_actor(actor_type, env)
+				proc_type = UserProcType(procedure, inner)
+				if not proc_type.sub.params:
+					self.apply_procedure(proc_type, (), env)
+				return UserTaskType(proc_type).exemplar()
 		else:
-			self._report.bad_message(env, mr, lhs_type)
+			self._report.bad_message(env, mr, actor_type)
 			return ERROR
 	
 	def visit_DoBlock(self, do:syntax.DoBlock, env:TYPE_ENV) -> SophieType:
@@ -1098,17 +1115,15 @@ class DeductionEngine(Visitor):
 		return primitive.literal_act
 
 	def visit_AsTask(self, at:syntax.AsTask, env:TYPE_ENV) -> SophieType:
-		def is_act(t): return t.number == primitive.literal_act.number
-		inner = self.visit(at.sub, env)
-		if is_act(inner):
-			return primitive.literal_msg
-		elif isinstance(inner, ArrowType) and is_act(inner.res):
-			return MessageType(inner.arg).exemplar()
-		elif isinstance(inner, UDFType):
-			return UserTaskType(inner).exemplar()
-		else:
-			self._report.bad_type(env, at.sub, "procedure", inner, "Concurrent tasks cannot return a value.")
-			return ERROR
+		proc_type = self.visit(at.proc_ref, env)
+		if isinstance(proc_type, UserProcType):
+			return UserTaskType(proc_type).exemplar()
+		if isinstance(proc_type, ArrowType) and proc_type.res == primitive.literal_act:
+			return MessageType(proc_type.arg).exemplar()
+		if proc_type == primitive.literal_act:
+			return MessageType(EMPTY_PRODUCT).exemplar()
+		self._report.bad_task(env, at.proc_ref, proc_type)
+		return ERROR
 
 def _hypothesis(st:syntax.SubTypeSpec, type_args:Sequence[SophieType]) -> SubType:
 	assert isinstance(st, syntax.SubTypeSpec)

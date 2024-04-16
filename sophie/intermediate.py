@@ -661,7 +661,7 @@ class FunctionContext(EagerContext):
 		self.answer(outer)
 	
 	def visit_AsTask(self, task:syntax.AsTask, scope:VMFunctionScope):
-		FORCE.visit(task.sub, scope)
+		FORCE.visit(task.proc_ref, scope)
 		emit("TASK")
 		self.answer(scope)
 	

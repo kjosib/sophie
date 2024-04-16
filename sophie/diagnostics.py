@@ -181,7 +181,7 @@ class Report:
 	def use_my_instead(self, env: TYPE_ENV, fr: syntax.FieldReference):
 		intro = "To read an actor's own private state, use `my %s` here." % fr.field_name.text
 		problem = [Annotation(env.path(), fr)]
-		self.issue(Pic(intro, trace_stack(env) + problem))
+		self.issue(Pic(intro, problem))
 	
 	# Methods the Alias-checker calls
 	def these_are_not_types(self, non_types:Sequence[syntax.TypeCall]):
@@ -253,15 +253,16 @@ class Report:
 		self.issue(Pic(intro, problem))
 		self.issue(Pic("Here's how that happens:", trace_stack(env)))
 	
-	def wrong_arity(self, env:TYPE_ENV, site:syntax.ValExpr, arity:int, args:Sequence[syntax.ValExpr]):
-		if site not  in self._already_complained_about:
+	def wrong_arity(self, env:TYPE_ENV, site:syntax.ValExpr, callee_type:SophieType, args:Sequence[syntax.ValExpr]):
+		arity = callee_type.expected_arity()
+		if site not in self._already_complained_about:
 			self._already_complained_about.add(site)
 			if arity < 0:
-				intro = "This is not callable."
+				intro = "This %s is not callable."%callee_type
 			else:
 				plural = '' if arity == 1 else 's'
-				pattern = "This function takes %d argument%s, but got %d instead."
-				intro = pattern % (arity, plural, len(args))
+				pattern = "This %s takes %d argument%s, but got %d instead."
+				intro = pattern % (callee_type, arity, plural, len(args))
 			problem = [Annotation(env.path(), site, "Here")]
 			self.issue(Pic(intro, problem))  # +trace_stack(env)
 
@@ -287,13 +288,25 @@ class Report:
 		problem = [Annotation(env.path(), expr, complaint)]
 		self.issue(Pic(intro, trace_stack(env)+problem, (why,)))
 	
+	def bad_task(self, env: TYPE_ENV, expr: syntax.ValExpr, got):
+		intro = "I don't know how to convert %s into a task." % got
+		footer = "Typically you'll want a procedure here."
+		problem = [Annotation(env.path(), expr)]
+		self.issue(Pic(intro, trace_stack(env)+problem, (footer,)))
+
+	
 	def does_not_express_behavior(self, env: TYPE_ENV, procedure:syntax.UserProcedure, got):
 		intro = "This definition expresses %s instead of behavior"%got
 		problem = [Annotation(env.path(), procedure)]
 		self.issue(Pic(intro, trace_stack(env)+problem))
 
-	def bad_message(self, env:TYPE_ENV, expr:syntax.BindMethod, agent_type:SophieType):
-		intro = "This %s does not understand..."%agent_type
+	def must_not_express_behavior(self, env: TYPE_ENV, fn:syntax.UserFunction):
+		intro = "Procedural steps cannot happen within a pure function."
+		problem = [Annotation(env.path(), fn)]
+		self.issue(Pic(intro, trace_stack(env)+problem))
+
+	def bad_message(self, env:TYPE_ENV, expr:syntax.BindMethod, actor_type:SophieType):
+		intro = "This %s does not understand..." % actor_type
 		problem = [Annotation(env.path(), expr.method_name, "this message")]
 		self.issue(Pic(intro, trace_stack(env)+problem))
 	
@@ -316,9 +329,9 @@ class Report:
 		problem = [Annotation(env.path(), fr, complaint)]
 		self.issue(Pic(intro, trace_stack(env)+problem))
 	
-	def ill_founded_function(self, env:TYPE_ENV, udf:syntax.UserFunction):
-		intro = "This function's definition turned up circular, as in a=a."
-		problem = [Annotation(udf.source_path, udf, "This one.")]
+	def ill_founded_function(self, env:TYPE_ENV, sub:syntax.Subroutine):
+		intro = "This definition turned up circular, as in a=a."
+		problem = [Annotation(sub.source_path, sub, "This one.")]
 		self.issue(Pic(intro, trace_stack(env)+problem))
 
 	def no_applicable_method(self, env:TYPE_ENV, actual_types):
@@ -352,7 +365,7 @@ class Annotation:
 		self.path = path
 		self.slice = node.head()
 		self.caption = caption
-		assert isinstance(self.slice, slice), type(node)
+		assert isinstance(self.slice, slice), (type(node), "head method fails to return a slice.")
 
 def illustrate(source, span:slice, caption):
 	row, col = source.find_row_col(span.start)

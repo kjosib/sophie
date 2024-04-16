@@ -11,12 +11,12 @@ Upon this simplified foundation, I'll build as needed to properly reflect
 the upcoming message-passing semantics.
 """
 
-from typing import TypeVar, Generic, Union
+from typing import TypeVar, Generic, Union, Optional
 from pathlib import Path
 from .ontology import Symbol, SELF
-from .syntax import UserFunction, UserProcedure, ValExpr, Subject, Module
+from .syntax import Subroutine, ValExpr, Subject, Module
 
-CRUMB = Union[Symbol, Module]
+CRUMB = Union[Symbol, Module, None]
 
 T = TypeVar("T")
 
@@ -60,28 +60,29 @@ class RootFrame(Frame):
 
 class Activation(Frame):
 	def __init__(self, static_link: Frame[T], dynamic_link: Frame[T], breadcrumb:CRUMB):
-		assert hasattr(breadcrumb, 'source_path'), type(breadcrumb)
+		assert breadcrumb is None or hasattr(breadcrumb, 'source_path'), type(breadcrumb)
 		self._bindings = {}
 		self._static_link = static_link
 		self._dynamic_link = dynamic_link
 		self.breadcrumb = breadcrumb
 	
-	def path(self) -> Path:
-		return self.breadcrumb.source_path
+	def path(self) -> Optional[Path]:
+		return self.breadcrumb and self.breadcrumb.source_path
 		
 	def chase(self, key:Symbol) -> Frame[T]:
 		return self if key in self._bindings else self._static_link.chase(key)
 
 	def trace(self, tracer):
 		self._dynamic_link.trace(tracer)
-		tracer.trace_frame(self.breadcrumb, self._bindings, self.pc)
+		if self.breadcrumb is not None:
+			tracer.trace_frame(self.breadcrumb, self._bindings, self.pc)
 	
 	@staticmethod
-	def for_function(static_link: Frame[T], dynamic_link: Frame[T], udf: UserFunction, arguments) -> "Activation[T]":
-		assert len(udf.params) == len(arguments)
-		ar = Activation(static_link, dynamic_link, udf)
-		ar.update(zip(udf.params, arguments))
-		for key in udf.where:
+	def for_subroutine(static_link: Frame[T], dynamic_link: Frame[T], sub: Subroutine, arguments) -> "Activation[T]":
+		assert len(sub.params) == len(arguments)
+		ar = Activation(static_link, dynamic_link, sub)
+		ar.update(zip(sub.params, arguments))
+		for key in sub.where:
 			ar.declare(key)
 		return ar
 
@@ -105,11 +106,9 @@ class Activation(Frame):
 		return Activation(static_link, static_link, static_link.breadcrumb)
 
 	@staticmethod
-	def for_method(actor, method:UserProcedure, arguments, dynamic_link: Frame[T]) -> "Activation[T]":
-		assert len(method.params) == len(arguments)
-		frame = Activation(actor.global_env, dynamic_link, method)
+	def for_actor(actor, dynamic_link: Frame[T]) -> "Activation[T]":
+		frame = Activation(actor.global_env, dynamic_link, None)
 		frame.assign(SELF, actor)
 		frame.update(actor.state_pairs())
-		frame.update(zip(method.params, arguments))
 		return frame
 
