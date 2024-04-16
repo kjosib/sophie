@@ -115,8 +115,10 @@ def _eval_lookup(expr:syntax.Lookup, dynamic_env:ENV):
 			if sym.params:
 				value = Closure(static_env, sym)
 			else:
-				inner = Activation.for_function(static_env, dynamic_env, sym, ())
+				inner = Activation.for_subroutine(static_env, dynamic_env, sym, ())
 				value = delay(sym.expr, inner)
+		elif isinstance(sym, syntax.UserProcedure):
+			value = Closure(static_env, sym)
 		elif isinstance(sym, syntax.TypeAlias):
 			value = _snap_type_alias(sym, static_env)
 		else:
@@ -193,7 +195,7 @@ def _eval_bind_method(expr:syntax.BindMethod, dynamic_env:ENV):
 	return BoundMethod(_strict(expr.receiver, dynamic_env), expr.method_name.text)
 
 def _eval_as_task(expr:syntax.AsTask, dynamic_env:ENV):
-	sub = _strict(expr.sub, dynamic_env)
+	sub = _strict(expr.proc_ref, dynamic_env)
 	if isinstance(sub, Closure):
 		return ClosureMessage(sub)
 	else:
@@ -258,7 +260,7 @@ class Function:
 class Closure(Function):
 	""" The run-time manifestation of a sub-function: a callable value tied to its natal environment. """
 
-	def __init__(self, static_link:ENV, udf:syntax.UserFunction):
+	def __init__(self, static_link:ENV, udf:syntax.Subroutine):
 		assert hasattr(udf, "strictures"), udf
 		self._static_link = static_link
 		self._udf = udf
@@ -271,7 +273,7 @@ class Closure(Function):
 	def apply(self, args: Sequence[LAZY_VALUE], dynamic_env:ENV) -> LAZY_VALUE:
 		for i in self._udf.strictures:
 			force(args[i])
-		inner_env = Activation.for_function(self._static_link, dynamic_env, self._udf, args)
+		inner_env = Activation.for_subroutine(self._static_link, dynamic_env, self._udf, args)
 		return delay(self._udf.expr, inner_env)
 
 class Primitive(Function):
@@ -425,8 +427,9 @@ class UserDefinedActor(Actor):
 	
 	def handle(self, message, args):
 		behavior = self._vtable[message]
-		frame = Activation.for_method(self, behavior, args, THREADED_ROOT)
-		_strict(behavior.expr, frame).perform()
+		outer = Activation.for_actor(self, THREADED_ROOT)
+		inner = Activation.for_subroutine(outer, THREADED_ROOT, behavior, args)
+		_strict(behavior.expr, inner).perform()
 
 	def state_pairs(self):
 		return self.state

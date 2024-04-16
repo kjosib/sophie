@@ -51,7 +51,7 @@ def run_program(roadmap:RoadMap):
 	return result
 
 def _set_strictures(module):
-	for udf in module.all_subs:
+	for udf in module.all_fns + module.all_procs:
 		udf.strictures = tuple(i for i, p in enumerate(udf.params) if p.is_strict)
 
 def _dynamic_root(preamble_scope) -> RootFrame:
@@ -76,7 +76,7 @@ def _prepare(env:Frame, namespace:ontology.NS):
 				raise ValueError("Tagged scalars (%r) are not implemented."%key)
 		elif isinstance(dfn, syntax.FFI_Alias):
 			env.assign(dfn, _native_object(dfn))
-		elif isinstance(dfn, syntax.UserFunction):
+		elif isinstance(dfn, syntax.Subroutine):
 			env.declare(dfn)
 		elif isinstance(dfn, syntax.UserAgent):
 			env.assign(dfn, ActorClass(env, dfn) if dfn.members else ActorTemplate(env, dfn, ()))

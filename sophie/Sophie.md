@@ -62,7 +62,7 @@ type_decl  -> name type_parameters IS OPAQUE        :Opaque
 
 type_parameters -> square_list(name) :type_parameters     | :empty
 
-simple_type -> generic(simple_type) | arrow_of(simple_type)
+simple_type -> generic(simple_type)
 
 record_spec  -> round_list(field_dfn)                    :RecordSpec
 
@@ -82,7 +82,7 @@ method_type -> name optional(round_list(simple_type))      :MethodSpec
 The commonality is as follows:
 ```
 generic(item)  -> reference optional(square_list(item))   :TypeCall
-arrow_of(item) -> round_list(item) '->' item              :ArrowSpec
+                | round_list(item) '->' item              :ArrowSpec
                 | '!' optional(round_list(item))          :MessageSpec
 ```
 -----
@@ -119,7 +119,7 @@ parameter  ->  stricture name annotation   :FormalParameter
 stricture  ->  :nothing | .STRICT
 annotation ->  :nothing | ':' arg_type
 
-arg_type -> generic(arg_type) | arrow_of(arg_type)
+arg_type -> generic(arg_type)
           | '?' name    :ExplicitTypeVariable
           | '?'         :ImplicitTypeVariable
 
@@ -244,9 +244,13 @@ they don't actually *do* anything.
 
 Sophie needs a way to express action.
 
-The general idea is that an action (or rather, a plan of action)
-is just a special type of value which happens to express 
-observable outcomes, with just a few extra production rules.
+The general idea:
+
+* *Action* is a special type of value expressing the fact of things getting done.
+* *Procedure* is a *different* special type of value expressing a *plan* of action.
+* Just a few extra production rules suffice to express different kinds of actions.
+* For clarity, the syntax distinguishes *procedural* from *functional* abstractions.
+* Sophie uses the *actor* model to interface with the world and to express concurrency.
 
 ```
 procedure -> TO name formals IS expr where_clause  :UserProcedure
@@ -263,9 +267,12 @@ new_agent -> name IS expr   :NewAgent
 
 * The SKIP action does nothing, but means Sophie does not need single-branch conditionals.
   It can also have a place in case-expressions.
-* The exclamation point (a.k.a. "bang`!`" operator) for sending messages is attested in a few languages.
-  I suspect there's benefit to distinguishing method/message-binding from field access.
-* If there's no left-hand side on the bang operator, then we can assume the "message" is to call a procedure asynchronously.
+* The exclamation point (a.k.a. "bang`!`" operator) concerns message-passing concurrency.
+  As a prefix operator, it converts a *procedure* into a *message*.
+  Sending such a message schedules the procedure for asynchronous execution on something
+  like a global work-queue.
+ 
+* If there's no left-hand side on the bang operator, then we can assume the "message" is to call a procedure ly.
 * The do-block expresses sequence, packaging several actions into one.
 
 One sort of action remains: To create a new instance of some agent-class.
@@ -288,7 +295,7 @@ On balance an actor-like thing (`agent`, in Sophie parlance) has state and behav
 For simplicity, let us *declare* that state with the same syntax as a record.
 The chief difference is that agent state is mutable (and so cannot be shared).
 
-There may be cause for stateless agents from time to time, so I'll make the state optional.
+There may be cause for stateless agents to exist, so state remains optional.
 ```
 agent_definition -> AGENT name optional(round_list(field_dfn)) AS semicolon_list(procedure) END name  :UserAgent
 ```
@@ -335,9 +342,9 @@ round_list(x) -> '(' comma_list(x) ')'
 * Highest precedence comes first, like you learned in school.
 
 ```
+%nonassoc  '!'
 %left '(' '[' '.'
 %bogus UMINUS
-%nonassoc  '!'
 %right '^'
 %left '*' '/' DIV MOD
 %left '+' '-'

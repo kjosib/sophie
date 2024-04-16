@@ -34,7 +34,7 @@ class DeterminedCallGraphPass(TopDown):
 		del self.graph[None]
 	
 	def analyze_module(self, module:syntax.Module):
-		for udf in module.all_subs:
+		for udf in module.all_fns:
 			if isinstance(udf, syntax.UserFunction):
 				self.graph[udf] = set()
 		self.tour(module.top_subs)
@@ -201,7 +201,7 @@ class DemandPass(Visitor):
 		return self.visit(fr.lhs)
 	
 	def visit_AsTask(self, task:syntax.AsTask):
-		return self.visit(task.sub)
+		return self.visit(task.proc_ref)
 
 	@staticmethod
 	def visit_Literal(_):

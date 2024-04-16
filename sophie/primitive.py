@@ -19,7 +19,4 @@ literal_number = _built_in_type("number")
 literal_string = _built_in_type("string")
 literal_flag = _built_in_type("flag")
 literal_act = _built_in_type("act")
-literal_msg = _built_in_type("message")
-
-
 

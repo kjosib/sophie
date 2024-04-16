@@ -184,7 +184,7 @@ class MethodSpec(Symbol):
 	interface_decl : "Interface"
 	def __init__(self, nom:Nom, type_exprs:Sequence[SimpleType]):
 		super().__init__(nom)
-		self.type_exprs = type_exprs
+		self.type_exprs = type_exprs or ()
 	def has_value_domain(self) -> bool: return False
 
 class Interface(TypeDeclaration):
@@ -224,11 +224,12 @@ def _bookend(head: Nom, where: Optional["WhereClause"]) -> Sequence["Subroutine"
 
 class Subroutine(Term):
 	params: Sequence[FormalParameter]
+	expr: ValExpr
 	where: Sequence["Subroutine"]
+	strictures: tuple[int, ...] # Tree-walking runtime uses this.
 
 class UserFunction(Subroutine):
 	namespace: NS
-	strictures: tuple[int, ...] # Tree-walking runtime uses this.
 	
 	def __init__(
 			self,
@@ -346,14 +347,14 @@ class BindMethod(ValExpr):
 	def head(self) -> slice: return self._head
 
 class AsTask(ValExpr):
-	def __init__(self, head:slice, sub:ValExpr):
+	def __init__(self, head:Nom, proc_ref:ValExpr):
 		self._head = head
-		self.sub = sub
-	def head(self) -> slice: return self._head
+		self.proc_ref = proc_ref
+	def head(self) -> slice: return self._head.head()
 
 class Skip(ValExpr):
-	def __init__(self, head: slice): self._head = head
-	def head(self) -> slice: return self._head
+	def __init__(self, head: Nom): self._head = head
+	def head(self) -> slice: return self._head.head()
 
 class Binary(ValExpr):
 	def __init__(self, lhs: ValExpr, op:Nom, rhs: ValExpr):
@@ -567,7 +568,8 @@ class Module:
 	user_operators: list[UserOperator]
 	
 	source_path: Path  # Module loader fills this.
-	all_subs: list[Subroutine]  # WordDefiner pass fills this.
+	all_fns: list[UserFunction]  # WordDefiner pass fills this.
+	all_procs: list[UserProcedure]  # WordDefiner pass fills this.
 	ffi_operators: list[FFI_Operator]  # WordDefiner fills this too.
 
 	def __init__(self, exports:list, imports:list[ImportDirective], types:list[TypeDeclaration], assumptions:list[Assumption], top_levels:list, main:list):
@@ -579,7 +581,8 @@ class Module:
 		self.top_subs = []
 		self.agent_definitions = []
 		self.user_operators = []
-		self.all_subs = []
+		self.all_fns = []
+		self.all_procs = []
 		self.ffi_operators = []
 		for item in top_levels:
 			if isinstance(item, UserOperator): self.user_operators.append(item)
