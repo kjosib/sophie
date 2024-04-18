@@ -9,7 +9,7 @@ esac;
 
 solution(input) = sum(map(parenval, each_chr(input)));
 
-solve(input) = console ! echo[str(solution(input))];
+to solve(input) is console ! echo[str(solution(input))];
 
 begin:
 

@@ -4,6 +4,10 @@ Read this to get a general idea of what's new and nontrivial.
 
 ## April 2024
 
+* 17 April: Got the tree-walker fully working again with the new procedure semantics.
+  (This includes turtle graphics and list displays, which had broken some time back.)
+  All examples are updated to match. A program no longer returns a value.
+* 16 April: IRS finally acknowledges payment. Retroactively, thank heavens.
 * 15 April: Tax day. Also, functions and procedures are now completely distinct.
   The syntax and type checker are overhauled to understand this.
   (The tree-walker and compiler still need some work.)

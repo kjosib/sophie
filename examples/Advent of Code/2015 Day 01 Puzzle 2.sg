@@ -24,7 +24,7 @@ parenval(ch) = case
 	else 0;
 esac;
 
-solve(input) = console ! echo[str(solution)] where
+to solve(input) is console ! echo[str(solution)] where
 	solution = 1+index_where(ltz, path);
 	path = running_sum(map(parenval, each_chr(input)));
 	ltz(x) = x < 0;

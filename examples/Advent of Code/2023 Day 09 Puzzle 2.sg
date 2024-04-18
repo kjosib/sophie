@@ -10,7 +10,7 @@ rolling_differences(xs) = map({p|p.snd - p.fst}, rolling_pairs(xs));
 
 all_zero(xs) = all(map({x|x==0}, xs));
 
-solve(lines) = console!echo[str(solution(lines)), EOL];
+to solve(lines) is console!echo[str(solution(lines)), EOL];
 solution(lines) = sum(map(compose(extrapolate, nums_in), lines));
 
 begin:

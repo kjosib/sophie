@@ -41,7 +41,7 @@ is_gear(candidate:list[Range]) = length(candidate) == 2;
 gear_ratio(gear:list[Range]) = product(map(range_value, gear));
 range_value(range) = range.value;  # This sort of thing could be implicit syntax?
 
-solve(lines) = console ! echo[str(goal(lines)), EOL];
+to solve(lines) is console ! echo[str(goal(lines)), EOL];
 
 begin:
 

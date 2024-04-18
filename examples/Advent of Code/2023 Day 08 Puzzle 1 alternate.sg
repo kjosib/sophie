@@ -39,7 +39,7 @@ sample = [
 	"ZZZ = (ZZZ, ZZZ)",
 ];
 
-solve(lines) = console!echo[str(solution(lines)), EOL];
+to solve(lines) is console!echo[str(solution(lines)), EOL];
 
 begin:
 

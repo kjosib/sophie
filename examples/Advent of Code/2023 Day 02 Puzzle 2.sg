@@ -17,7 +17,7 @@ assume:
 
 define:
 
-solve(lines) = console ! echo[str(goal(lines)), EOL];
+to solve(lines) is console ! echo[str(goal(lines)), EOL];
 
 goal(lines) = sum(map(power, lines));
 

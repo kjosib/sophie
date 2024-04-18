@@ -85,6 +85,9 @@ class Thunk:
 			return "<Thunk: %s>"%self.expr
 		else:
 			return str(self.value)
+	
+	def perform(self, dynamic_env:ENV):
+		return force(self)
 
 def force(it:LAZY_VALUE) -> STRICT_VALUE:
 	"""
@@ -186,26 +189,33 @@ def _eval_match_expr(expr:syntax.MatchExpr, dynamic_env:ENV):
 		return evaluate(alternative.sub_expr, dynamic_env)
 
 def _eval_do_block(expr:syntax.DoBlock, dynamic_env:ENV):
-	return CompoundAction(expr, dynamic_env)
+	agents = expr.agents
+	if agents:
+		inner = Activation.for_do_block(dynamic_env)
+		for na in agents:
+			assert isinstance(na, syntax.NewAgent)
+			template = _strict(na.expr, dynamic_env)
+			inner.assign(na, template.instantiate(dynamic_env))
+	else:
+		inner = dynamic_env
+	# TODO: Solve the tail-recursion problem.
+	for expr in expr.steps:
+		inner.pc = expr
+		perform(_strict(expr, inner), inner)
 
 def _eval_skip(expr:syntax.Skip, dynamic_env:ENV):
-	return Nop()
+	return
 
 def _eval_bind_method(expr:syntax.BindMethod, dynamic_env:ENV):
 	return BoundMethod(_strict(expr.receiver, dynamic_env), expr.method_name.text)
 
 def _eval_as_task(expr:syntax.AsTask, dynamic_env:ENV):
 	sub = _strict(expr.proc_ref, dynamic_env)
-	if isinstance(sub, Closure):
-		return ClosureMessage(sub)
-	else:
-		assert isinstance(sub, Action), type(sub)
-		assert not isinstance(sub, BoundMethod)
-		return PlainTask(sub)
+	return sub.as_task()
 
 def _eval_assign_member(expr:syntax.AssignMember, dynamic_env:ENV):
 	uda = dynamic_env.chase(SELF).fetch(SELF)
-	return AssignAction(uda, expr.dfn, evaluate(expr.expr, dynamic_env))
+	uda.state[expr.dfn] = _strict(expr.expr, dynamic_env)
 
 def _eval_absurdity(expr:syntax.Absurdity, dynamic_env:ENV):
 	trace_absurdity(dynamic_env, expr)
@@ -259,6 +269,7 @@ class Function:
 
 class Closure(Function):
 	""" The run-time manifestation of a sub-function: a callable value tied to its natal environment. """
+	# For now, I'll use Closure for both functions and procedures.
 
 	def __init__(self, static_link:ENV, udf:syntax.Subroutine):
 		assert hasattr(udf, "strictures"), udf
@@ -275,6 +286,12 @@ class Closure(Function):
 			force(args[i])
 		inner_env = Activation.for_subroutine(self._static_link, dynamic_env, self._udf, args)
 		return delay(self._udf.expr, inner_env)
+	
+	def perform(self, dynamic_env:ENV) -> STRICT_VALUE:
+		return self.apply((), dynamic_env)
+	
+	def as_task(self):
+		return ParametricTask(self) if self._udf.params else PlainTask(self, ())
 
 class Primitive(Function):
 	""" All parameters to primitive procedures are strict. Also a kind of value, like a closure. """
@@ -321,103 +338,6 @@ class ActorTemplate:
 		vtable = self._uda.message_space.local
 		return UserDefinedActor(state, vtable, self._global_link)
 
-###############################################################################
-
-class Action:
-	def perform(self):
-		""" Do something here and now in the current thread. """
-		raise NotImplementedError(type(self))
-
-class Nop(Action):
-	def perform(self): pass
-
-class AssignAction(Action):
-	def __init__(self, uda:"UserDefinedActor", field_sym:syntax.Symbol, new_value:LAZY_VALUE):
-		self._uda = uda
-		self._field_sym = field_sym
-		self._new_value = new_value
-	def perform(self):
-		self._uda.state[self._field_sym] = force(self._new_value)
-
-class CompoundAction(Action):
-	def __init__(self, block:syntax.DoBlock, dynamic_env:ENV):
-		self._block = block
-		self._dynamic_env = dynamic_env
-	def perform(self):
-		agents = self._block.agents
-		if agents:
-			inner = Activation.for_do_block(self._dynamic_env)
-			for na in agents:
-				assert isinstance(na, syntax.NewAgent)
-				template = _strict(na.expr, self._dynamic_env)
-				inner.assign(na, template.instantiate(self._dynamic_env))
-		else:
-			inner = self._dynamic_env
-		# TODO: Solve the tail-recursion problem.
-		for expr in self._block.steps:
-			inner.pc = expr
-			action = _strict(expr, inner)
-			action.perform()
-
-class BoundMessage(Action):
-	def __init__(self, receiver, method_name, *args):
-		self._receiver = receiver
-		self._method_name = method_name
-		self._args = args
-		
-	def perform(self):
-		self._receiver.accept_message(self._method_name, self._args)
-
-class TaskAction(Action):
-	def __init__(self, task:Task):
-		self._task = task
-	def perform(self):
-		self._task.enqueue()
-
-###############################################################################
-
-class Message(Function):
-	""" Interface for things that, with arguments, become messages ready to send. """
-	def dispatch_with(self, *args):
-		self.apply(args, THREADED_ROOT).perform()
-
-class BoundMethod(Message, Action):
-	def __init__(self, receiver, method_name):
-		self._receiver = receiver
-		self._method_name = method_name
-
-	def apply(self, args: Sequence[LAZY_VALUE], dynamic_env:ENV) -> LAZY_VALUE:
-		return BoundMessage(self._receiver, self._method_name, *(force(a) for a in args))
-	
-	def perform(self):
-		""" Hack so that a single runtime class handles both parametric and non-parametric messages to actors """
-		self._receiver.accept_message(self._method_name, ())
-
-class ClosureMessage(Message):
-	def __init__(self, closure: Closure):
-		self._closure = closure
-
-	def apply(self, args: Sequence[LAZY_VALUE], dynamic_env:ENV) -> Any:
-		task = ParametricTask(self._closure, [force(a) for a in args])
-		return TaskAction(task)
-	
-###############################################################################
-
-class PlainTask(Task):
-	def __init__(self, action:Action):
-		self._action = action
-	def proceed(self):
-		self._action.perform()
-
-class ParametricTask(Task):
-	def __init__(self, closure:Closure, args:Sequence[STRICT_VALUE]):
-		self._closure = closure
-		self._args = args
-	def proceed(self):
-		action = force(self._closure.apply(self._args, THREADED_ROOT))
-		assert isinstance(action, Action), type(action)
-		action.perform()
-
 class UserDefinedActor(Actor):
 	def __init__(self, state:dict, vtable:dict, global_env:ENV):
 		super().__init__()
@@ -429,10 +349,62 @@ class UserDefinedActor(Actor):
 		behavior = self._vtable[message]
 		outer = Activation.for_actor(self, THREADED_ROOT)
 		inner = Activation.for_subroutine(outer, THREADED_ROOT, behavior, args)
-		_strict(behavior.expr, inner).perform()
+		perform(evaluate(behavior.expr, inner), inner)
 
 	def state_pairs(self):
 		return self.state
+
+###############################################################################
+
+def perform(action, dynamic_env:ENV):
+	while action is not None:
+		action = action.perform(dynamic_env)
+
+###############################################################################
+class ParametricMessage(Function):
+	""" Interface for things that, with arguments, become messages ready to send. """
+	def dispatch_with(self, *args):
+		self.apply(args, THREADED_ROOT).perform(THREADED_ROOT)
+
+class ParametricTask(ParametricMessage):
+	def __init__(self, closure: Closure):
+		self._closure = closure
+
+	def apply(self, args: Sequence[LAZY_VALUE], dynamic_env:ENV) -> Any:
+		return PlainTask(self._closure, tuple(force(a) for a in args))
+
+class BoundMethod(ParametricMessage):
+	def __init__(self, receiver, method_name):
+		self._receiver = receiver
+		self._method_name = method_name
+
+	def apply(self, args: Sequence[LAZY_VALUE], dynamic_env:ENV) -> Any:
+		return MessageTask(self._receiver, self._method_name, tuple(force(a) for a in args))
+
+	def perform(self, dynamic_env:ENV):
+		self._receiver.accept_message(self._method_name, ())
+	
+class MessageTask:
+	def __init__(self, receiver, method_name, args:Sequence[STRICT_VALUE]):
+		self._receiver = receiver
+		self._method_name = method_name
+		self._args = args
+		
+	def perform(self, dynamic_env:ENV):
+		self._receiver.accept_message(self._method_name, self._args)
+
+class PlainTask(Task):
+	def __init__(self, closure:Closure, args:Sequence[STRICT_VALUE]):
+		self._closure = closure
+		self._args = args
+	
+	def perform(self, dynamic_env:ENV):
+		self.enqueue()
+
+	def proceed(self):
+		it = self._closure.apply(self._args, THREADED_ROOT)
+		perform(it, THREADED_ROOT)
+	
 
 ###############################################################################
 
@@ -456,6 +428,9 @@ def as_sophie_list(items:Reversible):
 	for head in reversed(items):
 		lst = {"":CONS.key, "head":head, "tail":lst}
 	return lst
+
+def is_sophie_list(it:STRICT_VALUE):
+	return isinstance(it, dict) and it[""] is CONS.key
 
 def sophie_nope(): return NOPE
 def sophie_this(item): return {"":THIS.key, "item":item}

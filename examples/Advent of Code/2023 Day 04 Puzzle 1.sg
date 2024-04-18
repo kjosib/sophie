@@ -11,7 +11,7 @@ score(nr_wins) = 2 ^ (nr_wins-1) if nr_wins > 0 else 0;
 
 goal(lines) = sum(map(score, map(nr_winning, lines)));
 
-solve(lines) = console ! echo[str(goal(lines)), EOL];
+to solve(lines) is console ! echo[str(goal(lines)), EOL];
 
 begin:
 

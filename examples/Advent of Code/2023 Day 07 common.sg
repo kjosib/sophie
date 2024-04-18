@@ -112,6 +112,6 @@ FIVE_OF_KIND = 6;
 
 run(rank, arrange) = filesystem!read_lines(path, !solve) where
 	path = "/playground/advent of code/2023-d7";
-	solve(lines) = console ! echo[str(int(goal(rank, arrange, lines))), EOL];
+	to solve(lines) is console ! echo[str(int(goal(rank, arrange, lines))), EOL];
 end run;
 

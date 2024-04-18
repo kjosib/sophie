@@ -65,7 +65,7 @@ sample_net = parse_net [
 
 # Now to parse the actual file:
 solution(lines) = length(garden_path(surely(head(lines)), parse_net(drop(2, lines))));
-solve(lines) = console!echo[str(solution(lines)), EOL];
+to solve(lines) is console!echo[str(solution(lines)), EOL];
 
 begin:
 length(garden_path(sample_guide, sample_net));

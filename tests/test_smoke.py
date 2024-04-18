@@ -31,12 +31,6 @@ def _good(folder, which) -> resolution.RoadMap:
 class ExampleSmokeTests(unittest.TestCase):
 	""" Run all the examples; Test for no smoke. """
 	
-	def test_alias(self):
-		""" The result of running a program is the value of its last expression. """
-		roadmap = _good(examples, "tutorial/alias")
-		result = executive.run_program(roadmap)
-		self.assertEqual(7, result)
-	
 	def test_turtle_examples_compile(self):
 		for name in ["turtle", "color_spiral", "simple_designs"]:
 			with self.subTest(name):
@@ -56,6 +50,7 @@ class ExampleSmokeTests(unittest.TestCase):
 			"hello_actors",
 			"hello_world",
 			"algorithm",
+			"tutorial/alias",
 			"tutorial/patron",
 			"tutorial/simple_calculations",
 			"tutorial/explicit_list_construction",

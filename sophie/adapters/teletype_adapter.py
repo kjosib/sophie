@@ -1,6 +1,6 @@
 import sys
 import random
-from ..runtime import iterate_list, Message
+from ..runtime import iterate_list, ParametricMessage
 from ..scheduler import NativeObjectProxy
 
 class Console:
@@ -11,11 +11,11 @@ class Console:
 		sys.stdout.flush()
 
 	@staticmethod
-	def read(target:Message):
+	def read(target:ParametricMessage):
 		target.dispatch_with(input())
 
 	@staticmethod
-	def random(target:Message):
+	def random(target:ParametricMessage):
 		target.dispatch_with(random.random())
 
 console = NativeObjectProxy(Console(), pin=False)
