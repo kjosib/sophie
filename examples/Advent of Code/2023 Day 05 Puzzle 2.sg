@@ -74,7 +74,7 @@ as_range(start, size) = range(start, start+size);
 
 range_overlaps(r1, r2) = r1.start < r2.stop and r2.start < r1.stop;
 
-solve(lines) = console ! echo[str(int(goal(lines))), EOL];
+to solve(lines) is console ! echo[str(int(goal(lines))), EOL];
 
 begin:
 

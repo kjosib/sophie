@@ -13,7 +13,7 @@ all_zero(xs) = all(map({x|x==0}, xs));
 last_or(otherwise, xs) = case xs of nil -> otherwise; cons -> last_or(xs.head, xs.tail); esac;
 
 
-solve(lines) = console!echo[str(solution(lines)), EOL];
+to solve(lines) is console!echo[str(solution(lines)), EOL];
 solution(lines) = sum(map(compose(extrapolate, nums_in), lines));
 
 begin:

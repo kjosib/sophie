@@ -12,7 +12,7 @@ import:
 
 define:
 
-solve_puzzle(lines) = console ! echo [str(sum(map(value_for, lines)))];
+to solve_puzzle(lines) is console ! echo [str(sum(map(value_for, lines)))];
 
 value_for(line) = case filter_maybe(scan(line)) as d1 of
     nil -> 0;

@@ -8,19 +8,19 @@ from . import syntax, primitive,  ontology
 from .stacking import Frame, RootFrame, Activation
 from .runtime import (
 	force, _strict, Constructor, Primitive, Thunk,
-	Action, ActorClass, ActorTemplate, iterate_list,
+	ActorClass, ActorTemplate, is_sophie_list, iterate_list,
 	reset, install_overrides
 )
 from .resolution import RoadMap
 from .scheduler import MAIN_QUEUE, SimpleTask
 
-def run_program(roadmap:RoadMap):
+DRIVERS = {}
 
-	drivers = {}
+def run_program(roadmap:RoadMap):
+	DRIVERS.clear()
 	_set_strictures(roadmap.preamble)
 	preamble_scope = roadmap.module_scopes[roadmap.preamble]
 	root = _dynamic_root(preamble_scope)
-	result = None
 	for module in roadmap.each_module:
 		_set_strictures(module)
 		env = Activation.for_module(root, module)
@@ -29,26 +29,29 @@ def run_program(roadmap:RoadMap):
 			if d.linkage is not None:
 				py_module = sys.modules[d.source.value]
 				linkage = [env.fetch(ref.dfn) for ref in d.linkage]
-				drivers.update(py_module.sophie_init(*linkage) or ())
+				DRIVERS.update(py_module.sophie_init(*linkage) or ())
 		install_overrides(env, module.user_operators)
 		for expr in module.main:
 			env.pc = expr
-			result = _strict(expr, env)
-			if isinstance(result, Action):
-				MAIN_QUEUE.execute(SimpleTask(result.perform))
-				continue
-			if isinstance(result, dict):
-				tag = result.get("")
-				if tag in drivers:
-					drivers[tag](env, result)
-					continue
-				dethunk(result)
-				if tag == 'cons':
-					result = list(iterate_list(result))
-			if result is not None:
-				print(result)
+			MAIN_QUEUE.execute(SimpleTask(_display, expr, env))
 		root.absorb(env)
-	return result
+
+def _display(expr, env):
+	result = _strict(expr, env)
+	if hasattr(result, "perform"):
+		result.perform(env)
+		return
+	if is_sophie_list(result):
+		result = list(iterate_list(result))
+	elif isinstance(result, dict):
+		tag = result.get("")
+		if tag in DRIVERS:
+			DRIVERS[tag](env, result)
+			return
+		dethunk(result)
+	if result is not None:
+		print(result)
+
 
 def _set_strictures(module):
 	for udf in module.all_fns + module.all_procs:

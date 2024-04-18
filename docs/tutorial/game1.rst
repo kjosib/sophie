@@ -33,7 +33,7 @@ Here's an excerpt for that part::
 
     define:
         intro = ["I have chosen a random number from 1 to 100.", EOL, EOL];
-        game(r) = turn(1) where
+        to game(r) is turn(1) where
             goal = int(r*100)+1;
             ...
         ...
@@ -74,7 +74,7 @@ Actions are values.
     You can pass them around to functions, hold them in data structures,
     and select among them as you would with any other kind of value.
     The only way an action actually *gets done* is when an expression in the ``begin:`` section
-    evaluates to an action.
+    evaluates to an action -- which can possibly kick off a cascade of consequences.
 
 ``echo``
     The ``echo`` message asks the console to print some text.
@@ -90,16 +90,18 @@ Actions are values.
     1.  Pick a real number at random in the half-open range [0, 1).
     2.  Send that number *via message* to ... somewhere. I'll explain.
 
-``game``
-    By now you know that ``game`` is a function which takes a single argument.
+``to game(r) is ...``
+    The thing called ``game`` is a *procedure* which takes a single argument.
     (In this case, that argument is a number that determines the goal of the game.)
-    The *result* of calling ``game`` is some *action* which can take place.
-    And in **Sophie**, the only way to make action happen is to send messages around.
+
+    There is a strict separation between *functions* and *procedures*.
+    The point of a procedure is to encode some action that might happen.
+    And in **Sophie**, the way to make things happen is to send messages around.
     In particular, we'll soon see how ``game(r)`` represents the *procedure* of
     sending messages precisely orchestrated to implement a simple children's game.
 
 ``!game``
-    The ``game`` function evaluates to the *procedure* to play the game.
+    The ``game`` procedure is to play the game.
     But the ``console``'s ``random`` message does not expect a procedure.
     It expects to send a message.
 
@@ -120,7 +122,7 @@ It's job is to prompt for a guess and then interpret that guess as either too hi
 
     game(r) = turn(1) where
         goal = int(r*100)+1;
-        turn(score) = do
+        to turn(score) is do
             console ! echo ["What is your guess? "];
             console ! read(!guess);
         end where
@@ -152,7 +154,7 @@ Analyzing Input: Selection
 Evidently, ``guess`` must analyze the input. Before we worry about comparing the guess to the goal,
 there's another important possibility. The player might enter something which is not a number::
 
-        guess(g) = case val(g) as v of
+        to guess(g) is case val(g) as v of
             this -> consider(int(v.item));
             nope -> do
                 console ! echo ["I didn't grok that number.", EOL];
@@ -183,17 +185,17 @@ Evaluating a Guess
 
 Now let's see what happens if the input actually *is* a number::
 
-        consider(g:number) = case
+        to consider(g:number) is case
             when g > goal then go_again('Too high. Try a lower number.');
             when g < goal then go_again('Too low. Try a higher number.');
             else win;
         esac;
         
-This function ``consider`` is probably about what you'd expect.
+This procedure ``consider`` is probably about what you'd expect.
 Unsurprising code is virtuous code. But we do have two more words to define::
         
-        go_again(text) = do console ! echo [text, EOL]; turn(score+1); end;
-        win = console ! echo ["You win after ", str(score), " guesses!", EOL];
+        to go_again(text) is do console ! echo [text, EOL]; turn(score+1); end;
+        to win is console ! echo ["You win after ", str(score), " guesses!", EOL];
 
 Things of particular interest here:
 

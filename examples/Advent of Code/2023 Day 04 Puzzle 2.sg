@@ -34,7 +34,7 @@ copies_per_game(wins:list[number], copies:list[number]):list[number]
 	esac;
 esac;
 
-solve(lines) = console ! echo[str(goal(lines)), EOL];
+to solve(lines) is console ! echo[str(goal(lines)), EOL];
 
 begin:
 

@@ -19,7 +19,7 @@ import:
 
 define:
 
-solve(lines) = console ! echo[str(goal(lines)), EOL];
+to solve(lines) is console ! echo[str(goal(lines)), EOL];
 goal(lines) = sum(map(parse_game, lines));
 
 parse_game(line) = game_id if possible_game(cut.snd) else 0 where

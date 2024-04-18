@@ -10,7 +10,7 @@ import:
 
 define:
     
-    solve_puzzle(lines) = console ! echo [str(sum(map(value_for, lines)))];
+    to solve_puzzle(lines) is console ! echo [str(sum(map(value_for, lines)))];
     
     value_for(line) = case map(digit_value, filter(is_digit, each_chr(line))) as dvs of
         cons -> 10 * dvs.head + last(dvs.head, dvs.tail);

@@ -55,7 +55,7 @@ part_number_points(lines) = rolling_combinations(merge3, map(symbol_indices, lin
 
 # Now I need the list of digit ranges.
 
-solve(lines) = console ! echo[str(goal(lines)), EOL];
+to solve(lines) is console ! echo[str(goal(lines)), EOL];
 goal(lines) = sum(flat(map2(part_numbers, range_matrix(lines), part_number_points(lines))));
 
 

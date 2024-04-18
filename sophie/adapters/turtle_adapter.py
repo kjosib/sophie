@@ -2,12 +2,11 @@ from ..runtime import force, iterate_list
 from ..scheduler import NativeObjectProxy, MAIN_QUEUE, SimpleTask
 import turtle, tkinter
 
-def sophie_init():
-	return {'drawing':some_turtle_graphics}
+def sophie_init(drawing):
+	return {drawing.key:some_turtle_graphics}
 
 def some_turtle_graphics(env, drawing):
-	task = SimpleTask(worker.accept_message, "draw", (env, drawing))
-	MAIN_QUEUE.execute(task)
+	worker.accept_message("draw", (env, drawing))
 
 class Worker:
 	@staticmethod
@@ -46,7 +45,7 @@ class TurtleGraphics:
 	def block(self, steps):
 		t = self.yertle
 		for (tag, *args) in steps:
-			getattr(t, tag)(*args)
+			getattr(t, tag.nom.text)(*args)
 		t.screen.update()
 	
 	def finish(self, stepCount):

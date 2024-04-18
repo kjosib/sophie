@@ -26,7 +26,7 @@ import pygame
 from typing import Optional
 from pygame import draw, gfxdraw
 
-from ..runtime import iterate_list, force, Message, Action
+from ..runtime import iterate_list, force, ParametricMessage
 from ..scheduler import NativeObjectProxy
 
 linkage = {}
@@ -62,22 +62,22 @@ class GameLoop:
 	The alt-F4 quit-key combination comes across as a quit event, though.
 	"""
 	def __init__(self):
-		self._on_quit:Optional[Action] = None
-		self._on_mouse:Optional[Message] = None
-		self._on_button_down:Optional[Message] = None
-		self._on_button_up:Optional[Message] = None
-		self._on_key_down:Optional[Message] = None
-		self._on_key_up:Optional[Message] = None
-		self._on_tick:Optional[Message] = None
+		self._on_quit = None
+		self._on_mouse:Optional[ParametricMessage] = None
+		self._on_button_down:Optional[ParametricMessage] = None
+		self._on_button_up:Optional[ParametricMessage] = None
+		self._on_key_down:Optional[ParametricMessage] = None
+		self._on_key_up:Optional[ParametricMessage] = None
+		self._on_tick:Optional[ParametricMessage] = None
 	pass
 	
-	def on_quit(self, action:Action): self._on_quit = action
-	def on_mouse(self, message:Message): self._on_mouse = message
-	def on_button_down(self, message:Message): self._on_button_down = message
-	def on_button_up(self, message:Message): self._on_button_up = message
-	def on_key_down(self, message:Message): self._on_key_down = message
-	def on_key_up(self, message:Message): self._on_key_up = message
-	def on_tick(self, message:Message): self._on_tick = message
+	def on_quit(self, action): self._on_quit = action
+	def on_mouse(self, message:ParametricMessage): self._on_mouse = message
+	def on_button_down(self, message:ParametricMessage): self._on_button_down = message
+	def on_button_up(self, message:ParametricMessage): self._on_button_up = message
+	def on_key_down(self, message:ParametricMessage): self._on_key_down = message
+	def on_key_up(self, message:ParametricMessage): self._on_key_up = message
+	def on_tick(self, message:ParametricMessage): self._on_tick = message
 
 	def play(self, size, fps):
 		pygame.init()

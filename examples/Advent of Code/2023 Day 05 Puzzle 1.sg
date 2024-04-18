@@ -34,7 +34,7 @@ convert_one(nr, range_maps:list[RangeMap]) = case range_maps of
 	end cons;
 esac;
 
-solve(lines) = console ! echo[str(int(goal(lines))), EOL];
+to solve(lines) is console ! echo[str(int(goal(lines))), EOL];
 
 begin:
 
