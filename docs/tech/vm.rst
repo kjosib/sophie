@@ -1958,3 +1958,20 @@ While driving home, I figured the problem must be that I hadn't yet clearly codi
 all the semantics around the intersection of procedural abstraction with (a-)synchrony.
 So probably the next step is to make a nice state chart.
 That will have to live in the *tech* section of the manual.
+
+22 April 2024
+--------------
+
+Recently the language gained a distinctive "procedure" concept.
+The point is to resolve the "migrating computation" problem
+by clarifying some subtle ambiguities in the type system.
+I wanted to adjust the compiler to take full advantage of the new semantics.
+That means the ``perform()`` routine is now a loop.
+Furthermore, the ``OP_PERFORM_EXEC`` instruction goes away,
+as a procedure can now either ``OP_RETURN`` or ``OP_EXEC`` its own final action,
+and the surrounding ``perform()`` call will do the right thing.
+
+The ``OP_DISPLAY`` instruction gets (mostly) rolled into ``perform()``.
+The remaining bit is the ``drain_queue()`` call, which is now its own ``OP_DRAIN``.
+It's safe to call this without having enqueued a message,
+because it will just return immediately.

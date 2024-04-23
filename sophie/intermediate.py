@@ -11,7 +11,7 @@ Sophie interpreter. That still subjects your program to all normal syntax and ty
 but if that passes, then you get corresponding VM intermediate code on standard output.
 """
 
-from typing import Iterable, Optional, Sequence
+from typing import Iterable, Optional
 from boozetools.support.foundation import Visitor
 from . import syntax, ontology, primitive
 from .resolution import RoadMap
@@ -113,15 +113,16 @@ class VMScope:
 		for sym in symbols:
 			self.declare(sym)
 
-	def write_one_function(self, fn: syntax.UserFunction):
-		inner = VMFunctionScope(self, fn.nom.text, is_thunk=not fn.params)
+	def write_one_subroutine(self, fn: syntax.Subroutine):
+		inner = VMFunctionScope(self, fn.nom.text, is_thunk=fn.is_thunk())
 		emit(len(fn.params), quote(MANGLED[fn]))
 		for param in fn.params:
 			inner.declare(param)
 			if param.is_strict:
 				inner.make_strict(param)
 		inner.write_inner_functions(fn.where)
-		TAIL.visit(fn.expr, inner)
+		context = LAST if isinstance(fn, syntax.UserProcedure) else TAIL
+		context.visit(fn.expr, inner)
 		inner.emit_epilogue()
 
 class VMGlobalScope(VMScope):
@@ -139,10 +140,10 @@ class VMGlobalScope(VMScope):
 		inner = VMFunctionScope(self, "[BEGIN]", is_thunk=True)
 		for index, expr in enumerate(module.main):
 			inner.nl()
-			FORCE.visit(expr, inner)
-			inner.display()
+			STEP.visit(expr, inner)
+			inner.emit_drain()
 	
-	def write_outer_functions(self, fns:list[syntax.UserFunction]):
+	def write_outer_functions(self, fns:list[syntax.Subroutine]):
 		self.mangle_names(fns)
 		for fn in fns:
 			self.nl()
@@ -152,7 +153,7 @@ class VMGlobalScope(VMScope):
 					emit(quote(MANGLED[token]))
 			else:
 				emit(".fn")
-			self.write_one_function(fn)
+			self.write_one_subroutine(fn)
 	
 	def declare(self, symbol: ontology.Symbol):
 		pass
@@ -332,15 +333,17 @@ class VMFunctionScope(VMScope):
 			else:
 				emit(self._captives[sym])
 	
-	def display(self):
-		assert self._depth == 1, self.depth()
-		emit("DISPLAY")
-		self._pop()
+	def emit_drain(self):
+		assert self._depth == 0, self.depth()
+		emit("DRAIN")
 	
 	def ascend_to(self, depth:int):
 		assert self._depth >= depth
-		if self._depth > depth:
-			emit("ASCEND", self._depth - depth)
+		nr_levels = self._depth - depth
+		if nr_levels == 1:
+			self._pop()
+		elif nr_levels > 1:
+			emit("ASCEND", nr_levels)
 			self._depth = depth
 	
 	def emit_call(self, arity):
@@ -369,19 +372,17 @@ class VMFunctionScope(VMScope):
 		self._push()
 
 	def emit_return(self):
+		assert self._depth
 		emit("RETURN")
 		self._depth = None
 
 	def emit_force_return(self):
+		assert self._depth
 		emit("FORCE_RETURN")
 		self._depth = None
 
 	def emit_exec(self):
 		emit("EXEC")
-		self._depth = None
-
-	def emit_perform_exec(self):
-		emit("PERFORM_EXEC")
 		self._depth = None
 
 	def emit_nil(self):
@@ -435,7 +436,7 @@ class VMFunctionScope(VMScope):
 		self.nl()
 		last = fns[-1]
 		for fn in fns:
-			self.write_one_function(fn)
+			self.write_one_subroutine(fn)
 			emit("}" if fn is last else ";")
 			self.nl()
 
@@ -592,10 +593,15 @@ class EagerContext(Context):
 			scope.come_from(label)
 		pass
 	
-	@staticmethod
-	def sequel(scope:VMFunctionScope, depth:int, more:bool):
+	def sequel(self, scope:VMFunctionScope, depth:int, more:bool):
 		""" Called at the end of a consequence. """
-		raise NotImplementedError()
+		raise NotImplementedError(type(self))
+
+	def visit_BinExp(self, it: syntax.BinExp, scope:VMFunctionScope):
+		FORCE.visit(it.lhs, scope)
+		FORCE.visit(it.rhs, scope)
+		scope.emit_ALU(it.op.text)
+		self.answer(scope)
 
 	def visit_UnaryExp(self, ux:syntax.UnaryExp, scope:VMFunctionScope):
 		FORCE.visit(ux.arg, scope)
@@ -610,28 +616,28 @@ class EagerContext(Context):
 		scope.come_from(label)
 		self.answer(scope)
 		
-	@staticmethod
-	def answer(scope: VMFunctionScope):
+	@classmethod
+	def answer(cls, scope: VMFunctionScope):
 		""" Answer is on stack; now what? """
-		raise NotImplementedError()
+		raise NotImplementedError(cls)
 	
 	def visit_Literal(self, expr: syntax.Literal, scope: VMFunctionScope):
 		scope.constant(expr.value)
 		self.answer(scope)
 	
-	@staticmethod
-	def visit_LambdaForm(lf:syntax.LambdaForm, scope: VMFunctionScope):
+	def visit_LambdaForm(self, lf:syntax.LambdaForm, scope: VMFunctionScope):
 		# Two steps:
 		# 1. Emit the function.
 		scope.mangle_names([lf.function])
 		scope.declare(lf.function)
 		emit("{")
-		scope.write_one_function(lf.function)
+		scope.write_one_subroutine(lf.function)
 		emit("}")
 		# No need to explicitly load the function;
 		# the assembler does it on account of the close-brace.
 		# do not call scope.load(lf.function)
-		
+		self.answer(scope)
+
 	def visit_FieldReference(self, fr: syntax.FieldReference, scope: VMFunctionScope):
 		FORCE.visit(fr.lhs, scope)
 		scope.emit_read_field(fr.field_name.key())
@@ -649,16 +655,18 @@ class EagerContext(Context):
 		FORCE.visit(expr.receiver, scope)
 		emit("BIND", quote(expr.method_name.key()))
 		self.answer(scope)
-
+	
+	def visit_Lookup(self, expr: syntax.Lookup, scope: VMFunctionScope):
+		sym = expr.ref.dfn
+		scope.load(sym)
+		if symbol_harbors_thunks(sym):
+			emit("FORCE")
+		self.answer(scope)
 
 class FunctionContext(EagerContext):
 
 	def visit_DoBlock(self, do:syntax.DoBlock, outer:VMFunctionScope):
-		inner = outer.enter_gensym()
-		LAST.visit(do, inner)
-		inner.emit_epilogue()
-		emit("}")
-		self.answer(outer)
+		assert False, outer._prefix+": This should be neither possible nore necessary anymore."
 	
 	def visit_AsTask(self, task:syntax.AsTask, scope:VMFunctionScope):
 		FORCE.visit(task.proc_ref, scope)
@@ -671,35 +679,20 @@ class FunctionContext(EagerContext):
 
 		
 class ForceContext(FunctionContext):
-	@staticmethod
-	def visit_Lookup(expr:syntax.Lookup, scope:VMFunctionScope):
-		sym = expr.ref.dfn
-		scope.load(sym)
-		if symbol_harbors_thunks(sym):
-			emit("FORCE")
-	
 	def call(self, scope: VMFunctionScope, arity:int):
 		scope.emit_call(arity)
 	
-	@staticmethod
-	def sequel(scope:VMFunctionScope, depth:int, more:bool):
+	def sequel(self, scope:VMFunctionScope, depth:int, more:bool):
 		scope.ascend_to(depth)
 		if more:
 			return scope.jump_always()
 	
-	@staticmethod
-	def visit_BinExp(it: syntax.BinExp, scope:VMFunctionScope):
-		FORCE.visit(it.lhs, scope)
-		FORCE.visit(it.rhs, scope)
-		scope.emit_ALU(it.op.text)
-
-	@staticmethod
-	def answer(scope: VMFunctionScope):
+	@classmethod
+	def answer(cls, scope: VMFunctionScope):
 		""" Just leave the answer on the stack. """
 		pass
 
-	@staticmethod
-	def visit_Cond(cond:syntax.Cond, scope:VMFunctionScope):
+	def visit_Cond(self, cond:syntax.Cond, scope:VMFunctionScope):
 		FORCE.visit(cond.if_part, scope)
 		label_else = scope.jump_if(False)
 		FORCE.visit(cond.then_part, scope)
@@ -710,8 +703,7 @@ class ForceContext(FunctionContext):
 		scope.come_from(after)
 
 class TailContext(FunctionContext):
-	@staticmethod
-	def visit_Lookup(expr:syntax.Lookup, scope:VMFunctionScope):
+	def visit_Lookup(self, expr:syntax.Lookup, scope:VMFunctionScope):
 		sym = expr.ref.dfn
 		scope.load(sym)
 		if symbol_harbors_thunks(sym):
@@ -722,12 +714,12 @@ class TailContext(FunctionContext):
 	def call(self, scope: VMFunctionScope, arity:int):
 		scope.emit_exec()
 	
-	@staticmethod
-	def sequel(scope:VMFunctionScope, depth:int, more:bool):
+	def sequel(self, scope:VMFunctionScope, depth:int, more:bool):
+		# Nothing to do here because the alternatives all end with
+		# something that quits this scope.
 		pass
 	
-	@staticmethod
-	def visit_BinExp(it: syntax.BinExp, scope:VMFunctionScope):
+	def visit_BinExp(self, it: syntax.BinExp, scope:VMFunctionScope):
 		FORCE.visit(it.lhs, scope)
 		FORCE.visit(it.rhs, scope)
 		if it.op.text == "<=>":
@@ -736,30 +728,27 @@ class TailContext(FunctionContext):
 			scope.emit_ALU(it.op.text)
 			scope.emit_return()
 
-	@staticmethod
-	def answer(scope:VMFunctionScope):
+	@classmethod
+	def answer(cls, scope:VMFunctionScope):
 		""" Have answer on stack; time to return it. """
 		scope.emit_return()
 
-	@staticmethod
-	def visit_Cond(cond:syntax.Cond, scope:VMFunctionScope):
+	def visit_Cond(self, cond:syntax.Cond, scope:VMFunctionScope):
 		FORCE.visit(cond.if_part, scope)
 		label_else = scope.jump_if(False)
-		TAIL.visit(cond.then_part, scope)
+		self.visit(cond.then_part, scope)
 		scope.come_from(label_else)
-		TAIL.visit(cond.else_part, scope)
+		self.visit(cond.else_part, scope)
 
 
 class ProcContext(EagerContext):
 	
-	def call(self, scope: VMFunctionScope, arity:int):
-		scope.emit_call(arity)
-		self.perform(scope)
-
-	def perform(self, scope: VMFunctionScope):
-		raise NotImplementedError(type(self))
-
 	def semicolon(self, scope: VMFunctionScope):
+		# This is a terrible name.
+		# The concept is to put whatever happens after
+		# assembling either an assignment or a skip,
+		# meaning not a transfer-of-control.
+		# In LastContext, that means a RETURN instruction.
 		raise NotImplementedError(type(self))
 
 	def visit_DoBlock(self, do: syntax.DoBlock, scope: VMFunctionScope):
@@ -787,28 +776,30 @@ class ProcContext(EagerContext):
 		self.semicolon(scope)
 	
 class StepContext(ProcContext):
-	def perform(self, scope: VMFunctionScope):
+	def call(self, scope: VMFunctionScope, arity: int):
+		scope.emit_call(arity)
+		scope.emit_perform()
+	
+	def answer(self, scope: VMFunctionScope):
 		scope.emit_perform()
 
 	def semicolon(self, scope: VMFunctionScope):
 		pass
-
+	
+StepContext.sequel = ForceContext.sequel
 
 class LastContext(ProcContext):
 	""" The procedural context just before return-to-caller """
-	def perform(self, scope: VMFunctionScope):
-		scope.emit_perform_exec()
-		
-	def semicolon(self, scope: VMFunctionScope):
-		scope.emit_return()
 
-	@staticmethod
-	def visit_Cond(cond:syntax.Cond, scope:VMFunctionScope):
-		FORCE.visit(cond.if_part, scope)
-		label_else = scope.jump_if(False)
-		LAST.visit(cond.then_part, scope)
-		scope.come_from(label_else)
-		LAST.visit(cond.else_part, scope)
+	def semicolon(self, scope: VMFunctionScope):
+		scope.emit_skip()
+		scope.emit_return()
+	
+LastContext.call = TailContext.call
+LastContext.answer = TailContext.answer
+LastContext.visit_Cond = TailContext.visit_Cond
+LastContext.sequel = TailContext.sequel
+
 
 
 DELAY = LazyContext()

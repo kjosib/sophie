@@ -133,20 +133,18 @@ Instruction instruction[] = {
 	[OP_JT] = {"JT", &modeJump},
 	[OP_JMP] = {"JMP", &modeJump},
 	[OP_CASE] = {"CASE", &modeCase},
-	[OP_DISPLAY] = {"DISPLAY", &modeSimple},
-
 	[OP_FIELD] = {"FIELD", &modeString},
+
 	[OP_SNOC] = {"SNOC", &modeSimple},
 	[OP_THUNK] = {"THUNK", &modeThunk},
 	[OP_BIND] = {"BIND", &modeString},
 	[OP_TASK] = {"TASK", &modeSimple},
-
 	[OP_PERFORM] = {"PERFORM", &modeSimple},
-	[OP_PERFORM_EXEC] = {"PERFORM_EXEC", &modeSimple},
+
 	[OP_SKIP] = {"SKIP", &modeSimple},
 	[OP_CAST] = {"CAST", &modeSimple},
 	[OP_MEMBER] = {"MEMBER", &modeImmediate},
-
 	[OP_ASSIGN] = {"ASSIGN", &modeImmediate},
+	[OP_DRAIN] = {"DRAIN", &modeSimple},
 };
 
