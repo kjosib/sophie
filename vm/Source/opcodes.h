@@ -42,21 +42,19 @@ typedef enum {
 	OP_JT,
 	OP_JMP,
 	OP_CASE,
-	OP_DISPLAY,
-
 	OP_FIELD,
+
 	OP_SNOC,
 	OP_THUNK,
 	OP_BIND,
 	OP_TASK,
-
 	OP_PERFORM,
-	OP_PERFORM_EXEC,
+
 	OP_SKIP,
 	OP_CAST,
 	OP_MEMBER,
-
 	OP_ASSIGN,
+	OP_DRAIN,
 
 	NR_OPCODES,
 } OpCode;

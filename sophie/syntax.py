@@ -227,6 +227,9 @@ class Subroutine(Term):
 	expr: ValExpr
 	where: Sequence["Subroutine"]
 	strictures: tuple[int, ...] # Tree-walking runtime uses this.
+	def is_thunk(self) -> bool:
+		""" So the compiler can decide how to encode these things """
+		raise NotImplementedError(type(self))
 
 class UserFunction(Subroutine):
 	namespace: NS
@@ -247,6 +250,9 @@ class UserFunction(Subroutine):
 			
 	def head(self) -> slice:
 		return self.nom.head()
+	
+	def is_thunk(self) -> bool:
+		return not self.params
 	
 	def __repr__(self):
 		p = ", ".join(map(str, self.params))
@@ -311,6 +317,9 @@ class UserProcedure(Subroutine):
 		for p in self.params: p.is_strict = True
 		self.expr = expr
 		self.where = _bookend(nom, where)
+	
+	def is_thunk(self) -> bool:
+		return False
 
 class Literal(ValExpr):
 	def __init__(self, value: Any, a_slice: slice):

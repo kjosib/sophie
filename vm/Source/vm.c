@@ -122,15 +122,34 @@ static double knuth_mod(double numerator, double denominator) {
 
 void perform() {
 	// Where all the action happens, so to speak.
-	if (IS_CLOSURE(TOP)) vm_run();
-	else if(IS_GC_ABLE(TOP)) {
-		// By definition this must be either a message or a bound-method.
-		// Either way, the proper response is to enqueue the thing.
-		enqueue_message(pop());
+	while (1) {
+		switch (INDICATOR(TOP)) {
+		case IND_GC:
+		{
+			GC *item = AS_GC(TOP);
+			if (item->kind->proceed) {
+				enqueue_message(pop());
+			}
+			else {
+				printObjectDeeply(AS_GC(TOP));
+				pop();
+				printf("\n");
+			}
+			return;
+		}
+		case IND_CLOSURE:
+			push(vm_run());
+			break;
+		case IND_UNSET:
+			pop();
+			return;
+		default:
+			print_simply(TOP);
+			pop();
+			printf("\n");
+			return;
+		}
 	}
-	else if (IS_UNSET(TOP)) {
-		// Overloaded here to mean the empty action
-	} else crashAndBurn("Can't perform a %s action.", valKind(TOP));
 }
 
 static int type_index_for_value(Value v) {
@@ -183,6 +202,15 @@ static bool is_two_numbers() { return IS_NUMBER(SND) && IS_NUMBER(TOP); }
 
 #define BIN_EXP(exp, bop) do { if (is_two_numbers()) merge(NUMBER_VAL(exp)); else vm_double_dispatch(bop); } while (0)
 #define BIN_OP(op, bop) BIN_EXP(AS_NUMBER(SND) op AS_NUMBER(TOP), bop)
+
+#define EXEC do { \
+	closure = AS_CLOSURE(pop()); \
+	int arity = closure->function->arity; \
+	memmove(base, vm.stackTop - arity, arity * sizeof(Value)); \
+	vm.stackTop = base + arity; \
+	goto enter; \
+} while (0)
+
 
 Value vm_run() {
 	Closure *closure = AS_CLOSURE(pop());
@@ -297,15 +325,9 @@ dispatch:
 			switch (INDICATOR(TOP)) {
 			case IND_THUNK:
 				if (DID_SNAP(TOP)) YIELD(SNAP_RESULT(AS_CLOSURE(TOP)));
-				// Fall through to VAL_CLOSURE:
+				// Fall through to IND_CLOSURE:
 			case IND_CLOSURE:
-			{
-				closure = AS_CLOSURE(pop());
-				int arity = closure->function->arity;
-				memmove(base, vm.stackTop - arity, arity * sizeof(Value));
-				vm.stackTop = base + arity;
-				goto enter;
-			}
+				EXEC;
 			case IND_GC:  // i.e. native function
 				YIELD(apply());
 			default:
@@ -341,34 +363,6 @@ dispatch:
 			base[index] = force(base[index]);
 			NEXT;
 		}
-		case OP_DISPLAY:
-			switch (INDICATOR(TOP)) {
-			case IND_GC:
-			{
-				GC *item = AS_GC(TOP);
-				if (item->kind->proceed) {
-					enqueue_message(pop());
-					drain_the_queue();
-				}
-				else {
-					printObjectDeeply(AS_GC(TOP));
-					pop();
-					printf("\n");
-				}
-				NEXT;
-			}
-			case IND_CLOSURE:
-				if (AS_CLOSURE(TOP)->function->arity == 0) {
-					vm_run();
-					drain_the_queue();
-					NEXT;
-				}
-			default:
-				print_simply(TOP);
-				pop();
-				printf("\n");
-				NEXT;
-			}
 		case OP_JF:
 			if (AS_BOOL(TOP)) SKIP_AND_POP();
 			else LEAP();
@@ -424,22 +418,6 @@ dispatch:
 		case OP_PERFORM:
 			perform();
 			NEXT;
-		case OP_PERFORM_EXEC:
-			switch (INDICATOR(TOP)) {
-			case IND_UNSET: YIELD(UNSET_VAL);
-			case IND_CLOSURE:
-			{
-				closure = AS_CLOSURE(pop());
-				assert(0 == closure->function->arity);
-				vm.stackTop = base;
-				goto enter;
-			}
-			case IND_GC:
-				enqueue_message(TOP);
-				YIELD(UNSET_VAL);
-			default:
-				crashAndBurn("Can't yet handle a %s action.", valKind(TOP));
-			}
 		case OP_SKIP:
 			push(UNSET_VAL);  // Something that will get treated as an empty action.
 			NEXT;
@@ -460,6 +438,9 @@ dispatch:
 			vm.stackTop -= 2;
 			NEXT;
 		}
+		case OP_DRAIN:
+			drain_the_queue();
+			NEXT;
 		default:
 			runtimeError(vpc, base, "Unrecognized instruction %d.", vpc[-1]);
 		}
