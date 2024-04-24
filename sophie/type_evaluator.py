@@ -171,6 +171,15 @@ class DependencyPass(TopDown):
 	def visit_QualifiedReference(self, ref:syntax.QualifiedReference, env:Symbol):
 		pass
 
+	def visit_SelfReference(self, ref:syntax.SelfReference, env:Symbol):
+		"""
+		The SELF type need not participate here. Calling-conventions notwithstanding,
+		it's not a formal parameter for this purpose. Rather, SELF is completely
+		described by its agent-class and the types of the agent parameters.
+		These are already in the lexical scope, and they do the right things.
+		"""
+		pass
+
 	def visit_MatchExpr(self, mx: syntax.MatchExpr, env:Symbol):
 		self._prepare(mx.subject, env)
 		self._outflows[mx.subject].add(env)

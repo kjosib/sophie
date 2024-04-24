@@ -52,6 +52,10 @@ class PlainReference(Reference):
 	def head(self) -> slice: return self.nom.head()
 	def __repr__(self): return "<ref:%s>"%self.nom.text
 
+class SelfReference(Reference):
+	def head(self) -> slice: return self.nom.head()
+	def __repr__(self): return "<SELF>"
+
 class MemberReference(Reference):
 	def head(self) -> slice: return self.nom.head()
 	def __repr__(self): return "<my %s>"%self.nom.text
