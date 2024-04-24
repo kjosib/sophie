@@ -1975,3 +1975,15 @@ The ``OP_DISPLAY`` instruction gets (mostly) rolled into ``perform()``.
 The remaining bit is the ``drain_queue()`` call, which is now its own ``OP_DRAIN``.
 It's safe to call this without having enqueued a message,
 because it will just return immediately.
+
+23 April 2024
+--------------
+
+The VM now handles overloaded comparison operators,
+including the special case of ``<=>`` in tail-call position.
+
+The stimulus to finish this was when I tried to compile and run
+some (still incomplete) code for an Advent-of-Code challenge.
+Now it compiles and runs on the VM, but solves the wrong problem.
+Once I get it solving the *stated* problem,
+it will probably be time to draft a release.

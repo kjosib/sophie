@@ -4,6 +4,7 @@ Read this to get a general idea of what's new and nontrivial.
 
 ## April 2024
 
+* 23 April: Various bugs and oversights fixed. 
 * 22 April: Change compiler and VM to new procedure semantics. Some thing get simpler.
 * 17 April: Got the tree-walker fully working again with the new procedure semantics.
   (This includes turtle graphics and list displays, which had broken some time back.)
