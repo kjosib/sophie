@@ -165,11 +165,17 @@ static int type_index_for_value(Value v) {
 	}
 }
 
-static void vm_double_dispatch(BopType bop) {
+static void vm_double_resolve(BopType bop) {
+	// Leaves the correct callable object at top-of-stack.
 	VTable *vt = &vmap.at[type_index_for_value(SND)];
 	DispatchTable *dt = &vt->dt[bop];
 	push(find_dispatch(dt, type_index_for_value(TOP)));
 	assert(IS_GC_ABLE(TOP));
+}
+
+static void vm_double_dispatch(BopType bop) {
+	// Resolves the dispatch and performs the call.
+	vm_double_resolve(bop);
 	push(apply());
 }
 
@@ -299,6 +305,14 @@ dispatch:
 			if (is_two_numbers()) merge(compare_numbers(AS_NUMBER(SND), AS_NUMBER(TOP)));
 			else vm_double_dispatch(BOP_CMP);
 		NEXT;
+		case OP_CMP_EXEC:
+			if (is_two_numbers()) {
+				YIELD(compare_numbers(AS_NUMBER(SND), AS_NUMBER(TOP)));
+			}
+			else {
+				vm_double_resolve(BOP_CMP);
+				EXEC;
+			}
 		case OP_POWER: BIN_EXP(pow(AS_NUMBER(SND), AS_NUMBER(TOP)), BOP_POW); NEXT;
 		case OP_MULTIPLY: BIN_OP(*, BOP_MUL); NEXT;
 		case OP_DIVIDE: BIN_OP(/, BOP_DIV); NEXT;
