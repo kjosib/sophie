@@ -5,7 +5,7 @@
 	"patterns": [
 		{
 			"name": "keyword.control.sophie",
-			"match": "(?i)\\b(as|case|esac|else|end|if|is|of|when|then|agent|to|do|cast|where|strict)\\b"
+			"match": "(?i)\\b(as|case|esac|else|end|if|is|of|when|then|agent|to|do|cast|where|strict|self)\\b"
 		}, {
 			"name": "keyword.operator.sophie",
 			"match": "(?i)\\b(and|or|not|div|mod|absurd)\\b"
