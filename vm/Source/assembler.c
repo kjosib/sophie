@@ -393,6 +393,9 @@ static void parseDefinitions() {
 		case TOKEN_MOD:
 			parse_binop(BOP_MOD);
 			break;
+		case TOKEN_CMP:
+			parse_binop(BOP_CMP);
+			break;
 		case TOKEN_NEG:
 			parse_neg();
 			break;

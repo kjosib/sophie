@@ -723,7 +723,7 @@ class TailContext(FunctionContext):
 		FORCE.visit(it.lhs, scope)
 		FORCE.visit(it.rhs, scope)
 		if it.op.text == "<=>":
-			emit("TAIL_CMP")
+			emit("CMP_EXEC")
 		else:
 			scope.emit_ALU(it.op.text)
 			scope.emit_return()
