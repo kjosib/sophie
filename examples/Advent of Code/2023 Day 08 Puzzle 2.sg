@@ -1,0 +1,96 @@
+# I spent some time away and when I re-read the problem description, it didn't seem quite so crazy anymore.
+# There is a way to break this problem into much simpler parts.
+
+# This attempt is not finished yet, but it does exercise some newer language features as it stands,
+# so I'll go ahead and check it in unfinished and get back to it.
+
+import:
+	sys."tree" (search, Tree, in_order, assign);
+	"common" (filter_maybe, lex);
+	"2023 Day 08 common" (node, parse_net);
+
+type:
+	Camel is (label:string, steps_taken:number);
+	Puzzle is (directions: string, network: Tree[string, node] );
+
+define:
+
+# Some terms:
+# An "oasis" is a node ending in "Z". These are where a Camel can stop.
+is_oasis(label:string) = right(label, 1) == "Z";
+# A starting node has a label ending in "A". The Puzzle says Camels start here.
+is_start(label:string) = right(label, 1) == "A";
+
+# How to parse a Puzzle:
+parse_Puzzle(lines) = Puzzle(trim(surely(head(lines))), parse_net(drop(2, lines)));
+
+# Given a Puzzle and a Camel, we'd like to know the Camel that comes to rest at an oasis:
+comes_to_rest(puzzle:Puzzle, camel:Camel) = camel if is_oasis(camel.label) else comes_to_rest(puzzle, next_camel) where
+	next_camel = Camel(next_node, camel.steps_taken+1);
+	here:node = surely(search(puzzle.network, camel.label));
+	next_node = here.left if dir=="L" else here.right;
+	dir = mid(puzzle.directions, camel.steps_taken mod len(puzzle.directions), 1);
+end comes_to_rest;
+
+# I want to memoize such computations so that similar ones take very little compute time.
+# Memoization is stateful, so this calls for an actor.
+# The actor only really needs one method.
+
+agent Camel_Memo(puzzle:Puzzle, memo:Tree) as
+	to advance(camel:Camel, reply) is case search(my memo, proxy) as s of
+		this -> reply(unproxy(s.item));
+		nope -> do
+			my memo := assign(my memo, entry(proxy, comes_to_rest(my puzzle, proxy)));
+			self ! advance(camel, reply);
+		end;
+	esac where
+		modulus = camel.steps_taken mod len(my puzzle.directions);
+		offset = camel.steps_taken - modulus;
+		proxy = Camel(camel.label, modulus);
+		unproxy(oasis) = Camel(oasis.label, oasis.steps_taken + offset);
+	end advance;
+end Camel_Memo;
+
+# For this to work, I'll need to define an order on Camels.
+# Later there's a reason to order Camels by steps-taken and then label.
+
+operator <=> (a:Camel, b:Camel) = lex(a.steps_taken <=> b.steps_taken, a.label <=> b.label);
+
+# We have another problem: At the moment, there's no convenient way to
+# factor common subexpressions out of method bodies. That's an area
+# for language growth.
+
+# Now that Camels have an order, I can model the other half of the problem
+# as a priority-queue of Camels: When they're all at the same distance travelled,
+# then that's the answer. 
+
+# An interim test:
+solution(lines) = comes_to_rest(puzzle, Camel(start, 0)).steps_taken where
+	puzzle = parse_Puzzle(lines);
+	start = surely(first(is_start, map({e|e.key}, in_order(puzzle.network))));
+end solution;
+
+# We can model this problem with two actors in conversation.
+# One is responsible for the above question, efficiently.
+# The other represents the state of the ghost.
+# At any given time, it has a next oasis
+
+sample = split_lines("LR
+
+11A = (11B, XXX)
+11B = (XXX, 11Z)
+11Z = (11B, XXX)
+22A = (22B, XXX)
+22B = (22C, 22C)
+22C = (22Z, 22Z)
+22Z = (22B, 22B)
+XXX = (XXX, XXX)
+");
+
+to solve(lines) is console!echo[str(solution(lines)), EOL];
+
+begin:
+
+solution(sample);
+filesystem!read_lines("/playground/advent of code/2023-d8", !solve);
+
