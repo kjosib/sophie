@@ -46,7 +46,7 @@ import_symbol ->  name alias  :ImportSymbol
 alias -> AS name | :nothing
 
 reference -> name     :PlainReference
-  | .SELF             :PlainReference
+  | .SELF             :SelfReference
   | name '@' name     :QualifiedReference
   | MY name           :MemberReference
 ```

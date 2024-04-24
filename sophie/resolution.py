@@ -438,6 +438,13 @@ class _WordResolver(_ResolutionPass):
 		# This kind of reference searches the local-scoped name-space
 		ref.dfn = self._lookup(ref.nom, env)
 	
+	def visit_SelfReference(self, ref:syntax.SelfReference, env:NS):
+		if self._current_uda is None:
+			self.report.undefined_name(ref.nom.head())
+			return Bogon(ref.nom)
+		else:
+			ref.dfn = SELF
+
 	def visit_QualifiedReference(self, ref:syntax.QualifiedReference, env:NS):
 		# Search among imports.
 		im = self._lookup(ref.space, self.import_alias)
