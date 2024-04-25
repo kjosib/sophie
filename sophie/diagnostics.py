@@ -1,6 +1,6 @@
 import sys, random
 from typing import Sequence, Optional, Union, Any
-from traceback import TracebackException
+from traceback import TracebackException, format_stack
 from pathlib import Path
 from boozetools.support.failureprone import SourceText, Issue, Evidence, Severity, illustration
 from . import syntax
@@ -185,7 +185,7 @@ class Report:
 	
 	# Methods the Alias-checker calls
 	def these_are_not_types(self, non_types:Sequence[syntax.TypeCall]):
-		intro = "Words that get used like types, but refer to something else (e.g. variants or functions)."
+		intro = "Words that get used like types, but refer to something else (e.g. variants, functions, or agent definitions)."
 		problem = [Annotation(self._path, tc) for tc in non_types]
 		self.issue(Pic(intro, problem))
 	
@@ -276,7 +276,7 @@ class Report:
 		self.issue(Pic(intro, trace_stack(env)+problem))
 	
 	def bad_result(self, env: TYPE_ENV, fn:syntax.UserFunction, result_type, why):
-		intro = "Type-checking found a problem. Here's how it happens:"
+		intro = "Type-checking found a problematic result:"
 		produced = Annotation(fn.source_path, fn.expr, "Produced "+str(result_type))
 		caption = "Did not match because " + why
 		needed = Annotation(fn.source_path, fn.result_type_expr, caption)
@@ -350,12 +350,18 @@ class Report:
 
 	# Some things for just in case:
 	
-	def drat(self, env:TYPE_ENV, expr:Expr, exception):
-		intro = _outburst()
-		problem = [Annotation(env.path(), expr, str(exception))]
-		self.issue(Pic(intro, trace_stack(env)+problem))
-		self.complain_to_console()
-		raise exception
+	def drat(self, env:TYPE_ENV, hint):
+		intro = "This code hits an unfinished part of the type-checker."
+		python_frames = map(str.rstrip, format_stack(limit=8)[:-1])
+		footer = [
+			"",
+			"Hint: "+str(hint),
+			"",
+			"Recent Python frames:",
+			*python_frames,
+		]
+		self.issue(Pic(intro, trace_stack(env), footer))
+		# self.complain_to_console()
 
 class Annotation:
 	path: Path

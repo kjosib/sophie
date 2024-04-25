@@ -194,8 +194,8 @@ def _eval_do_block(expr:syntax.DoBlock, dynamic_env:ENV):
 		inner = Activation.for_do_block(dynamic_env)
 		for na in agents:
 			assert isinstance(na, syntax.NewAgent)
-			template = _strict(na.expr, dynamic_env)
-			inner.assign(na, template.instantiate(dynamic_env))
+			template = _strict(na.expr, inner)
+			inner.assign(na, template.instantiate())
 	else:
 		inner = dynamic_env
 	# TODO: Solve the tail-recursion problem.
@@ -333,7 +333,7 @@ class ActorTemplate:
 		self._uda = uda
 		self._args = args
 	
-	def instantiate(self, dynamic_link:ENV):
+	def instantiate(self):
 		state = dict(zip(self._uda.members, map(force, self._args)))
 		vtable = self._uda.message_space.local
 		return UserDefinedActor(state, vtable, self._global_link)

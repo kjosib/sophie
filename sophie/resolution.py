@@ -137,6 +137,13 @@ class _ResolutionPass(TopDown):
 	def visit_Module(self):
 		raise NotImplementedError(type(self))
 
+	def _install(self, namespace: NS, dfn:Symbol):
+		try: namespace[dfn.nom.key()] = dfn
+		except SymbolAlreadyExists:
+			earlier = namespace[dfn.nom.key()]
+			self.report.redefined_name(earlier, dfn.nom)
+
+
 class _WordDefiner(_ResolutionPass):
 	"""
 	At the end of this phase:
@@ -166,12 +173,6 @@ class _WordDefiner(_ResolutionPass):
 		for expr in module.main:  # Might need to define some case-match symbols here.
 			self.visit(expr, self.globals)
 		pass
-
-	def _install(self, namespace: NS, dfn:Symbol):
-		try: namespace[dfn.nom.key()] = dfn
-		except SymbolAlreadyExists:
-			earlier = namespace[dfn.nom.key()]
-			self.report.redefined_name(earlier, dfn.nom)
 
 	def _declare_type(self, td:syntax.TypeDeclaration):
 		self._install(self.globals, td)
@@ -286,7 +287,7 @@ class _WordDefiner(_ResolutionPass):
 			inner = env.new_child(db)
 			for new_agent in db.agents:
 				self.visit(new_agent.expr, env)
-				self._install(inner, new_agent)
+				# self._install(inner, new_agent) # Save for _WordResolver...
 		else:
 			inner = env
 		db.namespace = inner
@@ -493,7 +494,8 @@ class _WordResolver(_ResolutionPass):
 
 	def visit_UserAgent(self, uda:syntax.UserAgent):
 		for f in uda.members:
-			self.visit(f.type_expr, self.globals)
+			if f.type_expr is not None:
+				self.visit(f.type_expr, uda.member_space)
 		self._current_uda = uda
 		for b in uda.behaviors:
 			self._reads_members = b.reads_members = set()
@@ -535,7 +537,8 @@ class _WordResolver(_ResolutionPass):
 	
 	def visit_DoBlock(self, db: syntax.DoBlock, env:NS):
 		for new_agent in db.agents:
-			self.visit(new_agent.expr, env)
+			self.visit(new_agent.expr, db.namespace)
+			self._install(db.namespace, new_agent)
 		for s in db.steps:
 			self.visit(s, db.namespace)
 

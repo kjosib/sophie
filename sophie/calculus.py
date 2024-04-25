@@ -264,6 +264,7 @@ class _Error(FormalType):
 BOTTOM = _Bottom(None)
 ERROR = _Error(None)
 EMPTY_PRODUCT = ProductType(())
+READY_MESSAGE = MessageType(EMPTY_PRODUCT).exemplar()
 
 ###################
 #

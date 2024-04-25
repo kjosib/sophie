@@ -25,7 +25,7 @@ from .calculus import (
 	RecordType, SumType, SubType, TaggedRecord, EnumType,
 	SubroutineType, UserFnType, UserProcType, UDAType, UserTaskType,
 	InterfaceType, MessageType, ParametricTemplateType, ConcreteTemplateType,
-	BOTTOM, ERROR, EMPTY_PRODUCT
+	BOTTOM, ERROR, EMPTY_PRODUCT, READY_MESSAGE
 )
 
 class DependencyPass(TopDown):
@@ -192,7 +192,7 @@ class DependencyPass(TopDown):
 
 	def visit_DoBlock(self, db: syntax.DoBlock, env:Symbol):
 		for new_agent in db.agents:
-			self._parent[new_agent] = env
+			self._prepare(new_agent, env)
 			self.visit(new_agent.expr, env)
 		for s in db.steps:
 			self.visit(s, env)
@@ -272,11 +272,8 @@ class ManifestBuilder(Visitor):
 		return ArrowType(self._make_product(spec.lhs), self.visit(spec.rhs))
 	
 	def visit_MessageSpec(self, ms:syntax.MessageSpec) -> SophieType:
-		if ms.type_exprs:
-			product = self._make_product(ms.type_exprs)
-			return MessageType(product).exemplar()
-		else:
-			return primitive.literal_msg
+		product = self._make_product(ms.type_exprs)
+		return MessageType(product).exemplar()
 		
 	def make_agent_template(self, uda:syntax.UserAgent, module_scope:TYPE_ENV):
 		if uda.members:
@@ -285,6 +282,11 @@ class ManifestBuilder(Visitor):
 		else:
 			# In this case, we have a (stateless) template ready to go.
 			return ConcreteTemplateType(uda, EMPTY_PRODUCT, module_scope)
+	
+	@staticmethod
+	def visit_NoneType(_:None):
+		""" An ugly hack, but it gets progress made. """
+		return BOTTOM
 
 class Rewriter(TypeVisitor):
 	def __init__(self, gamma:dict):
@@ -884,7 +886,7 @@ class DeductionEngine(Visitor):
 		elif isinstance(callee_type, MessageType):
 			binder = Binder(self, env).inputs(callee_type.arg.fields, actual_types, args)
 			if binder.ok:
-				return MessageType(EMPTY_PRODUCT).exemplar()
+				return READY_MESSAGE
 			else:
 				binder.complain(self._report)
 				return ERROR
@@ -895,6 +897,11 @@ class DeductionEngine(Visitor):
 		elif isinstance(callee_type, UserProcType):
 			return self.apply_procedure(callee_type, actual_types, env)
 		
+		elif isinstance(callee_type, UserTaskType):
+			pt = self.apply_procedure(callee_type.proc_type, actual_types, env)
+			if pt is ERROR: return ERROR
+			else: return READY_MESSAGE
+		
 		elif isinstance(callee_type, ParametricTemplateType):
 			binder = Binder(self, env).inputs(callee_type.args, actual_types, args)
 			if binder.ok:
@@ -904,7 +911,8 @@ class DeductionEngine(Visitor):
 				return ERROR
 		
 		else:
-			raise NotImplementedError(type(callee_type))
+			self._report.drat(env, type(callee_type))
+			return ERROR
 	
 	def visit_Call(self, site: syntax.Call, env: TYPE_ENV) -> SophieType:
 		fn_type = self.visit(site.fn_exp, env)
@@ -1084,8 +1092,11 @@ class DeductionEngine(Visitor):
 				inner = Activation.for_actor(actor_type, env)
 				proc_type = UserProcType(procedure, inner)
 				if not proc_type.sub.params:
-					self.apply_procedure(proc_type, (), env)
-				return UserTaskType(proc_type).exemplar()
+					pt = self.apply_procedure(proc_type, (), env)
+					if pt is ERROR: return ERROR
+					else: return READY_MESSAGE
+				else:
+					return UserTaskType(proc_type).exemplar()
 		else:
 			self._report.bad_message(env, mr, actor_type)
 			return ERROR
@@ -1097,11 +1108,12 @@ class DeductionEngine(Visitor):
 		inner = Activation.for_do_block(env)
 		for na in do.agents:
 			assert isinstance(na, syntax.NewAgent)
-			tt = self.visit(na.expr, env)
+			tt = self.visit(na.expr, inner)
 			if isinstance(tt, ConcreteTemplateType):
 				agent_type = UDAType(tt.uda, ProductType(tt.args).exemplar(), tt.global_env)
 			else:
-				self._report.bad_type(env, na.expr, "Agent Template", tt, "Casting call will repeat next Thursday.")
+				if tt is not ERROR:
+					self._report.bad_type(env, na.expr, "Agent Template", tt, "Casting call will repeat next Thursday.")
 				agent_type = ERROR
 				answer = ERROR
 			inner.assign(na, agent_type)
@@ -1109,7 +1121,7 @@ class DeductionEngine(Visitor):
 		for step in do.steps:
 			inner.pc = step
 			step_type = self.visit(step, inner)
-			assert isinstance(step_type, SophieType)
+			assert isinstance(step_type, SophieType), step_type
 			if step_type is ERROR: answer = ERROR
 			elif step_type is BOTTOM:
 				if answer is not ERROR:
@@ -1130,7 +1142,7 @@ class DeductionEngine(Visitor):
 		if isinstance(proc_type, ArrowType) and proc_type.res == primitive.literal_act:
 			return MessageType(proc_type.arg).exemplar()
 		if proc_type == primitive.literal_act:
-			return MessageType(EMPTY_PRODUCT).exemplar()
+			return READY_MESSAGE
 		self._report.bad_task(env, at.proc_ref, proc_type)
 		return ERROR
 
