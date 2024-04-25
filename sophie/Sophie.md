@@ -292,12 +292,10 @@ Evidently the type system will need to distinguish between *agent-instance* and 
 **User-Defined Agent**
 
 On balance an actor-like thing (`agent`, in Sophie parlance) has state and behavior.
-For simplicity, let us *declare* that state with the same syntax as a record.
 The chief difference is that agent state is mutable (and so cannot be shared).
 
-There may be cause for stateless agents to exist, so state remains optional.
 ```
-agent_definition -> AGENT name optional(round_list(field_dfn)) AS semicolon_list(procedure) END name  :UserAgent
+agent_definition -> AGENT name formals AS semicolon_list(procedure) END name  :UserAgent
 ```
 The name gets repeated at the end of an `agent` definition.
 My motivation for this decision is the same as with functions that have subordinate `where` clauses.

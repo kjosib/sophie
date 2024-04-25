@@ -4,6 +4,8 @@ Read this to get a general idea of what's new and nontrivial.
 
 ## April 2024
 
+* 24 April: Within `cast` lists, you can now mention one actor while constructing the next.
+  Declare-before-use applies, at least for now.
 * 23 April: Various bugs and oversights fixed. 
 * 22 April: Change compiler and VM to new procedure semantics. Some thing get simpler.
 * 17 April: Got the tree-walker fully working again with the new procedure semantics.

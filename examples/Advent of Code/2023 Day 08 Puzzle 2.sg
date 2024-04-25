@@ -5,13 +5,17 @@
 # so I'll go ahead and check it in unfinished and get back to it.
 
 import:
-	sys."tree" (search, Tree, in_order, assign);
+	sys."tree" as TREE (search, Tree, in_order, assign, tree_of);
 	"common" (filter_maybe, lex);
 	"2023 Day 08 common" (node, parse_net);
 
 type:
 	Camel is (label:string, steps_taken:number);
-	Puzzle is (directions: string, network: Tree[string, node] );
+	Puzzle is (directions: string, network: Tree[string, node]);
+	Ghost is OrderedSet[Camel];
+
+	
+	OrderedSet[E] is Tree[E, flag];
 
 define:
 
@@ -51,29 +55,41 @@ agent Camel_Memo(puzzle:Puzzle, memo:Tree) as
 	end advance;
 end Camel_Memo;
 
+# We can model this problem with two actors in conversation.
+# One is responsible for the above question, efficiently.
+# The other represents the state of the ghost.
+# At any given time, it has camels at various oases.
+
+agent Ghost_Rider(ghost:Ghost, memo) as
+	to tick is console ! echo [c.label, " ", str(c.steps_taken), EOL] where
+		c = first_of_set(my ghost);
+	end tick;
+
+	to venture_forth is my memo ! advance(first_of_set(my ghost), self ! arrive);
+
+	to arrive is skip;
+
+end Ghost_Rider;
+
+# I'll model that priority-queue of Camels as a tree used like an ordered set.
+	# The trick is to store nothing of consequence in the values,
+	# and just use the keys of the entries.
+# (Come to think of it, if entries compare by their keys, then Tree and Set unify...)
+
+ordered_set_of(xs) = tree_of(map({x|entry(x, yes)}, xs));
+first_of_set(s) = surely(first@TREE(s)).key;
+set_elements(s) = map({e|e.key}, in_order(s));
+
 # For this to work, I'll need to define an order on Camels.
 # Later there's a reason to order Camels by steps-taken and then label.
-
 operator <=> (a:Camel, b:Camel) = lex(a.steps_taken <=> b.steps_taken, a.label <=> b.label);
 
-# We have another problem: At the moment, there's no convenient way to
-# factor common subexpressions out of method bodies. That's an area
-# for language growth.
 
 # Now that Camels have an order, I can model the other half of the problem
 # as a priority-queue of Camels: When they're all at the same distance travelled,
 # then that's the answer. 
 
-# An interim test:
-solution(lines) = comes_to_rest(puzzle, Camel(start, 0)).steps_taken where
-	puzzle = parse_Puzzle(lines);
-	start = surely(first(is_start, map({e|e.key}, in_order(puzzle.network))));
-end solution;
-
-# We can model this problem with two actors in conversation.
-# One is responsible for the above question, efficiently.
-# The other represents the state of the ghost.
-# At any given time, it has a next oasis
+# is_ghost_finished(ghost) = all_same(map({c|c.steps_taken}), set_elements(ghost));
 
 sample = split_lines("LR
 
@@ -87,10 +103,28 @@ sample = split_lines("LR
 XXX = (XXX, XXX)
 ");
 
-to solve(lines) is console!echo[str(solution(lines)), EOL];
+
+initial_ghost(puzzle):Ghost = ordered_set_of(map(first_oasis, starting_positions)) where
+	starting_positions = filter(is_start, each_label);
+	each_label = map({e|e.key}, (in_order(puzzle.network)));
+	first_oasis(label) = comes_to_rest(puzzle, Camel(label, 0));
+end initial_ghost;
+
+to attempt(puzzle) is
+	cast
+		memo is Camel_Memo(puzzle, new_tree@TREE);
+		rider is Ghost_Rider(initial_ghost(puzzle), memo);
+	do
+		rider ! tick;
+		rider ! venture_forth;
+		rider ! tick;
+	end;
+
+to solve(lines) is attempt(parse_Puzzle(lines));
 
 begin:
 
-solution(sample);
-filesystem!read_lines("/playground/advent of code/2023-d8", !solve);
+solve(sample);
+
+# filesystem!read_lines("/playground/advent of code/2023-d8", !solve);
 
