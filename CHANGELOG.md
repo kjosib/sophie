@@ -4,6 +4,9 @@ Read this to get a general idea of what's new and nontrivial.
 
 ## April 2024
 
+* 27 April: Type-checker now copes with assigning actor members of variant type e.g. `list`.
+  I have a sneaking suspicion the present method may not be *completely* sound,
+  but I have a plan to fix the hole.
 * 24 April: Within `cast` lists, you can now mention one actor while constructing the next.
   Declare-before-use applies, at least for now.
 * 23 April: Various bugs and oversights fixed. 
