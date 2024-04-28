@@ -79,7 +79,7 @@ class Activation(Frame):
 	
 	@staticmethod
 	def for_subroutine(static_link: Frame[T], dynamic_link: Frame[T], sub: Subroutine, arguments) -> "Activation[T]":
-		assert len(sub.params) == len(arguments)
+		assert len(sub.params) == len(arguments), (sub, arguments)
 		ar = Activation(static_link, dynamic_link, sub)
 		ar.update(zip(sub.params, arguments))
 		for key in sub.where:

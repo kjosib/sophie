@@ -1030,13 +1030,23 @@ class DeductionEngine(Visitor):
 			return ERROR
 
 	def visit_AssignMember(self, am:syntax.AssignMember, env:TYPE_ENV) -> SophieType:
-		field_type = env.chase(am.dfn).fetch(am.dfn)
+		field_scope = env.chase(am.dfn)
+		field_type = field_scope.fetch(am.dfn)
 		expr_type = self.visit(am.expr, env)
+		
 		if expr_type == field_type or expr_type is ERROR:
 			return primitive.literal_act
 		else:
-			self._report.bad_type(env, am.expr, field_type, expr_type, "Assignment must match field type exactly.")
-			return ERROR
+			uf = UnionFinder()
+			uf.unify_with(env, None, field_type, self._report)
+			uf.unify_with(env, am.expr, expr_type, self._report)
+			union = uf.result()
+			if union is ERROR:
+				self._report.bad_type(env, am.expr, field_type, expr_type, "Assignment must match field type exactly.")
+				return ERROR
+			else:
+				field_scope.assign(am.dfn, union)
+				return primitive.literal_act
 	
 	def visit_FieldReference(self, fr:syntax.FieldReference, env:TYPE_ENV) -> SophieType:
 		lhs_type = self.visit(fr.lhs, env)
@@ -1089,8 +1099,7 @@ class DeductionEngine(Visitor):
 				return ERROR
 			else:
 				assert isinstance(procedure, syntax.UserProcedure)
-				inner = Activation.for_actor(actor_type, env)
-				proc_type = UserProcType(procedure, inner)
+				proc_type = UserProcType(procedure, actor_type.frame)
 				if not proc_type.sub.params:
 					pt = self.apply_procedure(proc_type, (), env)
 					if pt is ERROR: return ERROR
@@ -1108,12 +1117,12 @@ class DeductionEngine(Visitor):
 		inner = Activation.for_do_block(env)
 		for na in do.agents:
 			assert isinstance(na, syntax.NewAgent)
-			tt = self.visit(na.expr, inner)
-			if isinstance(tt, ConcreteTemplateType):
-				agent_type = UDAType(tt.uda, ProductType(tt.args).exemplar(), tt.global_env)
+			template = self.visit(na.expr, inner)
+			if isinstance(template, ConcreteTemplateType):
+				agent_type = UDAType(template, inner)
 			else:
-				if tt is not ERROR:
-					self._report.bad_type(env, na.expr, "Agent Template", tt, "Casting call will repeat next Thursday.")
+				if template is not ERROR:
+					self._report.bad_type(env, na.expr, "Agent Template", template, "Casting call will repeat next Thursday.")
 				agent_type = ERROR
 				answer = ERROR
 			inner.assign(na, agent_type)
