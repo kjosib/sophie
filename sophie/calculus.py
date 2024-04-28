@@ -19,7 +19,7 @@ from typing import Iterable
 from boozetools.support.foundation import EquivalenceClassifier
 from . import syntax
 from .ontology import Symbol, SELF
-from .stacking import Frame
+from .stacking import Frame, Activation
 
 TYPE_ENV = Frame["SophieType"]
 
@@ -242,12 +242,26 @@ class ParametricTemplateType(_AgentDerived):
 class ConcreteTemplateType(_AgentDerived):
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_concrete_template(self)
 	def expected_arity(self) -> int: return -1  # Not callable; instantiable.
-
-class UDAType(_AgentDerived):
-	def visit(self, visitor:"TypeVisitor"): return visitor.on_uda(self)
-	def expected_arity(self) -> int: return -1  # Not callable; instantiable.
 	def state_pairs(self):
 		return zip(self.uda.members, self.args)
+
+class UDAType(ComputedType):
+	"""
+	Has much in common with a subroutine type,
+	except that the environment link here is going to contain
+	the state of the actor itself. This is necessary because
+	assignment statements can possibly cause state to promote.
+	""" 
+	def __init__(self, template:ConcreteTemplateType, dynamic_link:TYPE_ENV):
+		self.uda = template.uda
+		frame = Activation(template.global_env, dynamic_link, None)
+		frame.assign(SELF, self)
+		frame.update(template.state_pairs())
+		self.frame = frame
+		super().__init__(template)
+		
+	def visit(self, visitor:"TypeVisitor"): return visitor.on_uda(self)
+	def expected_arity(self) -> int: return -1  # Not callable
 
 class _Bottom(FormalType):
 	"""
