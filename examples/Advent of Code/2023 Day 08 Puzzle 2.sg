@@ -5,7 +5,7 @@
 # so I'll go ahead and check it in unfinished and get back to it.
 
 import:
-	sys."tree" as TREE (search, Tree, in_order, assign, tree_of);
+	sys."tree" as TREE (search, Tree, in_order, assign, tree_of, delete);
 	"common" (filter_maybe, lex);
 	"2023 Day 08 common" (node, parse_net);
 
@@ -29,12 +29,13 @@ is_start(label:string) = right(label, 1) == "A";
 parse_Puzzle(lines) = Puzzle(trim(surely(head(lines))), parse_net(drop(2, lines)));
 
 # Given a Puzzle and a Camel, we'd like to know the Camel that comes to rest at an oasis:
-comes_to_rest(puzzle:Puzzle, camel:Camel) = camel if is_oasis(camel.label) else comes_to_rest(puzzle, next_camel) where
-	next_camel = Camel(next_node, camel.steps_taken+1);
+comes_to_rest(puzzle:Puzzle, camel:Camel) = camel if is_oasis(camel.label) else comes_to_rest(puzzle, next_camel(puzzle, camel));
+
+next_camel(puzzle:Puzzle, camel:Camel) = Camel(next_node, camel.steps_taken+1) where
 	here:node = surely(search(puzzle.network, camel.label));
 	next_node = here.left if dir=="L" else here.right;
 	dir = mid(puzzle.directions, camel.steps_taken mod len(puzzle.directions), 1);
-end comes_to_rest;
+end next_camel;
 
 # I want to memoize such computations so that similar ones take very little compute time.
 # Memoization is stateful, so this calls for an actor.
@@ -42,9 +43,12 @@ end comes_to_rest;
 
 agent Camel_Memo(puzzle:Puzzle, memo:Tree) as
 	to advance(camel:Camel, reply) is case search(my memo, proxy) as s of
-		this -> reply(unproxy(s.item));
+		this -> do
+			console ! echo [fmt_camel(camel), " -> ", fmt_camel(unproxy(s.item)), EOL];
+			reply(camel, unproxy(s.item));
+		end;
 		nope -> do
-			my memo := assign(my memo, entry(proxy, comes_to_rest(my puzzle, proxy)));
+			my memo := assign(my memo, entry(proxy, comes_to_rest(my puzzle, next_camel(my puzzle, proxy))));
 			self ! advance(camel, reply);
 		end;
 	esac where
@@ -61,15 +65,22 @@ end Camel_Memo;
 # At any given time, it has camels at various oases.
 
 agent Ghost_Rider(ghost:Ghost, memo) as
-	to tick is console ! echo [c.label, " ", str(c.steps_taken), EOL] where
-		c = first_of_set(my ghost);
-	end tick;
+	to tick is do
+		console ! echo(cat(interleave(", ", map(fmt_camel, set_elements(my ghost))), [EOL]));
+		case
+			when is_ghost_finished(my ghost) then skip;
+			else my memo ! advance(first_of_set(my ghost), self ! arrive);
+		esac;
+	end;
 
-	to venture_forth is my memo ! advance(first_of_set(my ghost), self ! arrive);
-
-	to arrive is skip;
+	to arrive(src, dst) is do
+		my ghost := set_add(set_drop(my ghost, src), dst);
+		self ! tick;
+	end;
 
 end Ghost_Rider;
+
+fmt_camel(c) = join [c.label, " ", str(c.steps_taken)];
 
 # I'll model that priority-queue of Camels as a tree used like an ordered set.
 	# The trick is to store nothing of consequence in the values,
@@ -79,6 +90,8 @@ end Ghost_Rider;
 ordered_set_of(xs) = tree_of(map({x|entry(x, yes)}, xs));
 first_of_set(s) = surely(first@TREE(s)).key;
 set_elements(s) = map({e|e.key}, in_order(s));
+set_drop(s, item) = delete(s, item).rest;
+set_add(s, item) = assign(s, entry(item, yes));
 
 # For this to work, I'll need to define an order on Camels.
 # Later there's a reason to order Camels by steps-taken and then label.
@@ -89,7 +102,12 @@ operator <=> (a:Camel, b:Camel) = lex(a.steps_taken <=> b.steps_taken, a.label <
 # as a priority-queue of Camels: When they're all at the same distance travelled,
 # then that's the answer. 
 
-# is_ghost_finished(ghost) = all_same(map({c|c.steps_taken}), set_elements(ghost));
+is_ghost_finished(ghost) = all_same(map({c|c.steps_taken}, set_elements(ghost)));
+
+all_same(xs) = case xs of
+	nil -> yes;
+	cons -> all(map({y|y == xs.head}, xs.tail));
+esac;
 
 sample = split_lines("LR
 
@@ -115,8 +133,6 @@ to attempt(puzzle) is
 		memo is Camel_Memo(puzzle, new_tree@TREE);
 		rider is Ghost_Rider(initial_ghost(puzzle), memo);
 	do
-		rider ! tick;
-		rider ! venture_forth;
 		rider ! tick;
 	end;
 
