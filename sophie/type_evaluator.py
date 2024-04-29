@@ -985,15 +985,13 @@ class DeductionEngine(Visitor):
 	def visit_MatchExpr(self, mx:syntax.MatchExpr, env:TYPE_ENV) -> SophieType:
 		
 		def try_one_alternative(alt, subtype:SubType) -> SophieType:
-			inner = Activation.for_subject(env, mx.subject)
-			inner.assign(mx.subject, subtype)
+			inner = Activation.for_subject(env, mx.subject, subtype)
 			for sub in alt.where:
 				inner.declare(sub)
 			return self.visit(alt.sub_expr, inner)
 		
 		def try_otherwise():
-			inner = Activation.for_subject(env, mx.subject)
-			inner.assign(mx.subject, subject_type)
+			inner = Activation.for_subject(env, mx.subject, subject_type)
 			return self.visit(mx.otherwise, inner)
 		
 		def try_everything(type_args:Sequence[SophieType]):
@@ -1009,6 +1007,7 @@ class DeductionEngine(Visitor):
 			return uf.result()
 
 		subject_type = self.visit(mx.subject.expr, env)
+		env.pc = None
 		if subject_type is ERROR:
 			return ERROR
 

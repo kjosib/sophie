@@ -263,9 +263,9 @@ class Report:
 				plural = '' if arity == 1 else 's'
 				pattern = "This %s takes %d argument%s, but got %d instead."
 				intro = pattern % (callee_type, arity, plural, len(args))
-			problem = [Annotation(env.path(), site, "Here")]
-			self.issue(Pic(intro, problem))  # +trace_stack(env)
-
+			problem = [Annotation(env.path(), site, intro)]
+			self.issue(Pic(intro, trace_stack(env) + problem))
+	
 	def bad_argument(self, env: TYPE_ENV, term:Term, param:syntax.FormalParameter, actual:SophieType, why:str):
 		assert isinstance(term, Term)
 		assert isinstance(param, syntax.FormalParameter)
@@ -382,21 +382,20 @@ def illustrate(source, span:slice, caption):
 class Tracer:
 	def __init__(self):
 		self.trace = []
-	def called_with(self, path, breadcrumb, args:dict):
-		bind_text = ', '.join("%s:%s" % (p.nom.text, t) for p, t in args.items())
-		self.trace.append(Annotation(path, breadcrumb, "with " + bind_text))
 	def called_from(self, path, pc):
-		self.trace.append(Annotation(path, pc, "calls:"))
+		self.trace.append(Annotation(path, pc))
 	def hit_bottom(self):
 		pass
-	def trace_frame(self, breadcrumb, bindings, pc):
-		path = breadcrumb.source_path
+	def trace_frame(self, path, breadcrumb, bindings):
 		args = {
 			k:v for k,v in bindings.items()
-			if isinstance(k, syntax.FormalParameter)
+			if isinstance(k, (syntax.FormalParameter, syntax.Subject))
 		}
-		if args: self.called_with(path, breadcrumb, args)
-		if pc is not None: self.called_from(path, pc)
+		if args:
+			bind_text = ', '.join("%s:%s" % (p.nom.text, t) for p, t in args.items())
+			self.trace.append(Annotation(path, breadcrumb, bind_text))
+
+		
 
 def trace_stack(env:Frame) -> list[Annotation]:
 	tracer = Tracer()
