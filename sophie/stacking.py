@@ -4,16 +4,11 @@ Because Sophie's type-checking philosophy is "run the program over the types",
 that means these activation records get used in both the type-checker and the evaluator.
 
 Despite superficial similarity, this is not treated quite the same as a namespace.
-
-For now I've removed the complexity of tracking static depth.
-Sophie does run a little slower this way, but it's for a purpose.
-Upon this simplified foundation, I'll build as needed to properly reflect
-the upcoming message-passing semantics.
 """
 
 from typing import TypeVar, Generic, Union, Optional
 from pathlib import Path
-from .ontology import Symbol, SELF
+from .ontology import Symbol
 from .syntax import Subroutine, ValExpr, Subject, Module
 
 CRUMB = Union[Symbol, Module, None]
@@ -60,14 +55,16 @@ class RootFrame(Frame):
 
 class Activation(Frame):
 	def __init__(self, static_link: Frame[T], dynamic_link: Frame[T], breadcrumb:CRUMB):
-		assert breadcrumb is None or hasattr(breadcrumb, 'source_path'), type(breadcrumb)
 		self._bindings = {}
 		self._static_link = static_link
 		self._dynamic_link = dynamic_link
 		self.breadcrumb = breadcrumb
 	
 	def path(self) -> Optional[Path]:
-		return self.breadcrumb and self.breadcrumb.source_path
+		if self.breadcrumb and hasattr(self.breadcrumb, 'source_path'):
+			return self.breadcrumb.source_path
+		else:
+			return self._static_link.path() 
 		
 	def chase(self, key:Symbol) -> Frame[T]:
 		return self if key in self._bindings else self._static_link.chase(key)
@@ -75,7 +72,8 @@ class Activation(Frame):
 	def trace(self, tracer):
 		self._dynamic_link.trace(tracer)
 		if self.breadcrumb is not None:
-			tracer.trace_frame(self.breadcrumb, self._bindings, self.pc)
+			tracer.trace_frame(self.path(), self.breadcrumb, self._bindings)
+		if self.pc is not None: tracer.called_from(self.path(), self.pc)
 	
 	@staticmethod
 	def for_subroutine(static_link: Frame[T], dynamic_link: Frame[T], sub: Subroutine, arguments) -> "Activation[T]":
@@ -87,9 +85,9 @@ class Activation(Frame):
 		return ar
 
 	@staticmethod
-	def for_subject(static_link: Frame[T], subject:Subject) -> "Activation[T]":
-		ar = Activation(static_link, static_link, static_link.breadcrumb)
-		ar.declare(subject)
+	def for_subject(static_link: Frame[T], subject:Subject, value:T) -> "Activation[T]":
+		ar = Activation(static_link, static_link, subject)
+		ar.assign(subject, value)
 		return ar
 	
 	@staticmethod
@@ -103,12 +101,5 @@ class Activation(Frame):
 
 	@staticmethod
 	def for_do_block(static_link: Frame[T]) -> "Activation[T]":
-		return Activation(static_link, static_link, static_link.breadcrumb)
-
-	@staticmethod
-	def for_actor(actor, dynamic_link: Frame[T]) -> "Activation[T]":
-		frame = Activation(actor.global_env, dynamic_link, None)
-		frame.assign(SELF, actor)
-		frame.update(actor.state_pairs())
-		return frame
+		return Activation(static_link, static_link, None)
 

@@ -343,16 +343,14 @@ class UserDefinedActor(Actor):
 		super().__init__()
 		self.state = state
 		self._vtable = vtable
-		self.global_env = global_env
+		self._global_env = global_env
 	
 	def handle(self, message, args):
 		behavior = self._vtable[message]
-		outer = Activation.for_actor(self, THREADED_ROOT)
-		inner = Activation.for_subroutine(outer, THREADED_ROOT, behavior, args)
-		perform(evaluate(behavior.expr, inner), inner)
-
-	def state_pairs(self):
-		return self.state
+		frame = Activation.for_subroutine(self._global_env, self._global_env, behavior, args)
+		frame.assign(SELF, self)
+		frame.update(self.state)
+		perform(evaluate(behavior.expr, frame), frame)
 
 ###############################################################################
 
