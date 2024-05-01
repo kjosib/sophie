@@ -74,7 +74,6 @@ typedef struct {
 	TypeIndexFn type_index;
 	Apply apply;     // Arguments on the stack.
 	Method finalize; // Must not gc_allocate; gets called mid-collection.
-	Method proceed; // Specifically for how a message runs itself.
 	char *name;
 } GC_Kind;
 
@@ -384,6 +383,8 @@ void install_binop(BopType bop, int lhs_tx, int rhs_tx);
 Value find_dispatch(DispatchTable *dt, int type_index);
 
 /* actor.h */
+
+extern GC_Kind KIND_Message, KIND_BoundMethod;
 
 typedef struct {
 	GC header;

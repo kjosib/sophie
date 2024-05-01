@@ -121,35 +121,10 @@ static double knuth_mod(double numerator, double denominator) {
 }
 
 void perform() {
-	// Where all the action happens, so to speak.
-	while (1) {
-		switch (INDICATOR(TOP)) {
-		case IND_GC:
-		{
-			GC *item = AS_GC(TOP);
-			if (item->kind->proceed) {
-				enqueue_message(pop());
-			}
-			else {
-				printObjectDeeply(AS_GC(TOP));
-				pop();
-				printf("\n");
-			}
-			return;
-		}
-		case IND_CLOSURE:
-			push(vm_run());
-			break;
-		case IND_UNSET:
-			pop();
-			return;
-		default:
-			print_simply(TOP);
-			pop();
-			printf("\n");
-			return;
-		}
+	while (!IS_UNSET(TOP)) {
+		push(apply());
 	}
+	pop();
 }
 
 static int type_index_for_value(Value v) {
@@ -208,15 +183,6 @@ static bool is_two_numbers() { return IS_NUMBER(SND) && IS_NUMBER(TOP); }
 
 #define BIN_EXP(exp, bop) do { if (is_two_numbers()) merge(NUMBER_VAL(exp)); else vm_double_dispatch(bop); } while (0)
 #define BIN_OP(op, bop) BIN_EXP(AS_NUMBER(SND) op AS_NUMBER(TOP), bop)
-
-#define EXEC do { \
-	closure = AS_CLOSURE(pop()); \
-	int arity = closure->function->arity; \
-	memmove(base, vm.stackTop - arity, arity * sizeof(Value)); \
-	vm.stackTop = base + arity; \
-	goto enter; \
-} while (0)
-
 
 Value vm_run() {
 	Closure *closure = AS_CLOSURE(pop());
@@ -311,7 +277,7 @@ dispatch:
 			}
 			else {
 				vm_double_resolve(BOP_CMP);
-				EXEC;
+				goto do_exec;
 			}
 		case OP_POWER: BIN_EXP(pow(AS_NUMBER(SND), AS_NUMBER(TOP)), BOP_POW); NEXT;
 		case OP_MULTIPLY: BIN_OP(*, BOP_MUL); NEXT;
@@ -336,12 +302,17 @@ dispatch:
 				runtimeError(vpc, base, "CALL needs a callable object; got %s.", valKind(TOP));
 			}
 		case OP_EXEC:
+		do_exec:
 			switch (INDICATOR(TOP)) {
 			case IND_THUNK:
 				if (DID_SNAP(TOP)) YIELD(SNAP_RESULT(AS_CLOSURE(TOP)));
 				// Fall through to IND_CLOSURE:
 			case IND_CLOSURE:
-				EXEC;
+				closure = AS_CLOSURE(pop());
+				int arity = closure->function->arity;
+				memmove(base, vm.stackTop - arity, arity * sizeof(Value));
+				vm.stackTop = base + arity;
+				goto enter;
 			case IND_GC:  // i.e. native function
 				YIELD(apply());
 			default:
@@ -454,6 +425,11 @@ dispatch:
 		}
 		case OP_DRAIN:
 			drain_the_queue();
+			NEXT;
+		case OP_DISPLAY:
+			printValueDeeply(TOP);
+			fputc('\n', stdout);
+			pop();
 			NEXT;
 		default:
 			runtimeError(vpc, base, "Unrecognized instruction %d.", vpc[-1]);

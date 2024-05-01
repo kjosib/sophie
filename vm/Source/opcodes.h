@@ -56,6 +56,8 @@ typedef enum {
 	OP_ASSIGN,
 	OP_DRAIN,
 
+	OP_DISPLAY,
+
 	NR_OPCODES,
 } OpCode;
 
