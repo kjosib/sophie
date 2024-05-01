@@ -84,7 +84,9 @@ void enqueue_message(Value value) {
 	// Careful: The message here may not be on the stack.
 	Message *msg = AS_MESSAGE(value);
 #ifdef DEBUG_TRACE_QUEUE
-	printf("< Enqueue: (%d)\n", (int)arity_of_message(msg));
+	fputs("< Enqueue: ", stdout);
+	printValue(msg->method);
+	fputc('\n', stdout);
 #endif // DEBUG_TRACE_QUEUE
 	mq.buffer[mq.gap] = msg;
 	mq.gap = ahead(mq.gap);
@@ -220,25 +222,6 @@ void display_bound(Message *msg) { printf("<bound method>"); }
 static void blacken_bound(Message *msg) { darkenValue(&msg->method); darkenValue(&msg->payload[0]); }
 static size_t size_bound(Message *msg) { return sizeof(Message) + sizeof(Value); }
 
-static void run_message(Message *msg) {
-	push(msg->method);
-	switch (INDICATOR(msg->method)) {
-	case IND_CLOSURE:
-		// Must either be a do-block or a user-defined method.
-		// In either case, the corresponding code is in procedural perspective.
-		vm_run();
-		break;
-	case IND_GC:
-		// Must be a native method.
-		// For now, rely on it to have side effects.
-		apply();
-		break;
-	default:
-		crashAndBurn("Inconceivable!");
-	}
-
-}
-
 static void blacken_message(Message *msg) {
 	darkenValue(&msg->method);
 	darkenValues(msg->payload, arity_of_message(msg));
@@ -246,10 +229,15 @@ static void blacken_message(Message *msg) {
 
 static size_t size_message(Message *msg) { return sizeof(Message) + arity_of_message(msg) * sizeof(Value); }
 
-static GC_Kind KIND_Message = {
+static Value apply_message() {
+	enqueue_message(pop());
+	return UNSET_VAL;
+}
+
+GC_Kind KIND_Message = {
 	.blacken = blacken_message,
 	.size = size_message,
-	.proceed = run_message,
+	.apply = apply_message,
 	.name = "Message",
 };
 
@@ -269,7 +257,7 @@ static Value apply_bound_method() {
 }
 
 
-static GC_Kind KIND_BoundMethod = {
+GC_Kind KIND_BoundMethod = {
 	// These things definitely have a receiver,
 	// but no other associated arguments.
 	.display = display_bound,
@@ -277,7 +265,6 @@ static GC_Kind KIND_BoundMethod = {
 	.blacken = blacken_bound,
 	.size = size_bound,
 	.apply = apply_bound_method,
-	.proceed = run_message,
 	.name = "Bound Method",
 };
 
@@ -294,22 +281,6 @@ void bind_method_by_name() {  // ( actor message_name -- bound_method )
 }
 
 
-void run_task(Message *msg) {
-	// A regular function can at best evaluate to an action.
-	// So we call the function for its action-as-value,
-	// then perform the action.
-	push(msg->method);
-	push(vm_run());
-	perform();
-}
-
-static GC_Kind KIND_Task = {
-	.blacken = blacken_message,
-	.size = size_message,
-	.proceed = run_task,
-	.name = "Task",
-};
-
 static void blacken_parametric(Message *msg) { darkenValue(&msg->method); }
 static size_t size_parametric(Message *msg) { return sizeof(Message); }
 
@@ -318,7 +289,7 @@ static Value apply_parametric() {
 	int arity = AS_CLOSURE(TOP)->function->arity;
 	Value *base = &TOP - arity;
 	force_stack_slots(base, &TOP);
-	Message *msg = gc_allocate(&KIND_Task, sizeof(Message) + arity * sizeof(Value));
+	Message *msg = gc_allocate(&KIND_Message, sizeof(Message) + arity * sizeof(Value));
 	msg->method = TOP;
 	memcpy(msg->payload, base, arity * sizeof(Value));
 	vm.stackTop = base;
@@ -356,7 +327,8 @@ static void run_one_message(Message *msg) {
 	size_t arity = arity_of_message(msg);
 	memcpy(vm.stackTop, msg->payload, arity * sizeof(Value));
 	vm.stackTop += arity;
-	msg->header.kind->proceed(msg);
+	push(msg->method);
+	perform();
 	vm.stackTop = base;
 #ifdef DEBUG_TRACE_QUEUE
 	printf("  <--->\n");

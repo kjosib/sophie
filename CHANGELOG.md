@@ -4,13 +4,15 @@ Read this to get a general idea of what's new and nontrivial.
 
 ## April 2024
 
+* 30 April: Repair VM's message-passing behavior for new proc semantics.
+* 28 April: Virtual stack-trace diagnostic is now nicer/smarter around type-case match expressions. 
 * 27 April: Type-checker now copes with assigning actor members of variant type e.g. `list`.
   I have a sneaking suspicion the present method may not be *completely* sound,
   but I have a plan to fix the hole.
 * 24 April: Within `cast` lists, you can now mention one actor while constructing the next.
   Declare-before-use applies, at least for now.
 * 23 April: Various bugs and oversights fixed. 
-* 22 April: Change compiler and VM to new procedure semantics. Some thing get simpler.
+* 22 April: Change compiler and VM to new procedure semantics. Some things got simpler.
 * 17 April: Got the tree-walker fully working again with the new procedure semantics.
   (This includes turtle graphics and list displays, which had broken some time back.)
   All examples are updated to match. A program no longer returns a value.

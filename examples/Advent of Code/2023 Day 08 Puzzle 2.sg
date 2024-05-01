@@ -1,8 +1,13 @@
-# I spent some time away and when I re-read the problem description, it didn't seem quite so crazy anymore.
-# There is a way to break this problem into much simpler parts.
+# This ostensible "solution" mainly exists to exercise some newer language features.
+# Specifically, we have multiple user-defined actors communicating with each other
+# in round-robin fashion, repeatedly and continually.
 
-# This attempt is not finished yet, but it does exercise some newer language features as it stands,
-# so I'll go ahead and check it in unfinished and get back to it.
+# The concept works, as shown with the sample puzzle.
+# Unfortunately for my progress on Advent of Code,
+# this particular strategy is still far too slow for the real puzzle.
+# Successful solutions take advantage of number theory and observations
+# about the oasis-graph. That stuff is interesting, but I leave it as
+# an exercise for the sufficiently-inclined reader.
 
 import:
 	sys."tree" as TREE (search, Tree, in_order, assign, tree_of, delete);
@@ -42,10 +47,10 @@ end next_camel;
 # The actor only really needs one method.
 
 agent Camel_Memo(puzzle:Puzzle, memo:Tree) as
-	to advance(camel:Camel, reply) is case search(my memo, proxy) as s of
+	to advance(camel:Camel, reply) is case search(my memo, proxy) as found of
 		this -> do
-			console ! echo [fmt_camel(camel), " -> ", fmt_camel(unproxy(s.item)), EOL];
-			reply(camel, unproxy(s.item));
+			console ! echo [fmt_camel(camel), " -> ", fmt_camel(unproxy(found.item)), EOL];
+			reply(camel, unproxy(found.item));
 		end;
 		nope -> do
 			my memo := assign(my memo, entry(proxy, comes_to_rest(my puzzle, next_camel(my puzzle, proxy))));

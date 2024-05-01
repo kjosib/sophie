@@ -138,10 +138,14 @@ class VMGlobalScope(VMScope):
 
 	def write_begin_expressions(self, module: syntax.Module):
 		inner = VMFunctionScope(self, "[BEGIN]", is_thunk=True)
-		for index, expr in enumerate(module.main):
+		for expr, performative in zip(module.main, module.performative):
 			inner.nl()
-			STEP.visit(expr, inner)
-			inner.emit_drain()
+			if performative:
+				STEP.visit(expr, inner)
+				inner.emit_drain()
+			else:
+				FORCE.visit(expr, inner)
+				inner.emit_display()
 	
 	def write_outer_functions(self, fns:list[syntax.Subroutine]):
 		self.mangle_names(fns)
@@ -163,6 +167,7 @@ class VMGlobalScope(VMScope):
 			last = dfn.behaviors[-1]
 			inner = VMActorScope(self, dfn)
 			for b in dfn.behaviors:
+				inner.nl()
 				inner.write_one_behavior(b)
 				emit(".end" if b is last else ";")
 			self.nl()
@@ -336,6 +341,11 @@ class VMFunctionScope(VMScope):
 	def emit_drain(self):
 		assert self._depth == 0, self.depth()
 		emit("DRAIN")
+	
+	def emit_display(self):
+		assert self._depth == 1, self.depth()
+		self._pop()
+		emit("DISPLAY")
 	
 	def ascend_to(self, depth:int):
 		assert self._depth >= depth

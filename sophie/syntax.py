@@ -584,8 +584,10 @@ class Module:
 	all_fns: list[UserFunction]  # WordDefiner pass fills this.
 	all_procs: list[UserProcedure]  # WordDefiner pass fills this.
 	ffi_operators: list[FFI_Operator]  # WordDefiner fills this too.
+	
+	performative : list[bool]  # Type checker fills this in so compiler emits correctly.
 
-	def __init__(self, exports:list, imports:list[ImportDirective], types:list[TypeDeclaration], assumptions:list[Assumption], top_levels:list, main:list):
+	def __init__(self, exports:list, imports:list[ImportDirective], types:list[TypeDeclaration], assumptions:list[Assumption], top_levels:list, main:list[ValExpr]):
 		self.exports = exports
 		self.imports = [i for i in imports if isinstance(i, ImportModule)]
 		self.foreign = [i for i in imports if isinstance(i, ImportForeign)]

@@ -146,5 +146,7 @@ Instruction instruction[] = {
 	[OP_MEMBER] = {"MEMBER", &modeImmediate},
 	[OP_ASSIGN] = {"ASSIGN", &modeImmediate},
 	[OP_DRAIN] = {"DRAIN", &modeSimple},
+
+	[OP_DISPLAY] = {"DISPLAY", &modeSimple},
 };
 

@@ -692,11 +692,17 @@ class DeductionEngine(Visitor):
 		for uda in module.agent_definitions:
 			self._constructors[uda] = builder.make_agent_template(uda, local)
 	
+	def _trace_visit(self, expr, local):
+		self._report.trace(" -->", expr)
+		result = self.visit(expr, local)
+		self._report.info(result)
+		return result
+	
 	def visit_begin_block(self, module, local):
-		for expr in module.main:
-			self._report.trace(" -->", expr)
-			result = self.visit(expr, local)
-			self._report.info(result)
+		module.performative = [
+			_quacks_like_an_action(self._trace_visit(expr, local))
+			for expr in module.main
+		]
 
 	###############################################################################
 
