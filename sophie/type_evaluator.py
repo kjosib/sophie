@@ -1043,7 +1043,7 @@ class DeductionEngine(Visitor):
 			return primitive.literal_act
 		else:
 			uf = UnionFinder()
-			uf.unify_with(env, None, field_type, self._report)
+			uf.unify_with(env, am.dfn, field_type, self._report)
 			uf.unify_with(env, am.expr, expr_type, self._report)
 			union = uf.result()
 			if union is ERROR:

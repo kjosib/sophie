@@ -1,0 +1,136 @@
+##################
+# Not Quite Pong #
+##################
+
+# You control a paddle with your mouse.
+# A ball bounces back and forth, as long as you connect with your paddle.
+# Each time you hit the ball, it gets a bit faster.
+# How long can you keep this up?
+
+# Click once to start the game.
+# Click again to recover a dead ball.
+
+#----------------------------------------------------------------------------
+
+import:
+
+sys."game" as game (events, xy, polar, as_cartesian, rgb, fill, stroke, fill_box);
+
+
+type:
+
+	Ball is (p:xy, v:xy);
+
+	State is case:
+		dead(p:xy);
+		ready;
+		live(ball:Ball);
+	esac;
+	
+define:
+
+frame_rate = 60;
+
+# Colors:
+c_background = rgb(0, $99, 0);
+c_paddle = rgb($99, 0, $33);
+c_ball = rgb($99, $99, $cc);
+
+# Sizes:
+s_screen = xy(800, 500);
+s_ball = s_screen / 40;
+s_paddle = xy(s_ball.x, s_ball.y * 6);
+
+s_field = s_screen - s_ball;
+
+# The main game logic
+agent NotQuitePong(state:State, paddle:number) as
+
+	to mouse(event) is case my state of
+		dead -> skip;
+		else my paddle := clamp_paddle(event.pos.y - s_paddle.y/2);
+	esac;
+
+	to click(event) is case my state of
+		dead -> do my state := ready; console ! echo["Got ready", EOL]; end;
+		ready -> console!random(self!launch);
+		live -> skip;
+	esac;
+
+	to launch(random) is do
+		console ! echo["Launch ", str(random), EOL];
+		my state := live(Ball(ready_xy(my paddle), initial_velocity(random)));
+	end;
+
+	to tick(display) is do
+		display ! draw [
+			fill(c_background),
+			stroke(c_paddle, [fill_box(xy(0, my paddle), s_paddle)]),
+			stroke(c_ball, [fill_box(ball_position, s_ball)]),
+		];
+		my state := next;
+	end where
+		ball_position = case next as s of
+			live -> s.ball.p;
+			ready -> ready_xy(my paddle);
+			dead -> s.p;
+		esac;
+		next:State = case my state as s of
+			live -> bounce_x(bounce_y(advance(s.ball)), my paddle);
+			else s;
+		esac;
+	end tick;
+
+end NotQuitePong;
+
+# Support functions
+
+ready_xy(paddle):xy = xy(s_paddle.x, paddle + ready_offset);
+ready_offset = (s_paddle.y - s_ball.y) / 3;
+
+clamp_paddle(y) = case
+	when y < 0 then 0;
+	when y > max_y then max_y;
+	else y;
+esac;
+
+max_y = s_screen.y - s_paddle.y;
+
+advance(ball) = Ball(ball.p + ball.v, ball.v);
+
+bounce_y(ball) = case
+	when ball.p.y < 0 and ball.v.y < 0 then reflect_y(ball, 0);
+	when ball.p.y > s_field.y and ball.v.y > 0 then reflect_y(ball, s_field.y);
+	else ball;
+esac;
+
+is_at_left(ball) = ball.p.x < s_paddle.x and ball.v.x < 0;
+
+bounce_x(ball, paddle):State = case
+	when ball.p.x > s_field.x and ball.v.x > 0 then live(reflect_x(ball, s_field.x));
+	when is_at_left(ball) then boing(ball) if is_hit(ball, paddle) else dead(ball.p);
+	else live(ball);
+esac;
+
+is_hit(ball, paddle) = paddle <= center and center <= paddle + s_paddle.y where
+	center = ball.p.y + s_ball.y/2;
+end is_hit;
+
+boing(ball) = live(accelerate(reflect_x(ball, s_paddle.x)));
+accelerate(ball) = Ball(ball.p, ball.v * 1.05);
+
+reflect_x(ball, x) = Ball(xy(2*x-ball.p.x, ball.p.y), xy(-ball.v.x, ball.v.y));
+reflect_y(ball, y) = Ball(xy(ball.p.x, 2*y-ball.p.y), xy(ball.v.x, -ball.v.y));
+
+initial_velocity(random) = as_cartesian(polar(s_screen.x/4/frame_rate, random-0.5));
+
+begin:
+	cast
+		nqp is NotQuitePong(ready, 0);
+	do
+        events ! on_mouse(nqp ! mouse);
+        events ! on_button_down(nqp ! click);
+        events ! on_tick(nqp ! tick);
+	end;
+	events ! play(s_screen, frame_rate);
+end.

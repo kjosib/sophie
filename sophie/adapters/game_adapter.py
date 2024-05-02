@@ -96,7 +96,7 @@ class GameLoop:
 					self._on_mouse.dispatch_with(mouse_event(event))
 				elif event.type == pygame.MOUSEBUTTONDOWN and self._on_button_down is not None:
 					self._on_button_down.dispatch_with(button_event(event))
-				elif event.type == pygame.MOUSEBUTTONUP and self._on_button_down is not None:
+				elif event.type == pygame.MOUSEBUTTONUP and self._on_button_up is not None:
 					self._on_button_up.dispatch_with(button_event(event))
 				elif event.type == pygame.KEYDOWN and self._on_key_down is not None:
 					self._on_key_down.dispatch_with(key_event(event))

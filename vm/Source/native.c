@@ -297,7 +297,7 @@ static Value apply_native() {
 	return result;
 }
 
-GC_Kind KIND_Native = {
+static GC_Kind KIND_Native = {
 	.display = display_native,
 	.deeply = display_native,
 	.blacken = blacken_native,
