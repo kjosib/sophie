@@ -69,6 +69,26 @@ static Value game_on_tick(Value *args) {
 	return UNSET_VAL;
 }
 
+static Value game_on_button_down(Value *args) {
+	SELF->fields[ON_BUTTON_DOWN] = args[1];
+	return UNSET_VAL;
+}
+
+static Value game_on_button_up(Value *args) {
+	SELF->fields[ON_BUTTON_UP] = args[1];
+	return UNSET_VAL;
+}
+
+static Value game_on_key_down(Value *args) {
+	SELF->fields[ON_KEY_DOWN] = args[1];
+	return UNSET_VAL;
+}
+
+static Value game_on_key_up(Value *args) {
+	SELF->fields[ON_KEY_UP] = args[1];
+	return UNSET_VAL;
+}
+
 static void compose(LINKAGE what) {
 	push(linkage[what]);
 	push(construct_record());
@@ -379,10 +399,14 @@ static Value game_play(Value *args) {  // ( SELF size fps -- )
 				enqueue_message(pop());
 				return UNSET_VAL;
 			case SDL_KEYDOWN:
+#ifdef _DEBUG
 				printf("Key Down: %d\n", ev.key.keysym.sym);
+#endif // _DEBUG
 				break;
 			case SDL_KEYUP:
+#ifdef _DEBUG
 				printf("Key Up: %d\n", ev.key.keysym.sym);
+#endif // _DEBUG
 				break;
 			case SDL_MOUSEMOTION:
 				if (!IS_UNSET(SELF->fields[ON_MOUSE])) {
@@ -405,8 +429,16 @@ static Value game_play(Value *args) {  // ( SELF size fps -- )
 					enqueue_message(apply());
 				}
 				break;
+			case SDL_WINDOWEVENT:
+				break;
+			case SDL_TEXTEDITING:
+				break;
+			case SDL_AUDIODEVICEADDED:
+				break;
 			default:
+#ifdef _DEBUG
 				printf("Event %d\n", ev.type);
+#endif // _DEBUG
 				break;
 			}
 		}
@@ -467,6 +499,10 @@ static void define_event_loop_as_global() {
 
 	create_native_method("on_mouse", 2, game_on_mouse);
 	create_native_method("on_tick", 2, game_on_tick);
+	create_native_method("on_button_down", 2, game_on_button_down);
+	create_native_method("on_button_up", 2, game_on_button_up);
+	create_native_method("on_key_down", 2, game_on_key_down);
+	create_native_method("on_key_up", 2, game_on_key_up);
 	create_native_method("play", 3, game_play);
 
 	Value dfn = pop();

@@ -2,6 +2,11 @@
 
 Read this to get a general idea of what's new and nontrivial.
 
+## May 2024
+
+* 1 May: "Not Quite Pong" game drops. (It's simplistic, but gets a point across.)
+  Also, mouse button events now work in the VM.
+
 ## April 2024
 
 * 30 April: Repair VM's message-passing behavior for new proc semantics.

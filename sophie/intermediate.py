@@ -705,11 +705,11 @@ class ForceContext(FunctionContext):
 	def visit_Cond(self, cond:syntax.Cond, scope:VMFunctionScope):
 		FORCE.visit(cond.if_part, scope)
 		label_else = scope.jump_if(False)
-		FORCE.visit(cond.then_part, scope)
+		self.visit(cond.then_part, scope)
 		after = scope.jump_always()
 		scope.come_from(label_else)
 		scope.emit_pop()
-		FORCE.visit(cond.else_part, scope)
+		self.visit(cond.else_part, scope)
 		scope.come_from(after)
 
 class TailContext(FunctionContext):
@@ -796,6 +796,7 @@ class StepContext(ProcContext):
 	def semicolon(self, scope: VMFunctionScope):
 		pass
 	
+StepContext.visit_Cond = ForceContext.visit_Cond
 StepContext.sequel = ForceContext.sequel
 
 class LastContext(ProcContext):
