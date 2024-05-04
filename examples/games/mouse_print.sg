@@ -2,7 +2,8 @@
 # The simplest might be to print mouse events.
 
 import:
-sys."game" as game (events, xy, rgb, fill);
+sys."2d" (xy);
+sys."game" as game (events, rgb, fill);
 
 define:
     to print_mouse_event(e) is console!echo ["mouse ", str(e.pos.x), ",", str(e.pos.y), EOL];

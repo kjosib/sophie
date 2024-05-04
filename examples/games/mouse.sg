@@ -3,7 +3,9 @@
 
 
 import:
-sys."game" as game (events, xy, rgb, fill, stroke, black, white, hlin, vlin, box, circle);
+
+    sys."2d" (xy);
+    sys."game" as game (events, rgb, fill, stroke, black, white, hlin, vlin, box, circle);
 
 
 define:

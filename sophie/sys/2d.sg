@@ -1,0 +1,33 @@
+# Simple 2-D vector math and trigonometry: types and operations.
+
+# Games and graphical demos will probably use this quite a lot,
+# but there are plenty of other applications.
+
+type:
+
+	xy is (x:number, y:number);               # Cartesian / Rectangular Coordinates
+	polar is (magnitude:number, theta:number);  # Theta is expressed in radians.
+
+assume:
+
+	r, a, b : xy;
+	scalar, theta: number;
+	p, p1, p2 : polar;
+
+define:
+
+	operator + (a, b) = xy(a.x+b.x, a.y+b.y);
+	operator - (a, b) = xy(a.x-b.x, a.y-b.y);
+	operator * (scalar, r) = xy(scalar*r.x, scalar*r.y);
+	operator * (r, scalar) = xy(scalar*r.x, scalar*r.y);
+	operator / (r, scalar) = xy(r.x/scalar, r.y/scalar);
+	
+	unit_vector(theta) = xy(cos(theta), sin(theta));
+	as_cartesian(p) = p.magnitude * unit_vector(p.theta);
+	as_polar(r) = polar(magnitude_of(r), angle_of(r));
+	magnitude_of(r) = sqrt(r.x*r.x + r.y*r.y);
+	angle_of(r) = atan2(r.y, r.x);
+	norm(r) = r/magnitude_of(r);
+	dot(a:xy, b:xy) = a.x*b.x + a.y*b.y;
+	
+

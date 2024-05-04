@@ -4,6 +4,9 @@
 #
 
 import:
+	
+	sys."2d" (xy);
+	
     foreign "sophie.adapters.game_adapter" (
         xy, mouse_event, button_event, key_event
     ) where
@@ -17,9 +20,6 @@ type:
 
     rgb is (red:number, green:number, blue:number);
 
-
-    xy is (x:number, y:number);               # Cartesian / Rectangular Coordinates
-    polar is (magnitude:number, theta:number);  # Theta is expressed in radians.
     area is (left:number, top:number, width:number, height:number);
 
     GameLoop is agent:
@@ -65,29 +65,9 @@ type:
         arc(corner:xy, measure:xy, start_angle:number, stop_angle:number);
     esac;
 
-assume:
-    r, a, b : xy;
-    scalar, theta: number;
-    p, p1, p2 : polar;
 
 define:
 
     black = rgb(0,0,0);
     white = rgb(255,255,255);
 
-    # Simple 2-D vector math and trigonometry:
-    
-    operator + (a, b) = xy(a.x+b.x, a.y+b.y);
-    operator - (a, b) = xy(a.x-b.x, a.y-b.y);
-    operator * (scalar, r) = xy(scalar*r.x, scalar*r.y);
-    operator * (r, scalar) = xy(scalar*r.x, scalar*r.y);
-    operator / (r, scalar) = xy(r.x/scalar, r.y/scalar);
-    
-    unit_vector(theta) = xy(cos(theta), sin(theta));
-    as_cartesian(p) = p.magnitude * unit_vector(p.theta);
-    as_polar(r) = polar(magnitude_of(r), angle_of(r));
-    magnitude_of(r) = sqrt(r.x*r.x + r.y*r.y);
-    angle_of(r) = atan2(r.y, r.x);
-    norm(r) = r/magnitude_of(r);
-    dot(a:xy, b:xy) = a.x*b.x + a.y*b.y;
-    

@@ -9,12 +9,14 @@
 
 # Click once to start the game.
 # Click again to recover a dead ball.
+# You can put English on the ball by hitting it off-center with your paddle.
 
 #----------------------------------------------------------------------------
 
 import:
 
-sys."game" as game (events, xy, polar, as_cartesian, rgb, fill, stroke, fill_box);
+	sys."2d"(xy, polar, as_polar, as_cartesian);
+	sys."game" as game (events, rgb, fill, stroke, fill_box);
 
 
 type:
@@ -30,6 +32,8 @@ type:
 define:
 
 frame_rate = 60;
+max_angle = pi / 3;
+acceleration = 1.05;
 
 # Colors:
 c_background = rgb(0, $99, 0);
@@ -37,7 +41,7 @@ c_paddle = rgb($99, 0, $33);
 c_ball = rgb($99, $99, $cc);
 
 # Sizes:
-s_screen = xy(800, 500);
+s_screen = xy(1600, 1000);
 s_ball = s_screen / 40;
 s_paddle = xy(s_ball.x, s_ball.y * 6);
 
@@ -108,16 +112,23 @@ is_at_left(ball) = ball.p.x < s_paddle.x and ball.v.x < 0;
 
 bounce_x(ball, paddle):State = case
 	when ball.p.x > s_field.x and ball.v.x > 0 then live(reflect_x(ball, s_field.x));
-	when is_at_left(ball) then boing(ball) if is_hit(ball, paddle) else dead(ball.p);
+	when is_at_left(ball) then swing(ball, paddle);
 	else live(ball);
 esac;
 
-is_hit(ball, paddle) = paddle <= center and center <= paddle + s_paddle.y where
+swing(ball, paddle) = boing if is_hit else dead(ball.p) where
+	is_hit = paddle <= center and center <= paddle + s_paddle.y;
 	center = ball.p.y + s_ball.y/2;
-end is_hit;
+	English_angle = max_angle * (2 * (center - paddle) / s_paddle.y - 1);
+	bounce = reflect_x(ball, s_paddle.x);
+	bounce_velocity = as_polar(bounce.v * acceleration);
+	new_angle = midpoint(bounce_velocity.theta, English_angle);
+	new_velocity = as_cartesian(polar(bounce_velocity.magnitude, new_angle));
+	boing = live(Ball(bounce.p, new_velocity));
+end swing;
 
-boing(ball) = live(accelerate(reflect_x(ball, s_paddle.x)));
-accelerate(ball) = Ball(ball.p, ball.v * 1.05);
+
+midpoint(a,b) = (a+b)/2;
 
 reflect_x(ball, x) = Ball(xy(2*x-ball.p.x, ball.p.y), xy(-ball.v.x, ball.v.y));
 reflect_y(ball, y) = Ball(xy(ball.p.x, 2*y-ball.p.y), xy(ball.v.x, -ball.v.y));
@@ -128,9 +139,9 @@ begin:
 	cast
 		nqp is NotQuitePong(ready, 0);
 	do
-        events ! on_mouse(nqp ! mouse);
-        events ! on_button_down(nqp ! click);
-        events ! on_tick(nqp ! tick);
+		events ! on_mouse(nqp ! mouse);
+		events ! on_button_down(nqp ! click);
+		events ! on_tick(nqp ! tick);
 	end;
 	events ! play(s_screen, frame_rate);
 end.
