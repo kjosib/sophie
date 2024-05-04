@@ -4,7 +4,8 @@
 # The release-mode VM on the author's machine does keep up.
 
 import:
-sys."game" as game (events, xy, rgb, stroke, fill_box, black);
+sys."2d" (xy);
+sys."game" as game (events, rgb, stroke, fill_box, black);
 sys."complex" (complex, squared_magnitude);
 
 type:
