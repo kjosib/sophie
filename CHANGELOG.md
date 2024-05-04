@@ -4,6 +4,10 @@ Read this to get a general idea of what's new and nontrivial.
 
 ## May 2024
 
+* 4 May: May the fourth be with you.
+* 3 May: Factored the 2d vector/math/trig out of `game.sg` into `2d.sg`.
+  Also, the "Not Quite Pong" game now puts English on the ball based on
+  where it strikes the paddle, exploiting more `2d` things.
 * 1 May: "Not Quite Pong" game drops. (It's simplistic, but gets a point across.)
   Also, mouse button events now work in the VM.
 
