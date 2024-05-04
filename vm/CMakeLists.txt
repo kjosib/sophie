@@ -1,4 +1,4 @@
-﻿# CMakeList.txt : CMake project for svm, include source and define
+﻿# CMakeList.txt : CMake project for SophieVM, include source and define
 # project specific logic here.
 #
 cmake_minimum_required (VERSION 3.8)
@@ -9,12 +9,12 @@ if (POLICY CMP0141)
   set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT "$<IF:$<AND:$<C_COMPILER_ID:MSVC>,$<CXX_COMPILER_ID:MSVC>>,$<$<CONFIG:Debug,RelWithDebInfo>:EditAndContinue>,$<$<CONFIG:Debug,RelWithDebInfo>:ProgramDatabase>>")
 endif()
 
-project ("svm")
-include_directories(SYSTEM "/SDL2-2.28.5/include")
-link_directories("/SDL2-2.28.5/lib/x64")
+project ("SophieVM")
+include_directories(SYSTEM "/SDL2-2.30.3/include")
+link_directories("/SDL2-2.30.3/lib/x64")
 
 # Add source to this project's executable.
-add_executable (svm
+add_executable (SophieVM
 	"Source/chunk.c"  "Source/debug.c"  "Source/main.c" "Source/memory.c" "Source/value.c" 
 	"Source/vm.c" "Source/assembler.c" "Source/scanner.c" "Source/isa.c" "Source/parser.c"
 	"Source/string.c" "Source/table.c" "Source/gc.c" "Source/function.c" "Source/record.c"
@@ -25,15 +25,17 @@ add_executable (svm
 	"Source/chacha.h" "Source/platform_specific.h"
 )
 
-target_link_libraries(svm SDL2)
+set_target_properties(SophieVM PROPERTIES OUTPUT_NAME "svm")
+
+target_link_libraries(SophieVM SDL2)
 
 if (CMAKE_VERSION VERSION_GREATER 3.12)
-  set_property(TARGET svm PROPERTY CXX_STANDARD 20)
+  set_property(TARGET SophieVM PROPERTY CXX_STANDARD 20)
 endif()
 
 # Platform specific
 if(WIN32)
-	target_link_libraries(svm bcrypt)
+	target_link_libraries(SophieVM bcrypt)
 endif()
 
 
