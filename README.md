@@ -68,9 +68,9 @@ Some things are going well:
 
 * A native-code [Virtual-Machine](https://github.com/kjosib/sophie/tree/main/vm) can run Sophie code at a respectable speed.
   It reads a "compiled" form which you can generate with a command-line like `sophie -x your/sophie/program.sg > program.is`.
-  It runs most of the examples just fine, but lags slightly behind on extensions.
 * Sophie has Turtle-graphics! (See [here](https://github.com/kjosib/sophie/blob/main/examples/turtle/turtle.sg) for examples.)
-* Sophie is interactive! See [this guessing game](https://github.com/kjosib/sophie/blob/main/examples/games/guess_the_number.sg) as an example.
+* Sophie is interactive! See [this guessing game](https://github.com/kjosib/sophie/blob/main/examples/games/guess_the_number.sg)
+  or this [Not-Quite-Pong game](https://github.com/kjosib/sophie/blob/main/examples/games/nqp.sg) as examples.
 * The type-checker gives excellent feedback and cannot be fooled.
   Through abstract interpretation it completely rules out *type* errors.
   (Domain errors, such as division by zero, are still possible.)
@@ -78,16 +78,17 @@ Some things are going well:
 * The FFI: Sophie can call Python; Python can call Sophie; and Python can install I/O drivers into Sophie.
   The same FFI directives on the Sophie side interact properly with the native-code VM.
 * Compile-time error display is generally clear and informative.
+* Operator overloading works via double-dispatch. Thus, the standard modules for complex-numbers and 2d vectors
+  both let you use ordinary arithmetic symbols to manipulate their respective data types.
 
 Some things are in progress:
 
 * SDL bindings (via PyGame for now). See for example this [graphical mouse-chaser](https://github.com/kjosib/sophie/blob/main/examples/games/mouse.sg).
-* Operator overloading.
 
-Certain things are not started yet:
+Certain things seem like nice ideas, but may not happen any time soon:
 
-* Variable-Arity Functions. (This may never happen.)
-* Ad-hoc polymorphic multi-methods. (This becomes less interesting once operator overloading gets finished.)
+* Variable-Arity Functions.
+* Ad-hoc polymorphic multi-methods.
 * List comprehension (expressions like `[expr FOR name IN expr]`) are removed from the syntax for now.
 
 ## Why not just use Language X, Y, or Z?
