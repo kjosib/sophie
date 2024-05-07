@@ -59,22 +59,35 @@ Let's work through this part from the bottom up.
     This is what is meant by "asynchronous message-passing".
 
 ``console ! echo(intro)``
-    This means to send the message ``echo``,
-    with single argument ``intro``, to the agent called ``console``.
-    And to be clear, it means the *idea* of that action.
+    There are a couple things to unpack here.
 
-    Here, ``console`` is the *receiver*. Any single receiver will handle its
-    own incoming messages in the order they arrive. And messages sent from
-    one agent to another will arrive in the order they were sent.
-    However, messages from *different* sources may arrive at the same
-    destination in any interleaving that respects the rules above.
-    (The ``begin:`` block is considered a single source.)
+    This expression represents a message called ``echo``,
+    with single argument ``intro``, addressed to the agent called ``console``.
 
-Actions are values.
-    You can pass them around to functions, hold them in data structures,
-    and select among them as you would with any other kind of value.
-    The only way an action actually *gets done* is when an expression in the ``begin:`` section
-    evaluates to an action -- which can possibly kick off a cascade of consequences.
+    .. admonition:: Terminology
+
+        Here, ``console`` is called the *receiver* of this message.
+        The receiver will carry out some *behavior* in response to
+        the message at some future time when the message is delivered.
+
+    When Sophie sees a message as one of expressions in the ``begin:`` block,
+    or as a step in a procedure, then Sophie will send that message --
+    which may kick off a cascade of consequences.
+
+    As a special case, between steps in a ``begin:`` block,
+    Sophie will wait for those consequences to play out fully
+    before proceeding to the next expression. In any other
+    context, Sophie does not wait: Messages go on a queue
+    for asynchronous delivery.
+
+    .. note::
+        Any single receiver will handle its
+        own incoming messages in the order they arrive. And messages sent from
+        one agent to another will arrive in the order they were sent.
+        However, messages from *different* sources may arrive at the same
+        destination in any interleaving that respects the rules above.
+
+        I should really move this to some reference section...
 
 ``echo``
     The ``echo`` message asks the console to print some text.
@@ -117,7 +130,7 @@ Actions are values.
 Asking for Input: Sequence
 ...........................
 
-The ``turn`` function is the main loop of the game.
+The ``turn`` procedure is the main loop of the game.
 It's job is to prompt for a guess and then interpret that guess as either too high, too low, or just right::
 
     game(r) = turn(1) where
@@ -138,6 +151,11 @@ You can put a sequence of actions between ``do`` and ``end`` as shown here.
 That creates a single larger action.
 In this case, we have another ``echo`` and this time a ``read`` message.
 
+The ``turn`` procedure sends two messages in quick succession.
+Outside of the ``begin:`` block, Sophie *will not wait* between messages for the
+consequences to play out. Rather, each message is delivered as soon as possible.
+The receiver (``console`` in this case) will handle those messages asynchronously.
+
 * Just like with function calls, you don't need parenthesis around a list if it's the only argument to a message.
   The square brackets of the list itself are enough to make yourself clear.
 * The ``read`` message means to wait for a line of input text (ending with the 'enter' or 'return' key)
@@ -146,6 +164,7 @@ In this case, we have another ``echo`` and this time a ``read`` message.
 * Speaking of ``random``: the ``goal`` sub-function provides our number scaled up to between 1 and 100 inclusive,
   as promised in the introduction. The multiplication and addition should be self-explanatory.
   To get rid of any remaining fractional part, we apply the ``int`` function as shown here.
+
 
 
 Analyzing Input: Selection
