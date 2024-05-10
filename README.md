@@ -93,7 +93,7 @@ Certain things seem like nice ideas, but may not happen any time soon:
 
 ## Why not just use Language X, Y, or Z?
 
-Have you been paying attention?
+I won't stop you.
 
 ## Long-Term Plans
 

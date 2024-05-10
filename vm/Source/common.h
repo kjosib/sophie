@@ -26,23 +26,13 @@ Eventually I might enforce a consistent style. But for now, there are bigger fis
 #include <stddef.h>
 #include <stdint.h>
 
+#include "debug.h"
+
 typedef union {
 	uint64_t bits;
 	double number;
 	void *hex;  // This case only exists to make the debugger provide a hexadecimal read-out.
 } Value;
-
-#ifdef _DEBUG
-//#define DEBUG_PRINT_GLOBALS
-//#define DEBUG_PRINT_CODE
-//#define DEBUG_TRACE_EXECUTION
-//#define DEBUG_TRACE_QUEUE
-//#define DEBUG_STRESS_GC
-//#define DEBUG_ANNOUNCE_GC
-#define RECLAIM_CHUNKS 1
-#else
-#define RECLAIM_CHUNKS 0
-#endif // _DEBUG
 
 #define byte uint8_t
 #define BYTE_CARDINALITY 256
@@ -77,22 +67,41 @@ typedef struct {
 	char *name;
 } GC_Kind;
 
-typedef union {
+typedef union GC GC;
+
+union GC {
 	GC_Kind *kind;
 	void *ptr;
-} GC;
+	GC *fwd;
+};
 
 void init_gc();
 void gc_install_roots(Verb verb);
 void gc_forget_roots(Verb verb);
 
 void *gc_allocate(GC_Kind *kind, size_t size);
+
+void collect_garbage();
+void darkenValue(Value *value);
+
+/*
+There is a software write-barrier:
+After an object is first initialized,
+the mutator must call gc_mutate for all further mutation.
+*/
+void gc_mutate(Value *dst, Value value);
+
 GC *darken(GC *gc);
 static inline void darken_in_place(void **gc) {
 	// Suitable specifically for undecorated pointers, not packed values.
 	*gc = darken((GC*)(*gc));
 }
-void gc_must_finalize(GC *item);
+// gc_move_journal is suitable only for arrays, not hash-tables.
+void gc_move_journal(void *start, void *stop, void *new_start);
+void gc_forget_journal_portion(void *start, void *stop);
+#if USE_FINALIZERS
+void gc_please_finalize(GC *item);
+#endif
 
 /* memory.h */
 
@@ -134,7 +143,8 @@ void *reallocate(void *pointer, size_t newSize);
 #define IND_GC       SHIFT(0xfff4)  // Pointer to Garbage-Collected Heap for this and subsequent tags.
 #define IND_CLOSURE  SHIFT(0xfff5)  // Pointer to callable; helps with VM to avoid indirections.
 #define IND_THUNK    SHIFT(0xfff6)  // As long as the VM is recursive, it must check for these.
-#define IND_GLOBAL   SHIFT(0xfff7)  // Global reference; used only during compiling.
+#define IND_NATIVE   SHIFT(0xfff7)  // Because why not?
+#define IND_GLOBAL   SHIFT(0xfffd)  // Global reference; used only during compiling.
 
 #define IS_UNSET(value)   ((value).bits == IND_UNSET)
 #define IS_RUNE(value)    (INDICATOR(value) == IND_RUNE)
@@ -143,6 +153,7 @@ void *reallocate(void *pointer, size_t newSize);
 #define IS_GC_ABLE(value) (((value).bits & IND_GC) == IND_GC)
 #define IS_CLOSURE(value) (INDICATOR(value) == IND_CLOSURE)
 #define IS_THUNK(value)   (INDICATOR(value) == IND_THUNK)
+#define IS_NATIVE(value)   (INDICATOR(value) == IND_NATIVE)
 #define IS_GLOBAL(value)  (INDICATOR(value) == IND_GLOBAL)
 
 #define PACK(indic, datum) ((Value){.bits = indic | ((uint64_t)(datum))})
@@ -165,9 +176,18 @@ void *reallocate(void *pointer, size_t newSize);
 #define GC_VAL(object)      PACK(IND_GC, object)
 #define CLOSURE_VAL(object) PACK(IND_CLOSURE, object)
 #define THUNK_VAL(object)   PACK(IND_THUNK, object)
+#define NATIVE_VAL(object)  PACK(IND_NATIVE, object)
 #define GLOBAL_VAL(object)  PACK(IND_GLOBAL, object)
 
-DEFINE_VECTOR_TYPE(ValueArray, Value)
+typedef struct {
+	size_t cnt;
+	size_t cap;
+	Value *at;
+	// size_t id;
+} ValueArray;
+void initValueArray(ValueArray *vec);
+void freeValueArray(ValueArray *vec);
+size_t appendValueArray(ValueArray *vec);  // ( value -- )
 
 void print_simply(Value value);
 void printValue(Value value);
@@ -219,33 +239,52 @@ typedef struct {
 } String;
 
 uint32_t hashString(const char *key, size_t length);
+#define WRAP(index, capacity) ( (index) & ( (capacity) -1 ) )
+
 String *new_String(size_t length);
-String *intern_String(String *string);
-String *import_C_string(const char *chars, size_t length);
+void intern_String();  // ( string -- string )
+void import_C_string(const char *chars, size_t length);  // ( -- string )
 void push_C_string(const char *name);
 
 #define AS_STRING(it) ((String *)PAYLOAD(it))
 bool is_string(void *item);
 
+typedef struct {
+	size_t capacity;
+	size_t population;
+	size_t threshold;
+	Value *at;
+} StringTable;
+
+void string_table_init(StringTable *table, size_t capacity);
+void string_table_free(StringTable *table);
+
 /* table.h */
 
 typedef struct {
-	String *key;
+	Value key;
 	Value value;
 } Entry;
 
-DEFINE_VECTOR_TYPE(Table, Entry)
+extern GC_Kind KIND_Table;
 
-Value tableGet(Table *table, String *key);
-bool tableSet(Table *table, String *key, Value value);
-Value table_get_from_C(Table *table, const char *text);
-void table_set_from_C(Table *table, char *text, Value value);
-void tableAddAll(Table *from, Table *to);
-Entry *tableFindString(Table *table, const char *chars, size_t length, uint32_t hash);
-bool tableDelete(Table *table, String *key);
-void darkenTable(Table *table);
+typedef struct {
+	GC header;
+	size_t capacity;
+	size_t population;
+	Entry at[];
+} Table;
+
+#define AS_TABLE(v) ((Table*)PAYLOAD(v))
+
+Table *new_table(size_t capacity);
+
+Value tableGet(Value tableValue, String *key);
+void tableSet();  // ( value key table -- table )
+Value table_get_from_C(const char *text);  // ( Table -- Table )
+void table_set_from_C(char *text, Value value);  // ( table -- table )
 void tableDump(Table *table);
-void populate_field_offset_table(Table *table, int nr_fields);
+void make_field_offset_table(int nr_fields);  // ( Name ... -- Table )
 
 /* function.h */
 
@@ -289,28 +328,17 @@ String *name_of_function(Function *function);
 
 bool is_function(Value value);
 
-extern GC_Kind KIND_Snapped;
+extern GC_Kind KIND_Closure, KIND_Snapped;
 
 #define SNAP_RESULT(thunk_ptr) (thunk_ptr->captives[0])
 #define DID_SNAP(value) (&KIND_Snapped == AS_GC(value)->kind)
-
-static inline void darkenValue(Value *value) {
-	if (IS_THUNK(*value) && DID_SNAP(*value)) {
-		*value = SNAP_RESULT(AS_CLOSURE(*value));
-	}
-	if (IS_GC_ABLE(*value)) {
-		GC *grey = AS_GC(*value);
-		GC *black = darken(grey);
-		value->bits = INDICATOR(*value) | (uint64_t)black;
-	}
-}
 
 /* record.h */
 
 typedef struct {
 	GC header;
 	String *name;
-	Table field_offset;
+	Value field_offset;
 	int vt_idx;
 	byte tag;
 	byte nr_fields;
@@ -324,7 +352,7 @@ typedef struct {
 
 
 Value construct_record();
-void make_constructor(int vt_idx, int tag, int nr_fields);  // ( field_name ... ctor_name -- ctor )
+void make_constructor(int vt_idx, int tag, int nr_fields);  // ( field_table name -- constructor )
 
 #define AS_CTOR(value) ((Constructor*)PAYLOAD(value))
 #define AS_RECORD(value) ((Record*)PAYLOAD(value))
@@ -384,13 +412,13 @@ Value find_dispatch(DispatchTable *dt, int type_index);
 
 /* actor.h */
 
-extern GC_Kind KIND_Message, KIND_BoundMethod;
+extern GC_Kind KIND_Message, KIND_BoundMethod, KIND_ActorDfn;
 
 typedef struct {
 	GC header;
 	String *name;
-	Table field_offset;
-	Table msg_handler;
+	Value field_offset;
+	Value msg_handler;
 	byte nr_fields;
 } ActorDfn;
 
@@ -420,7 +448,7 @@ typedef struct {
 void init_actor_model();
 void enqueue_message(Value message);
 
-void define_actor(byte nr_fields);  // ( field_names... name -- dfn )
+void define_actor();  // ( field_names... name -- ActorDfn )
 void install_method();  // ( ActorDfn Method Name -- ActorDfn )
 Value make_template_from_dfn();  // ( args... dfn -- ) tpl
 void make_actor_from_template();  // ( tpl -- actor )
@@ -457,7 +485,7 @@ typedef struct {
 	Trace *trace;
 	Value stack[STACK_MAX];
 	Value *stackTop;
-	Table strings;
+	StringTable strings;
 	Value cons;
 	Value nil;
 	Value maybe_this;
@@ -489,8 +517,10 @@ static inline Value pop() {
 	return *vm.stackTop;
 }
 
-#define TOP (vm.stackTop[-1])
-#define SND (vm.stackTop[-2])
+#define INDEX(x) (vm.stackTop[-(x)])
+#define TOP INDEX(1)
+#define SND INDEX(2)
+#define THD INDEX(3)
 
 static inline Value apply() { return AS_GC(TOP)->kind->apply(); }
 
@@ -507,10 +537,12 @@ static inline void snoc() { swap(); push(vm.cons); push(construct_record()); }
 
 void defineGlobal();  // ( value name -- )
 
-void vm_capture_preamble_specials(Table *globals);
+void vm_capture_preamble_specials();
 __declspec(noreturn) void vm_panic(const char *format, ...);
 
 /* native.h */
+
+extern GC_Kind KIND_Native;
 
 typedef Value(*NativeFn)(Value *args);
 
@@ -536,7 +568,7 @@ void create_native_method(const char *name, byte arity, NativeFn function);  // 
 /* ffi.h */
 
 void ffi_prepare_modules();
-NativeFn ffi_find_module(String *key);
+NativeFn ffi_find_module(char *key);
 
 /* game.h */
 

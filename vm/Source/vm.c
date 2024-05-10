@@ -34,26 +34,25 @@ static void resetStack() {
 
 void vm_init() {
 	resetStack();
-	initTable(&vm.strings);
+	string_table_init(&vm.strings, 64);
 	vm.cons = vm.nil = vm.maybe_this = vm.maybe_nope = UNSET_VAL;
 	gc_install_roots(grey_the_vm_roots);
 	init_dispatch();
 }
 
-void vm_capture_preamble_specials(Table *globals) {
-	vm.cons = table_get_from_C(globals, "cons");
-	vm.nil = table_get_from_C(globals, "nil");
-	vm.maybe_this = table_get_from_C(globals, "this");
-	vm.maybe_nope = table_get_from_C(globals, "nope");
-	vm.less = table_get_from_C(globals, "less");
-	vm.same = table_get_from_C(globals, "same");
-	vm.more = table_get_from_C(globals, "more");
+void vm_capture_preamble_specials() {  // ( globals -- globals )
+	vm.cons = table_get_from_C("cons");
+	vm.nil = table_get_from_C("nil");
+	vm.maybe_this = table_get_from_C("this");
+	vm.maybe_nope = table_get_from_C("nope");
+	vm.less = table_get_from_C("less");
+	vm.same = table_get_from_C("same");
+	vm.more = table_get_from_C("more");
 }
 
 void vm_dispose() {
 	dispose_dispatch();
 	gc_forget_roots(grey_the_vm_roots);
-	freeTable(&vm.strings);
 }
 
 static void displaySomeValues(Value *first, size_t count) {
@@ -213,9 +212,11 @@ dispatch:
 		case OP_PANIC:
 			runtimeError(vpc, base, "PANIC instruction encountered.");
 		case OP_GLOBAL:  // Fall-through to OP_CONSTANT
-		case OP_CONSTANT:
-			push(constants[READ_BYTE()]);
+		case OP_CONSTANT: {
+			int index = READ_BYTE();
+			push(constants[index]);
 			NEXT;
+		}
 		case OP_POP: pop(); NEXT;
 		case OP_LOCAL: {
 			int index = READ_BYTE();
@@ -293,8 +294,9 @@ dispatch:
 			NEXT;
 		case OP_CALL:
 			switch (INDICATOR(TOP)) {
+			case IND_GC:
 			case IND_CLOSURE:
-			case IND_GC:  // i.e. native function
+			case IND_NATIVE:
 				push(apply());
 				NEXT;
 			default:
@@ -309,11 +311,13 @@ dispatch:
 				// Fall through to IND_CLOSURE:
 			case IND_CLOSURE:
 				closure = AS_CLOSURE(pop());
+				assert(closure->header.kind == &KIND_Closure);
 				int arity = closure->function->arity;
 				memmove(base, vm.stackTop - arity, arity * sizeof(Value));
 				vm.stackTop = base + arity;
 				goto enter;
-			case IND_GC:  // i.e. native function
+			case IND_GC:
+			case IND_NATIVE:  // i.e. native function
 				YIELD(apply());
 			default:
 				runtimeError(vpc, base, "EXEC needs a callable object; got val %s.", valKind(TOP));
@@ -381,7 +385,7 @@ dispatch:
 		{
 			assert(is_record(TOP));
 			Record *record = AS_RECORD(TOP);
-			Table *field_offset = &record->constructor->field_offset;
+			Value field_offset = record->constructor->field_offset;
 			int offset = AS_RUNE(tableGet(field_offset, AS_STRING(constants[READ_BYTE()])));
 			TOP = record->fields[offset];
 			NEXT;
@@ -419,7 +423,7 @@ dispatch:
 		{
 			assert(is_actor(SND));
 			Actor *actor = AS_ACTOR(SND);
-			actor->fields[READ_BYTE()] = TOP;
+			gc_mutate(&actor->fields[READ_BYTE()], TOP);
 			vm.stackTop -= 2;
 			NEXT;
 		}
@@ -445,17 +449,20 @@ dispatch:
 Value force(Value value) {
 	if (IS_THUNK(value)) {
 		if DID_SNAP(value) {
+			assert(AS_CLOSURE(value)->header.kind == &KIND_Snapped);
 			return SNAP_RESULT(AS_CLOSURE(value));
 		}
 		else {
 			// Thunk has yet to be snapped.
+			assert(AS_CLOSURE(value)->header.kind == &KIND_Closure);
 			push(value);
 			push(value);
 			Value result = vm_run();
-			Closure *thunk_ptr = AS_CLOSURE(pop());
-			SNAP_RESULT(thunk_ptr) = result;
-			thunk_ptr->header.kind = &KIND_Snapped;  // Help with debug until GC clears these out.
-			return result;
+			assert(AS_CLOSURE(TOP)->header.kind == &KIND_Closure);
+			gc_mutate(&SNAP_RESULT(AS_CLOSURE(TOP)), result);
+			assert(AS_CLOSURE(TOP)->header.kind == &KIND_Closure);
+			AS_CLOSURE(TOP)->header.kind = &KIND_Snapped;
+			return SNAP_RESULT(AS_CLOSURE(pop()));
 		}
 	}
 	else return value;

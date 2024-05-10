@@ -72,11 +72,17 @@ static size_t ahead(size_t index) {
 
 static size_t arity_of_message(Message *msg) {
 	// Accepts a GC-able parameter but doesn't call anything and therefore can't allocate.
-	assert(IS_GC_ABLE(msg->method));
-	switch (INDICATOR(msg->method)) {
-	case IND_CLOSURE: return AS_CLOSURE(msg->method)->function->arity;
-	case IND_GC: return AS_NATIVE(msg->method)->arity;
-	default: crashAndBurn("Nerp!");
+	Value method = msg->method;
+	switch (INDICATOR(method)) {
+	case IND_CLOSURE: {
+		Closure *closure = AS_CLOSURE(method);
+		return closure->function->arity;
+	}
+	case IND_NATIVE: {
+		Native *native = AS_NATIVE(method);
+		return native->arity;
+	}
+	default: crashAndBurn("Nerp! %s", valKind(method));
 	}
 }
 
@@ -112,12 +118,13 @@ static void display_actor_dfn(ActorDfn *dfn) {
 
 static void blacken_actor_dfn(ActorDfn *dfn) {
 	darken_in_place(&dfn->name);
-	darkenTable(&dfn->msg_handler);
+	darkenValue(&dfn->field_offset);
+	darkenValue(&dfn->msg_handler);
 }
 
 static size_t size_actor_dfn(ActorDfn *dfn) { return sizeof(ActorDfn); }
 
-static GC_Kind KIND_ActorDfn = {
+GC_Kind KIND_ActorDfn = {
 	.display = display_actor_dfn,
 	.deeply = display_actor_dfn,
 	.blacken = blacken_actor_dfn,
@@ -126,14 +133,15 @@ static GC_Kind KIND_ActorDfn = {
 	.name = "Actor Definition",
 };
 
-void define_actor(byte nr_fields) {
+void define_actor() {  // ( fieldTable name -- ActorDfn )
 	// Pops the name of the actor definition.
 	// Returns new actor definition on the VM stack.
+	push(GC_VAL(new_table(4)));
 	ActorDfn *dfn = gc_allocate(&KIND_ActorDfn, sizeof(ActorDfn));
-	dfn->nr_fields = nr_fields;
+	dfn->msg_handler = pop();
 	dfn->name = AS_STRING(pop());
-	initTable(&dfn->msg_handler);
-	populate_field_offset_table(&dfn->field_offset, nr_fields);
+	dfn->field_offset = pop();
+	dfn->nr_fields = IS_UNSET(dfn->field_offset) ? 0 : (byte)(AS_TABLE(dfn->field_offset)->population);
 	push(GC_VAL(dfn));
 }
 
@@ -217,10 +225,15 @@ void make_actor_from_template() {
 	TOP = GC_VAL(actor);
 }
 
-void display_bound(Message *msg) { printf("<bound method>"); }
-
-static void blacken_bound(Message *msg) { darkenValue(&msg->method); darkenValue(&msg->payload[0]); }
+static void blacken_bound(Message *msg) {
+	darkenValue(&msg->method);
+	darkenValue(&msg->payload[0]);
+}
 static size_t size_bound(Message *msg) { return sizeof(Message) + sizeof(Value); }
+
+static void display_message(Message *msg) {
+	printf("{Message/%d}", (int)arity_of_message(msg));
+}
 
 static void blacken_message(Message *msg) {
 	darkenValue(&msg->method);
@@ -235,6 +248,7 @@ static Value apply_message() {
 }
 
 GC_Kind KIND_Message = {
+	.display = display_message,
 	.blacken = blacken_message,
 	.size = size_message,
 	.apply = apply_message,
@@ -243,12 +257,13 @@ GC_Kind KIND_Message = {
 
 
 static Value apply_bound_method() {
-	size_t arity = arity_of_message(AS_MESSAGE(TOP));
+	Message *bound = AS_MESSAGE(TOP);
+	size_t arity = arity_of_message(bound);
 	assert(arity);
 	Value *base = vm.stackTop - arity;
 	force_stack_slots(base, &TOP);
 	Message *msg = gc_allocate(&KIND_Message, sizeof(Message) + arity * sizeof(Value));
-	Message *bound = AS_MESSAGE(TOP);
+	bound = AS_MESSAGE(TOP);
 	msg->method = bound->method;
 	msg->payload[0] = bound->payload[0];
 	memcpy(&msg->payload[1], base, (arity - 1) * sizeof(Value));
@@ -260,8 +275,6 @@ static Value apply_bound_method() {
 GC_Kind KIND_BoundMethod = {
 	// These things definitely have a receiver,
 	// but no other associated arguments.
-	.display = display_bound,
-	.deeply = display_bound,
 	.blacken = blacken_bound,
 	.size = size_bound,
 	.apply = apply_bound_method,
@@ -274,7 +287,8 @@ void bind_method_by_name() {  // ( actor message_name -- bound_method )
 	assert(IS_GC_ABLE(TOP));
 	assert(is_string(AS_GC(TOP)));
 	Message *bound = gc_allocate(&KIND_BoundMethod, sizeof(Message)+sizeof(Value));
-	bound->method = tableGet(&AS_ACTOR(SND)->actor_dfn->msg_handler, AS_STRING(TOP));
+	bound->method = tableGet(AS_ACTOR(SND)->actor_dfn->msg_handler, AS_STRING(TOP));
+	assert(IS_CLOSURE(bound->method) || IS_NATIVE(bound->method));
 	bound->payload[0] = SND;
 	SND = GC_VAL(bound);
 	pop();
@@ -340,8 +354,19 @@ void drain_the_queue() {
 }
 
 void install_method() {  // ( ActorDfn Method Name -- ActorDfn )
-	String *key = AS_STRING(pop());
-	ActorDfn *dfn = AS_ACTOR_DFN(SND);
-	bool was_new = tableSet(&dfn->msg_handler, key, pop());
-	if (!was_new) crashAndBurn("already installed %s into %s", key->text, dfn->name->text);
+	assert(IS_GC_ABLE(TOP));
+	String *name = AS_STRING(TOP);
+	assert(is_string(name));
+
+	assert(IS_GC_ABLE(SND));
+	GC *method = AS_GC(SND);
+	assert(method->kind == &KIND_Closure || method->kind == &KIND_Native);
+
+	assert(IS_GC_ABLE(THD));
+	ActorDfn *dfn = AS_ACTOR_DFN(THD);
+	assert(dfn->header.kind == &KIND_ActorDfn);
+	push(dfn->msg_handler);        // ActorDfn Method Name Table
+	tableSet();                                       // ActorDfn Table
+	gc_mutate(&AS_ACTOR_DFN(SND)->msg_handler, TOP);
+	pop();                                            // ActorDfn
 }

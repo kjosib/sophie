@@ -22,7 +22,9 @@ static Value concatenate(Value *args) {
 	String *b = AS_STRING(args[1]);
 	memcpy(dst->text, a->text, a->length);
 	memcpy(dst->text + a->length, b->text, b->length);
-	return GC_VAL(intern_String(dst));
+	push(GC_VAL(dst));
+	intern_String();
+	return TOP;
 }
 
 static Value compare_string(Value *args) {
@@ -80,7 +82,9 @@ static Value chr_native(Value *args) {
 	args[0] = force(args[0]);
 	String *dst = new_String(1);
 	dst->text[0] = (byte)(AS_NUMBER(args[0]));
-	return GC_VAL(intern_String(dst));
+	push(GC_VAL(dst));
+	intern_String();
+	return TOP;
 }
 
 static Value slice(Value *argp, size_t left, size_t right) {
@@ -89,7 +93,9 @@ static Value slice(Value *argp, size_t left, size_t right) {
 	size_t size = right - left;
 	String *dst = new_String(size);
 	memcpy(dst->text, AS_STRING(*argp)->text + left, size);
-	return GC_VAL(intern_String(dst));
+	push(GC_VAL(dst));
+	intern_String();
+	return TOP;
 }
 
 static Value mid_native(Value *args) {
@@ -105,7 +111,9 @@ static Value mid_native(Value *args) {
 	// Allocate the string
 	String *dst = new_String(actual_len);
 	memcpy(dst->text, AS_STRING(args[0])->text + offset, actual_len);
-	return GC_VAL(intern_String(dst));
+	push(GC_VAL(dst));
+	intern_String();
+	return TOP;
 }
 
 static Value trim_native(Value *args) {
@@ -140,7 +148,9 @@ static Value join_native(Value *args) {
 	}
 
 	// Return the result.
-	return GC_VAL(intern_String(dst));
+	push(GC_VAL(dst));
+	intern_String();
+	return TOP;
 }
 
 static Value str_native(Value *args) {
@@ -148,7 +158,9 @@ static Value str_native(Value *args) {
 	size_t len = snprintf(NULL, 0, NUMBER_FORMAT, value);
 	String *dst = new_String(len);
 	snprintf(dst->text, len+1, NUMBER_FORMAT, value);
-	return GC_VAL(intern_String(dst));
+	push(GC_VAL(dst));
+	intern_String();
+	return TOP;
 }
 
 static size_t beginning_of_line(char *text, size_t pos) {
@@ -248,9 +260,9 @@ static void push_file_contents(const char *path) {
 	String *dst = new_String(stat.st_size);
 	size_t nr_read = fread(&dst->text, sizeof(char), stat.st_size, file);
 	dst->text[nr_read] = 0;  // Just in case of partial read.
-	intern_String(dst);
 	fclose(file);
 	push(GC_VAL(dst));
+	intern_String();
 }
 
 static Value fs_read_file(Value *args) {
@@ -297,7 +309,7 @@ static Value apply_native() {
 	return result;
 }
 
-static GC_Kind KIND_Native = {
+GC_Kind KIND_Native = {
 	.display = display_native,
 	.deeply = display_native,
 	.blacken = blacken_native,
@@ -312,20 +324,20 @@ static void create_native(const char *name, byte arity, NativeFn function) {  //
 	native->arity = arity;
 	native->function = function;
 	native->name = AS_STRING(TOP);
-	TOP = GC_VAL(native);
+	dup();
+	SND = NATIVE_VAL(native);
+
 }
 
 void create_native_function(const char *name, byte arity, NativeFn function) {  // ( -- )
 	create_native(name, arity, function);
-	push(GC_VAL(AS_NATIVE(TOP)->name));
 	defineGlobal();
 }
 
 void create_native_method(const char *name, byte arity, NativeFn function) {  // ( ActorDfn -- ActorDfn )
 	assert(arity);
-	create_native(name, arity, function);
-	push(GC_VAL(AS_NATIVE(TOP)->name));
-	install_method();
+	create_native(name, arity, function);    // ActorDfn Native Name
+	install_method();                        // ActorDfn
 }
 
 /***********************************************************************************/
@@ -434,6 +446,7 @@ static void install_numerics() {
 
 static void install_strings() {
 	create_native("<=>|string|string", 2, compare_string);
+	pop();  // Don't need the name on the stack now.
 	install_binop(BOP_CMP, TX_STRING, TX_STRING);
 
 	create_native_function("strcat", 2, concatenate);
@@ -452,8 +465,9 @@ static void install_the_console() {
 	// Now let me try to create the console.
 	// It starts with the class definition:
 
+	push(UNSET_VAL);
 	push_C_string("Console");  // Implements the Console interface; just happens to share the name.
-	define_actor(0);
+	define_actor();
 
 	// Next up, define some methods:
 	create_native_method("echo", 2, console_echo);
@@ -475,8 +489,9 @@ static void install_the_filesystem() {
 	// Similar linguistic interface to the console.
 	// Just happens to have some different methods.
 
+	push(UNSET_VAL);
 	push_C_string("FileSystem");
-	define_actor(0);
+	define_actor();
 
 	create_native_method("read_file", 3, fs_read_file);
 	create_native_method("read_lines", 3, fs_read_lines);

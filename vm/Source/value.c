@@ -1,7 +1,34 @@
 #include "common.h"
 
-DEFINE_VECTOR_CODE(ValueArray, Value)
-DEFINE_VECTOR_APPEND(ValueArray, Value)
+static int value_array_counter;
+
+void initValueArray(ValueArray *vec) {
+	vec->cnt = vec->cap = 0; vec->at = ((void *)0);
+	// vec->id = value_array_counter++;
+	// printf("#");
+}
+void freeValueArray(ValueArray *vec) {
+	free(vec->at);
+	initValueArray(vec);
+}
+
+static void grow_value_array(ValueArray *vec) {
+	// Postcondition: the ValueArray has a bigger buffer, with all its original data,
+	// but more room to grow. If any of the values are from a younger generation,
+	// the corresponding GC journal entries are adjusted point into the new buffer.
+	Value *prior = vec->at;
+	size_t new_capacity = max(4, 2 * vec->cap);
+	Value *new_buffer = reallocate(prior, sizeof(Value) * new_capacity);
+	gc_move_journal(prior, prior + vec->cap, new_buffer);
+	vec->at = new_buffer;
+	vec->cap = new_capacity;
+}
+
+size_t appendValueArray(ValueArray *vec) {  // ( value -- )
+	if (vec->cap <= vec->cnt) grow_value_array(vec);
+	gc_mutate(&vec->at[vec->cnt++], pop());
+	return vec->cnt - 1;
+}
 
 void print_simply(Value value) {
 	if (IS_NUMBER(value)) printf(NUMBER_FORMAT, AS_NUMBER(value));
@@ -56,7 +83,7 @@ char *valKind(Value value) {
 	if (IS_CLOSURE(value)) return "closure";
 	if (IS_THUNK(value)) return "thunk";
 	if (IS_GLOBAL(value)) return "global reference";
-	if (IS_GC_ABLE(value)) return "heap denizen";
+	if (IS_GC_ABLE(value)) return AS_GC(value)->kind->name;
 	return "unrecognized value kind";
 }
 

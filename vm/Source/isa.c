@@ -11,18 +11,22 @@ static int disSimple( Chunk *chunk, int offset) {
 }
 
 static void asmConstant(Chunk *chunk) {
-	size_t index = appendValueArray(&chunk->constants, parseConstant());
+	parseConstant();
+	size_t index = appendValueArray(&chunk->constants);
 	if (index > UINT8_MAX) error("too many constants in a chunk");
 	appendCode(&chunk->code, (byte)(index));
 }
 
 static void asmString(Chunk *chunk) {
-	size_t index = appendValueArray(&chunk->constants, GC_VAL(parseString()));
+	parseString();
+	size_t index = appendValueArray(&chunk->constants);
 	appendCode(&chunk->code, (byte)(index));
 }
 
 static void asmGlobal(Chunk *chunk) {
-	size_t index = appendValueArray(&chunk->constants, GLOBAL_VAL(parseString()));
+	parseString();
+	TOP = GLOBAL_VAL(AS_STRING(TOP));
+	size_t index = appendValueArray(&chunk->constants);
 	appendCode(&chunk->code, (byte)(index));
 }
 

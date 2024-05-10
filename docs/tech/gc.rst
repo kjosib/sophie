@@ -11,6 +11,13 @@ Sophie's VM-in-progress has garbage collection. *Nice.*
 Garbage Collected Memory Allocation for Sophie VM
 ===================================================
 
+Phase One: Semi-Space with a Snap
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+This was the VM's garbage collector until 10 May 2024.
+It was not too hairy to get right, and plenty fast enough for the circumstances.
+It did incorporate exactly one industrial-strength idea,
+which is different treatment for objects in different size classes.
 
 Concept of Operation
 ----------------------
@@ -82,12 +89,76 @@ it calls ``gc_install_roots`` with a root-darkener for that subsystem.
 
 Oh, and the subsystem responsible for the string table gets to go first.
 
+Phase Two: The Next Generation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+In early May 2024, I upgraded **Sophie**'s garbage collection system.
+
+Concept of Operation
+----------------------
+
+This is possibly the simplest imaginable way to add generational collection.
+The big idea is to partition the active allocation arena into a *nursery* and
+a *survivors* zone. This allows for many small "minor" collections -- which
+visit only a fraction of the reachable set -- in between full collections.
+
+I've taken some (ad-hoc, informal) measurements which suggest that overall,
+this is a net win on both latency *and* throughput.
+
+Finally, if Sophie's VM is ever to get threaded, then I'll need a way to
+minimize contention for the allocator. The usual plan is a nursery per thread.
+This change moves the VM in the right general direction for that.
+
+Nursery Rhymes
+................
+
+The GC now allocates small objects in a nursery. A full nursery triggers a collection.
+The collector decides between a minor and a major collection based on the pessimistic
+assumption that everything in the nursery will be reachable. This sets a threshold
+because there is a minimum tolerable size of nursery. (That size is presently 8k.)
+
+The nursery occupies the higher portion of free space in the survivors zone:
+at least the minimum, but up to half. (One must be careful not to round the wrong way.)
+Generally, only about 10% or less of the nursery actually survives that initial collection,
+so that ordinarily you can get quite a large number of minor collections between major ones.
+
+The Write Barrier
+...................
+
+The classic challenge with generational collection is mutating objects outside the nursery.
+(This supports lazy evaluation, actor field assignment, and other VM internals.)
+If you write into an older object, linking it to a younger one, then how will the VM
+know to treat that younger object as reachable?
+
+My solution is inspired by the Squeak VM: Keep an array of pointers to "dirty" words.
+These are specifically places in the *survivors* space that refer to younger objects.
+If this table ever fills up, that becomes another way to trigger a collection.
+
+All writes (after the first initial set-up) into a heap object *must* now go through
+the write-barrier code in function ``gc_mutate(...)``. Additionally, since this can
+cause a collection, I've had to make a bit more use of the VM stack to avoid holding
+direct pointers on the C stack where the GC can't find and update them.
+
+Large Object Changes
+.....................
+
+Large objects now have an extra field in their header to indicate which generation
+they belong to. This lets the GC avoid pointlessly marking and scanning older LOBs
+during minor collections.
+
+
 
 Things not done
------------------
+~~~~~~~~~~~~~~~~~
 
-Eventually I plan to add generational features.
-I'm also not going to worry about threads and actors right now. (Threads are hard.)
+There is a small infelicity:
+Presently the ``gc_mutate(...)`` function only checks the assignment target against the
+boundaries of the nursery. That means updating a LOB will always generate a "dirty words"
+journal entry. In practice this minor loss of efficiency should not cause major trouble.
+
+Many generational-GC designs have more generations. I might consider it one day.
+
+It's still too soon to worry about threads just yet. (Threads are hard.)
 
 
 

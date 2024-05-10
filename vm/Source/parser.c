@@ -53,14 +53,14 @@ bool maybe_token(TokenType type) {
 	}
 }
 
-String *parseString() {
+void parseString() {  // ( -- string )
 	consume(TOKEN_STRING, "Need a string here");
-	return import_C_string(parser.previous.start + 1, parser.previous.length - 2);
+	import_C_string(parser.previous.start + 1, parser.previous.length - 2);
 }
 
-String *parseName() {
+void parseName() {  // ( -- string )
 	consume(TOKEN_NAME, "Need a string here");
-	return import_C_string(parser.previous.start, parser.previous.length);
+	import_C_string(parser.previous.start, parser.previous.length);
 }
 
 
@@ -71,15 +71,15 @@ double parseDouble(const char *message) {
 
 byte parseByte(char *message) { return (byte)parseDouble(message); }
 
-Value parseConstant() {
+void parseConstant() {  // ( -- value )
 	if (predictToken(TOKEN_NUMBER)) {
-		return NUMBER_VAL(parseDouble("Need a number here"));
+		push(NUMBER_VAL(parseDouble("Need a number here")));
 	}
 	else if (predictToken(TOKEN_STRING)) {
-		return GC_VAL(parseString());
+		parseString();
 	}
 	else {
 		errorAtCurrent("Expected a literal constant.");
-		return UNSET_VAL;
+		push(UNSET_VAL);
 	}
 }
