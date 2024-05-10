@@ -23,7 +23,7 @@ add_executable (SophieVM
 
 	"Source/common.h" "Source/opcodes.h" "Source/prep.h"
 	"Source/chacha.h" "Source/platform_specific.h"
-)
+ "Source/debug.h")
 
 set_target_properties(SophieVM PROPERTIES OUTPUT_NAME "svm")
 

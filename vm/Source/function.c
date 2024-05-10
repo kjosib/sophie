@@ -78,8 +78,8 @@ Function *newFunction(FunctionType fn_type, Chunk *chunk, byte arity, byte nr_ca
 	function->visited = false;
 	function->chunk = *chunk;
 	initChunk(chunk);
-#if RECLAIM_CHUNKS
-	gc_must_finalize((GC*)function);
+#if USE_FINALIZERS
+	gc_please_finalize((GC*)function);
 #endif
 	return function;
 }

@@ -71,7 +71,7 @@ static void display_constructor(Constructor *constructor) {
 
 static void blacken_constructor(Constructor *constructor) {
 	darken_in_place(&constructor->name);
-	darkenTable(&constructor->field_offset);
+	darkenValue(&constructor->field_offset);
 }
 
 static size_t size_constructor(Constructor *constructor) {
@@ -88,13 +88,13 @@ GC_Kind KIND_Constructor = {
 };
 
 
-void make_constructor(int vt_idx, int tag, int nr_fields) {
+void make_constructor(int vt_idx, int tag, int nr_fields) {  // ( fieldTable name -- constructor )
 	Constructor *constructor = gc_allocate(&KIND_Constructor, sizeof(Constructor));
 	constructor->name = AS_STRING(pop());
 	constructor->vt_idx = vt_idx;
 	constructor->tag = (byte)tag;
 	constructor->nr_fields = (byte)nr_fields;
-	populate_field_offset_table(&constructor->field_offset, nr_fields);
+	constructor->field_offset = pop();
 	push(GC_VAL(constructor));
 }
 

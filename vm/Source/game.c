@@ -59,33 +59,38 @@ static SDL_Point scratch_points[NR_SCRATCH];
 
 #define DISPLAY_PTR ((Display*)AS_PTR(SELF->fields[DP_DISPLAY]))
 
+static Value game_on_quit(Value *args) {
+	gc_mutate(&SELF->fields[ON_QUIT], args[1]);
+	return UNSET_VAL;
+}
+
 static Value game_on_mouse(Value *args) {
-	SELF->fields[ON_MOUSE] = args[1];
+	gc_mutate(&SELF->fields[ON_MOUSE], args[1]);
 	return UNSET_VAL;
 }
 
 static Value game_on_tick(Value *args) {
-	SELF->fields[ON_TICK] = args[1];
+	gc_mutate(&SELF->fields[ON_TICK], args[1]);
 	return UNSET_VAL;
 }
 
 static Value game_on_button_down(Value *args) {
-	SELF->fields[ON_BUTTON_DOWN] = args[1];
+	gc_mutate(&SELF->fields[ON_BUTTON_DOWN], args[1]);
 	return UNSET_VAL;
 }
 
 static Value game_on_button_up(Value *args) {
-	SELF->fields[ON_BUTTON_UP] = args[1];
+	gc_mutate(&SELF->fields[ON_BUTTON_UP], args[1]);
 	return UNSET_VAL;
 }
 
 static Value game_on_key_down(Value *args) {
-	SELF->fields[ON_KEY_DOWN] = args[1];
+	gc_mutate(&SELF->fields[ON_KEY_DOWN], args[1]);
 	return UNSET_VAL;
 }
 
 static Value game_on_key_up(Value *args) {
-	SELF->fields[ON_KEY_UP] = args[1];
+	gc_mutate(&SELF->fields[ON_KEY_UP], args[1]);
 	return UNSET_VAL;
 }
 
@@ -163,7 +168,9 @@ static Display *init_display(int width, int height) {
 	Display *display = gc_allocate(&KIND_Display, sizeof(Display));
 	display->window = NULL;
 	display->renderer = NULL;
-	gc_must_finalize((GC*)display);
+#if USE_FINALIZERS
+	gc_please_finalize((GC*)display);
+#endif
 	display->window = SDL_CreateWindow("Sophie Game Window", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, width, height, SDL_WINDOW_SHOWN);
 	if (display->window == NULL) {
 		fprintf(stderr, "Failed to create window: %s\n", SDL_GetError());
@@ -349,7 +356,7 @@ static Value dp_draw(Value *args) {
 }
 
 static Value dp_close(Value *args) {
-	finalize_display(DISPLAY_PTR);
+	finalize_display((Display *)AS_PTR(SELF->fields[DP_DISPLAY]));
 	return UNSET_VAL;
 }
 
@@ -392,12 +399,15 @@ static Value game_play(Value *args) {  // ( SELF size fps -- )
 		SDL_Event ev;
 		while (SDL_PollEvent(&ev)) {
 			switch (ev.type) {
-			case SDL_QUIT:
+			case SDL_QUIT: {
 				push(args[3]);
-				push_C_string("close");
+				push_C_string(":close:");
 				bind_method_by_name();
 				enqueue_message(pop());
+				Value on_quit = SELF->fields[ON_QUIT];
+				if (!IS_UNSET(on_quit)) enqueue_message(on_quit);
 				return UNSET_VAL;
+			}
 			case SDL_KEYDOWN:
 #ifdef _DEBUG
 				printf("Key Down: %d\n", ev.key.keysym.sym);
@@ -469,13 +479,13 @@ static Value game_play(Value *args) {  // ( SELF size fps -- )
 /***********************************************************************************/
 
 static void define_display_proxy_as_linkage() {
-	push_C_string("display");
-
 	push_C_string("DisplayProxy");
-	define_actor(NR_DP_FIELDS);
+	make_field_offset_table(NR_DP_FIELDS);
+	push_C_string("display");
+	define_actor();
 
 	create_native_method("draw", 2, dp_draw);
-	create_native_method("close", 1, dp_close);
+	create_native_method(":close:", 2, dp_close);
 
 	// Leave on stack for linkage.
 	assert(is_actor_dfn(linkage[LL_DISPLAY_PROXY]));
@@ -491,12 +501,14 @@ static void define_event_loop_as_global() {
 	push_C_string("on_key_down");
 	push_C_string("on_key_up");
 	push_C_string("on_tick");
+	make_field_offset_table(NR_GAME_FIELDS);
 
 	push_C_string("SDL_GameLoop"); // Implements the GameLoop interface.
-	define_actor(NR_GAME_FIELDS);  // Will need fields soon enough at least for main display.
+	define_actor();  // Will need fields soon enough at least for main display.
 
 	// Continue to follow the trail forged by the console-actor:
 
+	create_native_method("on_quit", 2, game_on_quit);
 	create_native_method("on_mouse", 2, game_on_mouse);
 	create_native_method("on_tick", 2, game_on_tick);
 	create_native_method("on_button_down", 2, game_on_button_down);

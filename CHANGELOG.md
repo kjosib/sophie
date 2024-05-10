@@ -4,6 +4,7 @@ Read this to get a general idea of what's new and nontrivial.
 
 ## May 2024
 
+* 10 May: Sophie's VM now has a *generational* garbage collector.
 * 4 May: May the fourth be with you. Also, publish version 0.0.7.
 * 3 May: Factored the 2d vector/math/trig out of `game.sg` into `2d.sg`.
   Also, the "Not Quite Pong" game now puts English on the ball based on

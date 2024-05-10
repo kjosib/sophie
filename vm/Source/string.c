@@ -1,4 +1,7 @@
 #include "common.h"
+#define LOAD_FACTOR 0.75
+#define INITIAL_CAPACITY 64
+#define GROWTH_RATE 2
 
 uint32_t hashString(const char *text, size_t length) {
 	uint32_t hash = 2166136261u;
@@ -45,43 +48,100 @@ String *new_String(size_t length) {
 	return string;
 }
 
-String *intern_String(String *string) {
-	// If the new string is known to the string table,
-	// return the version from the string table.
-	// (GC will reap the new duplicate.)
-	// Otherwise, enter this new string into the string table,
-	// and return the argument.
-	// In this manner, string equality is pointer equality.
+void string_table_init(StringTable *table, size_t capacity) {
+	assert(capacity >= INITIAL_CAPACITY);
+	*table = (StringTable){
+		.capacity = capacity,
+		.population = 0,
+		.threshold = (size_t)(capacity * LOAD_FACTOR),
+		.at = calloc(capacity, sizeof(Value)),
+	};
+	if (!table->at) crashAndBurn("No space for string internship table.");
+}
 
-	// (A single global string table may prove a point of contention in thread-world.)
+void string_table_free(StringTable *table) {
+	free(table->at);
+	table->at = NULL;
+}
 
-	// The input string is not expected to have been hashed yet.
-	string->hash = hashString(string->text, string->length);
-	Entry *interned = tableFindString(&vm.strings, string->text, string->length, string->hash);
-	if (interned) return interned->key;
-	else {
-		tableSet(&vm.strings, string, UNSET_VAL);
-		return string;
+static Value *probe_string_table(StringTable *table, const char *chars, size_t length, uint32_t hash) {
+	size_t index = WRAP(hash, table->capacity);
+	Value *tombstone = NULL;
+	for (;;) {
+		Value *entry = &table->at[index];
+		if (entry->bits == 0) {
+			return tombstone ? tombstone : entry;
+		}
+		else if (IS_UNSET(*entry)) {
+			if (tombstone == NULL) tombstone = entry;
+		} 
+		else {
+			String *key = AS_STRING(*entry);
+			if (key->length == length && key->hash == hash && !memcmp(key->text, chars, length)) {
+				// We found it.
+				return entry;
+			}
+		}
+		index = WRAP(index + 1, table->capacity);
 	}
 }
 
-String *import_C_string(const char *text, size_t length) {
+static void grow_string_table() {
+	StringTable old = vm.strings;
+	string_table_init(&vm.strings, GROWTH_RATE * old.capacity);
+	for (size_t i = 0; i < old.capacity; i++) {
+		if IS_GC_ABLE(old.at[i]) {
+			String *string = AS_STRING(old.at[i]);
+			Value *slot = probe_string_table(&vm.strings, string->text, string->length, string->hash);
+			*slot = old.at[i];
+			vm.strings.population++;
+		}
+	}
+	string_table_free(&old);
+}
+
+static void install_string(Value *slot) {  // ( string -- string )
+	if (slot->bits == 0) {
+		*slot = TOP;
+		vm.strings.population++;
+		if (vm.strings.population > vm.strings.threshold) grow_string_table();
+	}
+	else {
+		*slot = TOP;
+	}
+}
+
+void intern_String() {  // ( string -- string )
+	// The input string is not expected to have been hashed yet.
+	String *string = AS_STRING(TOP);
+	string->hash = hashString(string->text, string->length);
+	Value *slot = probe_string_table(&vm.strings, string->text, string->length, string->hash);
+	if (IS_GC_ABLE(*slot)) TOP = *slot;
+	else install_string(slot);
+}
+
+void import_C_string(const char *text, size_t length) {  // ( -- string )
 	uint32_t hash = hashString(text, length);
-	Entry *interned = tableFindString(&vm.strings, text, length, hash);
-	if (interned) return interned->key;
+	Value *slot = probe_string_table(&vm.strings, text, length, hash);
+	if (IS_GC_ABLE(*slot)) push(*slot);
 	else {
 		String *string = new_String(length);
 		memcpy(string->text, text, length);
 		string->hash = hash;
-		tableSet(&vm.strings, string, UNSET_VAL);
-		return string;
+		push(GC_VAL(string));
+		install_string(slot);
 	}
 }
 
-void push_C_string(const char *text) {
-	push(GC_VAL(import_C_string(text, strlen(text))));
+void push_C_string(const char *text) {  // ( -- string )
+	import_C_string(text, strlen(text));
 }
 
 bool is_string(void *item) {
 	return ((GC*)item)->kind == &KIND_String;
 }
+
+
+
+
+

@@ -4,185 +4,135 @@ DESIGN NOTE
 ------------
 
 The hash table is principally a vector of Entry structures.
-An entry consists of a String pointer and a Value.
 
-Code currently represents virgin entries as those with key=NULL and value FALSE.
-Tombstones are as key=NULL and value TRUE.
+There will no no tombstones because the VM will not remove entries from tables.
+These tables are to be constant data set up as part of loading the program.
 
 */
 
 #include "common.h"
 
-#define TABLE_MAX_LOAD 0.75
+#define MIN_TABLE_SIZE 4
 
-DEFINE_VECTOR_CODE(Table, Entry)
+Table *new_table(size_t capacity) {
+#ifdef _DEBUG
+	size_t pwr = 1;
+	while (pwr < capacity) pwr <<= 1;
+	assert(pwr == capacity);
+#endif // _DEBUG
+	Table *table = gc_allocate(&KIND_Table, sizeof(Table) + (capacity * sizeof(Entry)));
+	table->capacity = capacity;
+	table->population = 0;
+	memset(&table->at, 0, capacity * sizeof(Entry));
+	return table;
+}
 
-#define WRAP(index, capacity) ( (index) & ( (capacity) -1 ) )
 
-static Entry *findEntry(Entry *entries, size_t capacity, String *key) {
-	/*
-	Implementation Notes:
-
-	If probe sequence happens upon a tombstone before an unused bucket,
-	then return that first tombstone thus to keep probe sequences short.
-
-	What if found entries swapped places with a found tombstone?
-	(Hypothesis: Churn on the data bus.)
-	*/
-
+static size_t findEntry(Table *table, String *key) {
+	size_t capacity = table->capacity;
 	size_t index = WRAP(key->hash, capacity);
-	Entry *tombstone = NULL;
 
 	for (;;) {
-		Entry *entry = &entries[index];
-		if (entry->key == NULL) {
-			if (AS_BOOL(entry->value)) {
-				// We found a tombstone.
-				if (tombstone == NULL) tombstone = entry;
-			}
-			else {
-				// Empty entry.
-				return tombstone != NULL ? tombstone : entry;
-			}
+		Entry *entry = &table->at[index];
+		if (!(entry->key.bits)) {
+			return index;
 		}
-		else if (entry->key == key) {
-		 // We found the key.
-			return entry;
+		else if (AS_STRING(entry->key) == key) {
+			return index;
 		}
 
 		index = WRAP(index + 1, capacity);
 	}
 }
 
-static void adjustCapacity(Table *table, size_t capacity) {
-	Entry *entries = ALLOCATE(Entry, capacity);
-	table->cnt = 0;
-	for (size_t i = 0; i < capacity; i++) {
-		entries[i].key = NULL;
-		entries[i].value = UNSET_VAL;
+
+static void rehash() {
+	Table *new = new_table(max(MIN_TABLE_SIZE, 2 * AS_TABLE(TOP)->capacity));
+	Table *old = AS_TABLE(TOP);
+	Entry *src = &old->at[old->capacity];
+	gc_forget_journal_portion(old->at, src);
+	while (old->at < src) {
+		src--;
+		if (src->key.bits) {
+			size_t index = findEntry(new, AS_STRING(src->key));
+			new->at[index] = *src;
+		}
 	}
-
-	for (size_t i = 0; i < table->cap; i++) {
-		Entry *entry = &table->at[i];
-		if (entry->key == NULL) continue;
-
-		Entry *dest = findEntry(entries, capacity, entry->key);
-		dest->key = entry->key;
-		dest->value = entry->value;
-		table->cnt++;
-	}
-
-	FREE_ARRAY(Entry, table->at);
-	table->at = entries;
-	table->cap = capacity;
+	new->population = old->population;
+	TOP = GC_VAL(new);
 }
 
-Value tableGet(Table *table, String *key) {
+
+Value tableGet(Value tableValue, String *key) {
+	Table *table = AS_TABLE(tableValue);
+	Entry *entry = &table->at[findEntry(table, key)];
 #ifdef _DEBUG
-	if (table->cnt == 0) crashAndBurn("tableGet tried to find \"%s\" in an empty table", key->text);
-#endif // _DEBUG
-	Entry *entry = findEntry(table->at, table->cap, key);
-#ifdef _DEBUG
-	if (entry->key == NULL) crashAndBurn("tableGet did not find key \"%s\"", key->text);
+	if (IS_UNSET(entry->key)) crashAndBurn("tableGet did not find key \"%s\"", key->text);
 #endif // _DEBUG
 	return entry->value;
 }
 
-bool tableSet(Table *table, String *key, Value value) {
-	// Returns true if the key is new, false if already present.
+void tableSet() {  // ( value key table -- table )
+	assert(IS_GC_ABLE(TOP) && AS_GC(TOP)->kind == &KIND_Table);
+	assert(IS_GC_ABLE(SND) && is_string(AS_GC(SND)));
 
-#ifdef _DEBUG
-	if (!is_string(key)) {
-		printf("Got non-string key:");
-		printObject((GC*)key);
-		crashAndBurn("confused");
-	}
-#endif // _DEBUG
-
-
-	if (table->cnt + 1 > table->cap * TABLE_MAX_LOAD) {
-		adjustCapacity(table, GROW(table->cap));
+	Table *table = AS_TABLE(TOP);
+	table->population++;
+	if (4 * (table->population) > (3 * table->capacity)) {
+		rehash();
+		table = AS_TABLE(TOP);
 	}
 
-	Entry *entry = findEntry(table->at, table->cap, key);
-	bool isNewKey = entry->key == NULL;
-	if (isNewKey && ! AS_BOOL(entry->value)) table->cnt++;
+	size_t index = findEntry(table, AS_STRING(SND));
+	if (table->at[index].key.bits) crashAndBurn("Duplicate key \"%s\".", AS_STRING(SND)->text);
 
-	entry->key = key;
-	entry->value = value;
-	return isNewKey;
+	gc_mutate(&table->at[index].key, SND);
+	table = AS_TABLE(TOP);
+	gc_mutate(&table->at[index].value, THD);
+	THD = TOP;
+	vm.stackTop -= 2;
 }
 
-Value table_get_from_C(Table *table, const char *text) {
+
+Value table_get_from_C(const char *text) {  // ( Table -- Table )
 	assert(text);
-	return tableGet(table, import_C_string(text, strlen(text)));
+	push_C_string(text);
+	Value answer = tableGet(SND, AS_STRING(TOP));
+	pop();
+	return answer;
 }
 
-void table_set_from_C(Table *table, char *text, Value value) {
+void table_set_from_C(char *text, Value value) {  // ( table -- table )
 	if (text) {
-		String *key = import_C_string(text, strlen(text));
-		tableSet(table, key, value);
+		push(value);
+		push_C_string(text);
+		push(THD);
+		tableSet();
+		SND = TOP;
+		pop();
 	}
 }
 
-void tableAddAll(Table *from, Table *to) {
-	for (int i = 0; i < from->cap; i++) {
-		Entry *entry = &from->at[i];
-		if (entry->key != NULL) {
-			tableSet(to, entry->key, entry->value);
-		}
-	}
+
+static size_t table_size(Table *table) {
+	return sizeof(Table) + (table->capacity * sizeof(Entry));
 }
 
-Entry *tableFindString(Table *table, const char *chars, size_t length, uint32_t hash) {
-	if (table->cnt == 0) return NULL;
-
-	size_t index = WRAP(hash, table->cap);
-	for (;;) {
+static void darkenTable(Table *table) {
+	for (size_t index = 0; index < table->capacity; index++) {
 		Entry *entry = &table->at[index];
-		if (entry->key == NULL) {
-			// Stop if we find an empty non-tombstone entry.
-			if (! AS_BOOL(entry->value)) return NULL;
-		}
-		else if (entry->key->length == length &&
-			entry->key->hash == hash &&
-			memcmp(entry->key->text, chars, length) == 0) {
-			// We found it.
-			return entry;
-		}
-
-		index = WRAP(index + 1, table->cap);
-	}
-}
-
-bool tableDelete(Table *table, String *key) {
-	if (table->cnt == 0) return false;
-
-	// Find the entry.
-	Entry *entry = findEntry(table->at, table->cap, key);
-	if (entry->key == NULL) return false;
-
-	// Place a tombstone in the entry.
-	entry->key = NULL;
-	entry->value = BOOL_VAL(true);
-	return true;
-}
-
-void darkenTable(Table *table) {
-	for (size_t index = 0; index < table->cap; index++) {
-		Entry *entry = &table->at[index];
-		if (entry->key != NULL) {
-			darken_in_place(&entry->key);
+		if (entry->key.bits) {
+			darkenValue(&entry->key);
 			darkenValue(&entry->value);
 		}
 	}
 }
 
 void tableDump(Table *table) {
-	for (size_t index = 0; index < table->cap; index++) {
+	for (size_t index = 0; index < table->capacity; index++) {
 		Entry *entry = &table->at[index];
-		if (entry->key != NULL) {
-			printObject((GC*)entry->key);
+		if (entry->key.bits) {
+			printValue(entry->key);
 			printf(" : ");
 			printValue(entry->value);
 			printf("\n");
@@ -190,13 +140,26 @@ void tableDump(Table *table) {
 	}
 }
 
+GC_Kind KIND_Table = {
+	.deeply = tableDump,
+	.blacken = darkenTable,
+	.size = table_size,
+	.name = "Table",
+};
 
-void populate_field_offset_table(Table *table, int nr_fields) {
-	initTable(table);
+void make_field_offset_table(int nr_fields) {  // ( Name ... -- Table )
+	Value *base = vm.stackTop;
+	size_t capacity = 4;
+	while (capacity * 3 < nr_fields * 4) capacity <<= 1;
+	push(GC_VAL(new_table(capacity)));
 	while (nr_fields--) {
-		Value rune = RUNE_VAL(nr_fields);
-		tableSet(table, AS_STRING(pop()), rune);
+		push(RUNE_VAL(nr_fields));
+		push(*(--base));
+		push(THD);
+		tableSet();
 	}
+	*base = TOP;
+	vm.stackTop = &base[1];
 }
 
 

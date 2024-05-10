@@ -1987,3 +1987,18 @@ some (still incomplete) code for an Advent-of-Code challenge.
 Now it compiles and runs on the VM, but solves the wrong problem.
 Once I get it solving the *stated* problem,
 it will probably be time to draft a release.
+
+10 May 2024
+--------------
+
+Sophie's VM now has generational garbage collection!
+*The journey to get it nearly sent me mad.*
+
+So far, there are just major and minor collections.
+Instrumentation showed that -- once I finally got this working properly --
+the generational GC does less work per unit time on average
+because it doesn't need to dig around in the *survivors* generation very often at all.
+
+For whatever it's worth, the graphical Mandelbrot-set demo now seems to run a bit more smoothly.
+
+

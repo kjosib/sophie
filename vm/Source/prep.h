@@ -55,9 +55,9 @@ void advance();
 void consume(TokenType type, const char *message);
 double parseDouble(const char *message);
 byte parseByte(char *message);
-Value parseConstant();
-String *parseString();
-String *parseName();
+void parseConstant();  // ( -- value )
+void parseString();  // ( -- string )
+void parseName();  // ( -- string )
 
 static inline bool predictToken(TokenType type) { return type == parser.current.type; }
 bool maybe_token(TokenType type);
