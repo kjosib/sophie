@@ -18,8 +18,8 @@
 # -- Project information -----------------------------------------------------
 
 project = 'Sophie'
-copyright = '2022, Ian Kjos'
-author = 'Ian Kjos'
+copyright = '2022, Beth Kjos'
+author = 'Beth Kjos'
 
 # The full version, including alpha/beta/rc tags
 release = '0.2.0'

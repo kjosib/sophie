@@ -13,7 +13,7 @@ else:
 
 setuptools.setup(
 	name='sophie-lang',
-	author='Ian Kjos',
+	author='Beth Kjos',
 	author_email='kjosib@gmail.com',
 	version='0.0.7',
 	packages=['sophie', "sophie.adapters", ],
