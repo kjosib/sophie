@@ -257,7 +257,7 @@ class ManifestBuilder(Visitor):
 			return SumType(dfn, args).exemplar()
 		if isinstance(dfn, syntax.TypeAlias):
 			return ManifestBuilder(dfn.type_params, args).visit(dfn.body)
-		if isinstance(dfn, syntax.Interface):
+		if isinstance(dfn, syntax.Role):
 			return InterfaceType(dfn, args).exemplar()
 		raise NotImplementedError(type(dfn))
 	
@@ -740,7 +740,7 @@ class DeductionEngine(Visitor):
 	def visit_Opaque(self, td:syntax.Opaque):
 		self._types[td] = OpaqueType(td)
 	
-	def visit_Interface(self, i:syntax.Interface):
+	def visit_Role(self, i:syntax.Role):
 		type_args = [TypeVariable() for _ in i.type_params]
 		self._types[i] = InterfaceType(i, type_args)
 	

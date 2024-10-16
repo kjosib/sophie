@@ -58,7 +58,7 @@ type_decl  -> name type_parameters IS OPAQUE        :Opaque
             | name type_parameters IS simple_type   :TypeAlias
             | name type_parameters IS record_spec   :Record
             | name type_parameters IS variant_spec  :Variant
-            | name type_parameters IS agent_spec    :Interface
+            | name type_parameters IS role_spec     :Role
 
 type_parameters -> square_list(name) :type_parameters     | :empty
 
@@ -74,7 +74,7 @@ subtype  -> name record_spec    :SubTypeSpec
           | name simple_type    :SubTypeSpec
           | name                :SubTypeSpec
 
-agent_spec  -> AGENT ':' semicolon_list(method_type) END
+role_spec  -> AGENT ':' semicolon_list(method_type) END
 method_type -> name optional(round_list(simple_type))      :MethodSpec
 
 ```
@@ -285,7 +285,7 @@ This may *look* like assignment, but Sophie attaches some rules:
 Thus, agents are created in procedural context, where it is perfectly fine to have side-effects.
 
 *Semantic Note:*
-Evidently the type system will need to distinguish between *agent-instance* and *agent-class.*
+Evidently the type system must distinguish between *agent-instance* and *agent-class.*
 
 -----
 

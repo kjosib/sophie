@@ -185,13 +185,13 @@ class Variant(TypeDeclaration):
 	def as_token(self): return self
 
 class MethodSpec(Symbol):
-	interface_decl : "Interface"
+	role_decl : "Role"
 	def __init__(self, nom:Nom, type_exprs:Sequence[SimpleType]):
 		super().__init__(nom)
 		self.type_exprs = type_exprs or ()
 	def has_value_domain(self) -> bool: return False
 
-class Interface(TypeDeclaration):
+class Role(TypeDeclaration):
 	method_space: NS
 	def __init__(self, nom: Nom, type_params:tuple[TypeParameter, ...], spec:Sequence[MethodSpec]):
 		super().__init__(nom, type_params)

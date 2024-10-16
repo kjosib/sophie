@@ -844,7 +844,7 @@ class StructureDefiner(Visitor):
 			self.visit(t, scope)
 
 	def visit_TypeAlias(self, t, scope:VMGlobalScope): pass
-	def visit_Interface(self, t, scope:VMGlobalScope): pass
+	def visit_Role(self, t, scope:VMGlobalScope): pass
 	
 	@staticmethod
 	def visit_Record(r:syntax.Record, scope:VMGlobalScope):

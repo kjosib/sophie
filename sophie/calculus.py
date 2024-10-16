@@ -145,8 +145,8 @@ class MessageType(FormalType):
 		return len(self.arg.fields) or -1
 
 class InterfaceType(FormalType):
-	def __init__(self, symbol:syntax.Interface, type_args: Iterable[SophieType]):
-		assert type(symbol) is syntax.Interface
+	def __init__(self, symbol:syntax.Role, type_args: Iterable[SophieType]):
+		assert type(symbol) is syntax.Role
 		self.symbol = symbol
 		self.type_args = _exemplargs(type_args, len(symbol.type_params))
 		super().__init__(self.symbol, *(a.number for a in self.type_args))

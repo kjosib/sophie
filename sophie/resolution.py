@@ -203,11 +203,11 @@ class _WordDefiner(_ResolutionPass):
 	def visit_TypeAlias(self, ta:syntax.TypeAlias):
 		self._declare_type(ta)
 	
-	def visit_Interface(self, i:syntax.Interface):
+	def visit_Role(self, i:syntax.Role):
 		self._declare_type(i)
 		i.method_space = NS(place=i)
 		for ms in i.spec:
-			ms.interface_decl = i
+			ms.role_decl = i
 			self._install(i.method_space, ms)
 
 	def visit_RecordSpec(self, rs:syntax.RecordSpec):
@@ -461,7 +461,7 @@ class _WordResolver(_ResolutionPass):
 		ref.dfn = self._lookup_member(ref.nom)
 		self._reads_members.add(ref.dfn)
 	
-	def visit_Interface(self, i:syntax.Interface):
+	def visit_Role(self, i:syntax.Role):
 		for ms in i.spec:
 			assert isinstance(ms, syntax.MethodSpec)
 			self.visit(ms, i.param_space)
@@ -662,7 +662,7 @@ class _AliasChecker(Visitor):
 			self.graph[expr].append(expr.rhs)
 			self.visit(expr.rhs, allow_elide)
 
-	def visit_Interface(self, i:syntax.Interface):
+	def visit_Role(self, i:syntax.Role):
 		for ms in i.spec:
 			assert isinstance(ms, syntax.MethodSpec)
 			self._tour(ms.type_exprs, False)
