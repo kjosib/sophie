@@ -168,8 +168,8 @@ class _WordDefiner(_ResolutionPass):
 		# Can't iterate all-functions yet; must build it first.
 		for fn in module.top_subs:
 			self.visit(fn, self.globals)
-		for uda in module.agent_definitions:
-			self.visit_UserAgent(uda)
+		for uda in module.actor_definitions:
+			self.visit_UserActor(uda)
 		for expr in module.main:  # Might need to define some case-match symbols here.
 			self.visit(expr, self.globals)
 		pass
@@ -244,7 +244,7 @@ class _WordDefiner(_ResolutionPass):
 		self.tour_where(udf.where, inner)
 		self.visit(udf.expr, inner)
 
-	def visit_UserAgent(self, uda:syntax.UserAgent):
+	def visit_UserActor(self, uda:syntax.UserActor):
 		uda.source_path = self.module.source_path
 		self._install(self.globals, uda)
 		uda.member_space = self.globals.new_child(uda)
@@ -283,11 +283,11 @@ class _WordDefiner(_ResolutionPass):
 		self.visit(lf.function, env)
 	
 	def visit_DoBlock(self, db: syntax.DoBlock, env:NS):
-		if db.agents:
+		if db.actors:
 			inner = env.new_child(db)
-			for new_agent in db.agents:
-				self.visit(new_agent.expr, env)
-				# self._install(inner, new_agent) # Save for _WordResolver...
+			for new_actor in db.actors:
+				self.visit(new_actor.expr, env)
+				# self._install(inner, new_actor) # Save for _WordResolver...
 		else:
 			inner = env
 		db.namespace = inner
@@ -379,7 +379,7 @@ class _WordResolver(_ResolutionPass):
 	"""
 	
 	dubious_constructors: list[syntax.Reference]
-	_current_uda : Optional[syntax.UserAgent] = None
+	_current_uda : Optional[syntax.UserActor] = None
 	_reads_members : set[Symbol] = set()
 	
 	def visit_Module(self):
@@ -391,8 +391,8 @@ class _WordResolver(_ResolutionPass):
 			self.visit(a.type_expr, self.globals)
 		for item in module.foreign:
 			self.visit(item)
-		for item in module.agent_definitions:
-			self.visit_UserAgent(item)
+		for item in module.actor_definitions:
+			self.visit_UserActor(item)
 		self.tour_where(module.top_subs)
 		for expr in module.main:
 			self.visit(expr, self.globals)
@@ -492,7 +492,7 @@ class _WordResolver(_ResolutionPass):
 		self.visit(fn.expr, fn.namespace)
 		self.tour_where(fn.where)
 
-	def visit_UserAgent(self, uda:syntax.UserAgent):
+	def visit_UserActor(self, uda:syntax.UserActor):
 		for f in uda.members:
 			if f.type_expr is not None:
 				self.visit(f.type_expr, uda.member_space)
@@ -536,9 +536,9 @@ class _WordResolver(_ResolutionPass):
 		self.visit_UserFunction(lf.function)
 	
 	def visit_DoBlock(self, db: syntax.DoBlock, env:NS):
-		for new_agent in db.agents:
-			self.visit(new_agent.expr, db.namespace)
-			self._install(db.namespace, new_agent)
+		for new_actor in db.actors:
+			self.visit(new_actor.expr, db.namespace)
+			self._install(db.namespace, new_actor)
 		for s in db.steps:
 			self.visit(s, db.namespace)
 
@@ -578,7 +578,7 @@ class _AliasChecker(Visitor):
 		self._tour(module.types)
 		self._tour(module.foreign)
 		self._tour(module.assumptions)
-		self._tour(module.agent_definitions)
+		self._tour(module.actor_definitions)
 		self._tour(module.all_fns)
 		if self.non_types:
 			self.report.these_are_not_types(self.non_types)
@@ -678,7 +678,7 @@ class _AliasChecker(Visitor):
 		if sym.result_type_expr:
 			self.visit(sym.result_type_expr, True)
 
-	def visit_UserAgent(self, sym:syntax.UserAgent):
+	def visit_UserActor(self, sym:syntax.UserActor):
 		self._tour(sym.members, True)
 		self._tour(sym.behaviors)
 	

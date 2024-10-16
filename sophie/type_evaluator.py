@@ -65,7 +65,7 @@ class DependencyPass(TopDown):
 		
 	def visit_Module(self, module: syntax.Module):
 		self._walk_children(module.top_subs, None)
-		self._walk_children(module.agent_definitions, None)
+		self._walk_children(module.actor_definitions, None)
 		for expr in module.main:
 			self.visit(expr, None)
 		self._flow_dependencies()
@@ -114,7 +114,7 @@ class DependencyPass(TopDown):
 			return param in env.params or self._is_in_scope(param, self._parent[env])
 		if isinstance(env, syntax.Subject):
 			return self._is_in_scope(param, self._parent[env])
-		if isinstance(env, syntax.UserAgent):
+		if isinstance(env, syntax.UserActor):
 			assert self._parent[env] is None
 			return param in env.members
 		assert False, (param, env)
@@ -134,7 +134,7 @@ class DependencyPass(TopDown):
 		self._walk_children(sub.where, sub)
 		self.visit(sub.expr, sub)
 	
-	def visit_UserAgent(self, uda:syntax.UserAgent, env):
+	def visit_UserActor(self, uda:syntax.UserActor, env):
 		assert env is None
 		self._walk_children(uda.behaviors, uda)
 
@@ -175,7 +175,7 @@ class DependencyPass(TopDown):
 		"""
 		The SELF type need not participate here. Calling-conventions notwithstanding,
 		it's not a formal parameter for this purpose. Rather, SELF is completely
-		described by its agent-class and the types of the agent parameters.
+		described by its actor-class and the types of the actor parameters.
 		These are already in the lexical scope, and they do the right things.
 		"""
 		pass
@@ -191,9 +191,9 @@ class DependencyPass(TopDown):
 			self.visit(mx.otherwise, mx.subject)
 
 	def visit_DoBlock(self, db: syntax.DoBlock, env:Symbol):
-		for new_agent in db.agents:
-			self._prepare(new_agent, env)
-			self.visit(new_agent.expr, env)
+		for new_actor in db.actors:
+			self._prepare(new_actor, env)
+			self.visit(new_actor.expr, env)
 		for s in db.steps:
 			self.visit(s, env)
 
@@ -275,7 +275,7 @@ class ManifestBuilder(Visitor):
 		product = self._make_product(ms.type_exprs)
 		return MessageType(product).exemplar()
 		
-	def make_agent_template(self, uda:syntax.UserAgent, module_scope:TYPE_ENV):
+	def make_actor_template(self, uda:syntax.UserActor, module_scope:TYPE_ENV):
 		if uda.members:
 			product = self._make_product(field.type_expr for field in uda.members)
 			return ParametricTemplateType(uda, product, module_scope)
@@ -689,8 +689,8 @@ class DeductionEngine(Visitor):
 				self._types[udf] = builder.visit(udf.result_type_expr)
 		for udp in module.all_procs:
 			install_params(udp)
-		for uda in module.agent_definitions:
-			self._constructors[uda] = builder.make_agent_template(uda, local)
+		for uda in module.actor_definitions:
+			self._constructors[uda] = builder.make_actor_template(uda, local)
 	
 	def _trace_visit(self, expr, local):
 		self._report.trace(" -->", expr)
@@ -936,7 +936,7 @@ class DeductionEngine(Visitor):
 		
 	def visit_Lookup(self, lu:syntax.Lookup, env:TYPE_ENV) -> SophieType:
 		target = lu.ref.dfn
-		if isinstance(target, (syntax.TypeDeclaration, syntax.SubTypeSpec, syntax.UserAgent)):
+		if isinstance(target, (syntax.TypeDeclaration, syntax.SubTypeSpec, syntax.UserActor)):
 			return self._constructors[target]  # Must succeed because of resolution.check_constructors
 		if isinstance(target, syntax.FFI_Alias):
 			return self._ffi[target]
@@ -953,7 +953,7 @@ class DeductionEngine(Visitor):
 			# but only when they're expressly called or used as a step.
 			return UserProcType(target, static_env).exemplar()
 		else:
-			assert target is SELF or isinstance(target, (syntax.FormalParameter, syntax.Subject, syntax.NewAgent)), type(target)
+			assert target is SELF or isinstance(target, (syntax.FormalParameter, syntax.Subject, syntax.NewActor)), type(target)
 			return static_env.fetch(target)
 	
 	@staticmethod
@@ -1118,19 +1118,19 @@ class DeductionEngine(Visitor):
 	def visit_DoBlock(self, do:syntax.DoBlock, env:TYPE_ENV) -> SophieType:
 		# A bit verbose to pick up all errors, not just the first.
 		answer = primitive.literal_act
-		# 1. Make a scope to contain new-agents:
+		# 1. Make a scope to contain new-actors:
 		inner = Activation.for_do_block(env)
-		for na in do.agents:
-			assert isinstance(na, syntax.NewAgent)
+		for na in do.actors:
+			assert isinstance(na, syntax.NewActor)
 			template = self.visit(na.expr, inner)
 			if isinstance(template, ConcreteTemplateType):
-				agent_type = UDAType(template, inner)
+				actor_type = UDAType(template, inner)
 			else:
 				if template is not ERROR:
-					self._report.bad_type(env, na.expr, "Agent Template", template, "Casting call will repeat next Thursday.")
-				agent_type = ERROR
+					self._report.bad_type(env, na.expr, "Actor Template", template, "Casting call will repeat next Thursday.")
+				actor_type = ERROR
 				answer = ERROR
-			inner.assign(na, agent_type)
+			inner.assign(na, actor_type)
 		# 2. Judge types of step in the new scope:
 		for step in do.steps:
 			inner.pc = step

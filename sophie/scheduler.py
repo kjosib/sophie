@@ -229,7 +229,7 @@ class Actor(Task):
 		raise NotImplementedError(type(self))
 
 class NativeObjectProxy(Actor):
-	""" Wrap Python objects in one of these to use them as agents. """
+	""" Wrap Python objects in one of these to use them as actors. """
 	def __init__(self, principal, pin=False):
 		super().__init__()
 		self._principal = principal

@@ -95,7 +95,7 @@ class Activation(Frame):
 		ar = Activation(static_link, RootFrame(), module)
 		for udf in module.top_subs:
 			ar.declare(udf)
-		for uda in module.agent_definitions:
+		for uda in module.actor_definitions:
 			ar.declare(uda)
 		return ar
 

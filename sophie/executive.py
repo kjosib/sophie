@@ -81,7 +81,7 @@ def _prepare(env:Frame, namespace:ontology.NS):
 			env.assign(dfn, _native_object(dfn))
 		elif isinstance(dfn, syntax.Subroutine):
 			env.declare(dfn)
-		elif isinstance(dfn, syntax.UserAgent):
+		elif isinstance(dfn, syntax.UserActor):
 			env.assign(dfn, ActorClass(env, dfn) if dfn.members else ActorTemplate(env, dfn, ()))
 		elif type(dfn) in _ignore_these:
 			pass

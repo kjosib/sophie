@@ -50,11 +50,10 @@ Let's work through this part from the bottom up.
     so that is the word Sophie defines for the purpose.
 
     The ``console`` is considered a separate entity from your program.
-    You might call it an *actor* but then the programming-language theorists would yell at me.
-    So let's call it an *agent* instead. You can send an agent a message,
-    and the agent can do something in response whenever the message arrives.
+    You might call it an *actor*. You can send an actor a message,
+    and the actor can do something in response whenever the message arrives.
     Your program will not stop to wait for that response, but will continue computing.
-    Indeed you can have many agents operating concurrently,
+    Indeed you can have many actor operating concurrently,
     and they will not step on each other's toes.
     This is what is meant by "asynchronous message-passing".
 
@@ -62,7 +61,7 @@ Let's work through this part from the bottom up.
     There are a couple things to unpack here.
 
     This expression represents a message called ``echo``,
-    with single argument ``intro``, addressed to the agent called ``console``.
+    with single argument ``intro``, addressed to the actor called ``console``.
 
     .. admonition:: Terminology
 
@@ -83,7 +82,7 @@ Let's work through this part from the bottom up.
     .. note::
         Any single receiver will handle its
         own incoming messages in the order they arrive. And messages sent from
-        one agent to another will arrive in the order they were sent.
+        one actor to another will arrive in the order they were sent.
         However, messages from *different* sources may arrive at the same
         destination in any interleaving that respects the rules above.
 
@@ -122,7 +121,7 @@ Let's work through this part from the bottom up.
     That message, ``!game``, takes one parameter just like the ``game`` from which it is built.
     Sending such a message would result in a game getting played.
 
-    This message has no *receiver*, so it will not synchronize on any particular agent.
+    This message has no *receiver*, so it will not synchronize on any particular actor.
     Therefore in principle you could have many games operating at once.
     That would rapidly get confusing for a game like this,
     but sometimes such *concurrent processing* is just what the doctor ordered.

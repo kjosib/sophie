@@ -189,11 +189,10 @@ def _eval_match_expr(expr:syntax.MatchExpr, dynamic_env:ENV):
 		return evaluate(alternative.sub_expr, dynamic_env)
 
 def _eval_do_block(expr:syntax.DoBlock, dynamic_env:ENV):
-	agents = expr.agents
-	if agents:
+	if expr.actors:
 		inner = Activation.for_do_block(dynamic_env)
-		for na in agents:
-			assert isinstance(na, syntax.NewAgent)
+		for na in expr.actors:
+			assert isinstance(na, syntax.NewActor)
 			template = _strict(na.expr, inner)
 			inner.assign(na, template.instantiate())
 	else:
@@ -318,7 +317,7 @@ class Constructor(Function):
 		return structure
 
 class ActorClass(Function):
-	def __init__(self, global_link:ENV, uda:syntax.UserAgent):
+	def __init__(self, global_link:ENV, uda:syntax.UserActor):
 		self._global_link = global_link
 		self._uda = uda
 		
@@ -328,7 +327,7 @@ class ActorClass(Function):
 
 
 class ActorTemplate:
-	def __init__(self, global_link:ENV, uda:syntax.UserAgent, args: Sequence[LAZY_VALUE]):
+	def __init__(self, global_link:ENV, uda:syntax.UserActor, args: Sequence[LAZY_VALUE]):
 		self._global_link = global_link
 		self._uda = uda
 		self._args = args

@@ -22,7 +22,7 @@ type:
 
     area is (left:number, top:number, width:number, height:number);
 
-    GameLoop is agent:
+    GameLoop is role:
         play(xy, number);
         on_quit(!);
         on_mouse(!(mouse_event));
@@ -42,7 +42,7 @@ type:
     button_event is (pos:xy, button:number, is_touch:flag);
     key_event is (unicode:string, key:number, mods:number, scancode:number);
     
-    display is agent:
+    display is role:
         draw(list[image_element]);
         # Maybe eventually some messages for setting screen mode, or grabs, or whatnot.
     end;

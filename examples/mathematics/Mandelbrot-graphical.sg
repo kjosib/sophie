@@ -61,7 +61,7 @@ end row_for;
 
 horizontal_steps = iota(0, res.x);
 
-agent painter(y:number) as
+actor painter(y:number) as
 	to tick(display) is case
 		when my y < res.y then do
 			display ! draw(row_for(my y*box_scale.y, interpolate(vertical, (my y+0.5) / res.y)));

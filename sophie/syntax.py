@@ -279,7 +279,7 @@ class WhereClause(NamedTuple):
 	sub_fns: Sequence[Subroutine]
 	coda: Nom
 
-class UserAgent(Term):
+class UserActor(Term):
 	member_space: NS
 	members: Sequence[FormalParameter]
 	message_space: NS
@@ -485,7 +485,7 @@ class MatchExpr(ValExpr):
 	def head(self) -> slice:
 		return self.subject.head()
 
-class NewAgent(Term):
+class NewActor(Term):
 	def __init__(self, nom:Nom, expr:ValExpr):
 		super().__init__(nom)
 		self.expr = expr
@@ -496,8 +496,8 @@ class DoBlock(ValExpr):
 	# The value of a do-block does not depend on when it runs.
 	# Its consequence may so depend, but by definition steps run in sequence.
 
-	def __init__(self, agents:list[NewAgent], _head:Nom, steps:list[ValExpr]):
-		self.agents = agents
+	def __init__(self, actors:list[NewActor], _head:Nom, steps:list[ValExpr]):
+		self.actors = actors
 		self.steps = steps
 		self._head = _head
 		
@@ -577,7 +577,7 @@ class Module:
 	foreign: list[ImportForeign]
 	assumptions: list[Assumption]
 	top_subs: list[Subroutine]
-	agent_definitions: list[UserAgent]
+	actor_definitions: list[UserActor]
 	user_operators: list[UserOperator]
 	
 	source_path: Path  # Module loader fills this.
@@ -594,7 +594,7 @@ class Module:
 		self.types = types
 		self.assumptions = assumptions
 		self.top_subs = []
-		self.agent_definitions = []
+		self.actor_definitions = []
 		self.user_operators = []
 		self.all_fns = []
 		self.all_procs = []
@@ -602,7 +602,7 @@ class Module:
 		for item in top_levels:
 			if isinstance(item, UserOperator): self.user_operators.append(item)
 			if isinstance(item, Subroutine): self.top_subs.append(item)
-			elif isinstance(item, UserAgent): self.agent_definitions.append(item)
+			elif isinstance(item, UserActor): self.actor_definitions.append(item)
 			else: assert False, type(item)
 		self.main = main
 	

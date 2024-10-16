@@ -32,7 +32,7 @@ assume_section  -> ASSUME ':' semicolon_list(assumption)       | :empty
 define_section  -> DEFINE ':' semicolon_list(top_level)        | :empty
 main_section    -> BEGIN ':' semicolon_list(expr)              | :empty
 
-top_level -> subroutine | agent_definition | operator_overload
+top_level -> subroutine | actor_definition | operator_overload
 subroutine -> function | procedure
 
 ```
@@ -74,7 +74,7 @@ subtype  -> name record_spec    :SubTypeSpec
           | name simple_type    :SubTypeSpec
           | name                :SubTypeSpec
 
-role_spec  -> AGENT ':' semicolon_list(method_type) END
+role_spec  -> ROLE ':' semicolon_list(method_type) END
 method_type -> name optional(round_list(simple_type))      :MethodSpec
 
 ```
@@ -259,10 +259,10 @@ expr -> .SKIP       :Skip
       | '!' expr       :AsTask
       | expr '!' name       :BindMethod
       | MY name ':=' expr      :AssignMember
-      | .with_agents .DO .semicolon_list(expr) END     :DoBlock
+      | .with_actors .DO .semicolon_list(expr) END     :DoBlock
 
-with_agents -> :empty | CAST semicolon_list(new_agent)
-new_agent -> name IS expr   :NewAgent
+with_actors -> :empty | CAST semicolon_list(new_actor)
+new_actor -> name IS expr   :NewActor
 ```
 
 * The SKIP action does nothing, but means Sophie does not need single-branch conditionals.
@@ -275,32 +275,29 @@ new_agent -> name IS expr   :NewAgent
 * If there's no left-hand side on the bang operator, then we can assume the "message" is to call a procedure ly.
 * The do-block expresses sequence, packaging several actions into one.
 
-One sort of action remains: To create a new instance of some agent-class.
+One sort of action remains: To create a new instance of some actor-class.
 This may *look* like assignment, but Sophie attaches some rules:
 
-* You can only create agents in the preamble of a do-block.
-* The scope of an agent-name is from the point *after* its definition until the end of its do-block.
-* No two agents created in the same do-block may have the same agent-name.
+* You can only create actors in the preamble of a do-block.
+* The scope of an actor-name is from the point *after* its definition until the end of its do-block.
+* No two actors created in the same do-block may have the same actor-name.
 
-Thus, agents are created in procedural context, where it is perfectly fine to have side-effects.
-
-*Semantic Note:*
-Evidently the type system must distinguish between *agent-instance* and *agent-class.*
+Thus, actors are created in a procedural order a'la side-effects.
 
 -----
 
-**User-Defined Agent**
+**User-Defined Actor**
 
-On balance an actor-like thing (`agent`, in Sophie parlance) has state and behavior.
-The chief difference is that agent state is mutable (and so cannot be shared).
+On balance an actor-like thing (`actor`, in Sophie parlance) has state and behavior.
+The chief difference is that actor state is mutable (and so cannot be shared).
 
 ```
-agent_definition -> AGENT name formals AS semicolon_list(procedure) END name  :UserAgent
+actor_definition -> ACTOR name formals AS semicolon_list(procedure) END name  :UserActor
 ```
-The name gets repeated at the end of an `agent` definition.
+The name gets repeated at the end of an `actor` definition.
 My motivation for this decision is the same as with functions that have subordinate `where` clauses.
 
-At least for now, I'll not entertain nesting amongst agents.
+At least for now, I'll not entertain nesting amongst actors.
 They're self-contained ... such as they are.
 
 -----

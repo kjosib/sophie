@@ -93,13 +93,13 @@ type:
 
 	predicate[x] is (x)->flag;
 
-	Console is agent:
+	Console is role:
 		echo(list[string]);
 		read(!(string));
 		random(!(number));
 	end;
 
-	FileSystem is agent:
+	FileSystem is role:
 		read_file(string, !(string));
 		read_lines(string, !(list[string]));
 	end;

@@ -11,7 +11,7 @@ Sophie is not exactly *block-structured:* module files have sections dedicated t
 * Imports
 * Type definitions
 * Type assumptions
-* Function and Agent definitions
+* Function and Actor definitions
 * "Main-Program" Behavior
 
 Every section is optional, but if it appears, it must appear in exactly that order.

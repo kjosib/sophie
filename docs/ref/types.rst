@@ -51,14 +51,14 @@ They may as well be built in, for all anyone cares.
     There is no required relation between their types.
 
 ``Console``
-    The ``agent``-type of the built-in ``console`` actor.
+    The ``role`` of the built-in ``console`` actor.
     It defines methods ``echo``, ``read``, and ``random``.
     Eventually it will deserve a section of its own.
 
 And soon:
 
 ``FileSystem``
-    The ``agent``-type of the built-in ``filesystem`` actor.
+    The ``role`` of the built-in ``filesystem`` actor.
     This is presently in a separate module, but I plan to make it part of the standard preamble.
 
 Types You Compose
@@ -81,7 +81,7 @@ Functions
 
 Message-handler Types
     Use the exclamation point and parenthesis to compose a message-handler type.
-    (This can refer either to a plain procedure or a method bound to an agent.)
+    (This can refer either to a plain procedure or a method bound to an actor.)
     For example, ``!(list[string]))`` is the type of a message-handler that takes
     a list of strings. The type ``!`` is that of a message-handler that takes no parameters.
 
@@ -166,13 +166,13 @@ Alias Types
     gives the name ``predicate`` to mean a function (of one argument) that returns a ``flag``.
     Alias types do not make constructors.
 
-Agent Types
-    This gives a type which some agent can implement.
+Role Types
+    This gives a type which some actor can implement.
     At the moment, it's mostly useful with the foreign function interface,
-    because agent definitions in the ``define:`` section implicitly define their own type.
+    because actor definitions in the ``define:`` section implicitly define their own type.
     Example::
 
-        Console is agent:
+        Console is role:
             echo(list[string]);
             read(!(string));
             random(!(number));

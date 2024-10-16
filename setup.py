@@ -15,7 +15,7 @@ setuptools.setup(
 	name='sophie-lang',
 	author='Beth Kjos',
 	author_email='kjosib@gmail.com',
-	version='0.0.7',
+	version='0.0.8',
 	packages=['sophie', "sophie.adapters", ],
 	package_data={
 		'sophie': ["Sophie.automaton"]+["sys/"+f for f in os.listdir("sophie/sys")],

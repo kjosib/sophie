@@ -38,7 +38,7 @@ class DeterminedCallGraphPass(TopDown):
 			if isinstance(udf, syntax.UserFunction):
 				self.graph[udf] = set()
 		self.tour(module.top_subs)
-		self.tour(module.agent_definitions)
+		self.tour(module.actor_definitions)
 		for expr in module.main:
 			self.visit(expr, None)
 	
@@ -50,7 +50,7 @@ class DeterminedCallGraphPass(TopDown):
 		self.tour(func.where)
 		self.visit(func.expr, func)
 	
-	def visit_UserAgent(self, actor:syntax.UserAgent):
+	def visit_UserActor(self, actor:syntax.UserActor):
 		self.tour(actor.behaviors)
 	
 	def visit_UserProcedure(self, proc:syntax.UserProcedure):
@@ -91,8 +91,8 @@ class DeterminedCallGraphPass(TopDown):
 		self.visit(alt.sub_expr, src)
 	
 	def visit_DoBlock(self, do:syntax.DoBlock, src):
-		for agent in do.agents:
-			self.visit(agent.expr, src)
+		for actor in do.actors:
+			self.visit(actor.expr, src)
 		for step in do.steps:
 			self.visit(step, src)
 	
@@ -142,8 +142,8 @@ class DemandPass(Visitor):
 				return {target}
 			elif isinstance(target, (syntax.SubTypeSpec, syntax.Record)):
 				return EMPTY
-			elif isinstance(target, syntax.UserAgent):
-				# This is a rough spot. In general, the params to a syntax.UserAgent
+			elif isinstance(target, syntax.UserActor):
+				# This is a rough spot. In general, the params to a syntax.UserActor
 				# will eventually be strict, but the stricture happens later when the
 				# template gets cast as an actor in a do-block. Until then, it works
 				# like a record.
@@ -183,7 +183,7 @@ class DemandPass(Visitor):
 		return self.visit(ux.arg)
 	
 	def visit_DoBlock(self, do:syntax.DoBlock):
-		return self._union([agent.expr for agent in do.agents]) | self._union(do.steps)
+		return self._union([actor.expr for actor in do.actors]) | self._union(do.steps)
 	
 	def visit_Lookup(self, lu:syntax.Lookup):
 		dfn = lu.ref.dfn

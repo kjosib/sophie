@@ -177,7 +177,7 @@ _hint("name formals : name ● ???", "It seems to cut off after perhaps a type-a
 _hint("name type_parameters IS ( name : name ● ???", "Anticipated a comma or perhaps open-square-bracket here.")
 _hint("WHEN expr ● ->", "WHEN goes with THEN. The arrow is for type matches.")
 _hint("TYPE : ??? round_list(simple_type) ● ;", "Might be a record missing field types, or the first part of a function-type (expecting '->' and a result-type ).")
-_hint("AGENT ??? semicolon_list(procedure) END ● ;", "End agents by name: AGENT foo ... END foo;")
+_hint("ACTOR ??? semicolon_list(procedure) END ● ;", "End actors by name: ACTOR foo ... END foo;")
 _hint("name formals annotation = expr WHERE semicolon_list(subroutine) END ● ;", "End enclosing functions by name: foo(x) = ... WHERE ... END foo;")
 _hint("TYPE : ??? ! ● name", "you have !foo and probably want !(foo) to represent a message/procedure of one argument.")
 

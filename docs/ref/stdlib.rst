@@ -34,7 +34,7 @@ The Console
 
 The standard preamble defines an actor called ``console`` (lower-case) with this interface::
 
-    Console is agent:
+    Console is role:
         echo(list[string]);
         read(!(string));
         random(!(number));

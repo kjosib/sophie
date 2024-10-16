@@ -46,7 +46,7 @@ end next_camel;
 # Memoization is stateful, so this calls for an actor.
 # The actor only really needs one method.
 
-agent Camel_Memo(puzzle:Puzzle, memo:Tree) as
+actor Camel_Memo(puzzle:Puzzle, memo:Tree) as
 	to advance(camel:Camel, reply) is case search(my memo, proxy) as found of
 		this -> do
 			console ! echo [fmt_camel(camel), " -> ", fmt_camel(unproxy(found.item)), EOL];
@@ -69,7 +69,7 @@ end Camel_Memo;
 # The other represents the state of the ghost.
 # At any given time, it has camels at various oases.
 
-agent Ghost_Rider(ghost:Ghost, memo) as
+actor Ghost_Rider(ghost:Ghost, memo) as
 	to tick is do
 		console ! echo(cat(interleave(", ", map(fmt_camel, set_elements(my ghost))), [EOL]));
 		case

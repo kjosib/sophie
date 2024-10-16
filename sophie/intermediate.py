@@ -162,8 +162,8 @@ class VMGlobalScope(VMScope):
 	def declare(self, symbol: ontology.Symbol):
 		pass
 	
-	def write_actors(self, agent_definitions:list[syntax.UserAgent]):
-		for dfn in agent_definitions:
+	def write_actors(self, actor_definitions:list[syntax.UserActor]):
+		for dfn in actor_definitions:
 			last = dfn.behaviors[-1]
 			inner = VMActorScope(self, dfn)
 			for b in dfn.behaviors:
@@ -175,7 +175,7 @@ class VMGlobalScope(VMScope):
 
 class VMActorScope(VMScope):
 	""" Specialized scope for the behaviors of an actor-definition """
-	def __init__(self, outer:VMScope, dfn:syntax.UserAgent):
+	def __init__(self, outer:VMScope, dfn:syntax.UserActor):
 		super().__init__(outer._prefix + dfn.nom.text + ":")
 		self._outer = outer
 		self.indent = outer.indent+"  "
@@ -762,9 +762,9 @@ class ProcContext(EagerContext):
 		raise NotImplementedError(type(self))
 
 	def visit_DoBlock(self, do: syntax.DoBlock, scope: VMFunctionScope):
-		for agent in do.agents:
-			scope.alias(agent)
-			FORCE.visit(agent.expr, scope)
+		for actor in do.actors:
+			scope.alias(actor)
+			FORCE.visit(actor.expr, scope)
 			# At this point a template is on the stack.
 			emit("CAST")
 		
@@ -774,7 +774,7 @@ class ProcContext(EagerContext):
 			assert scope.depth() == depth
 		self.visit(do.steps[-1], scope)
 		assert scope.depth() in (depth, None)
-		scope.emit_drop(len(do.agents))
+		scope.emit_drop(len(do.actors))
 
 	def visit_AssignMember(self, am:syntax.AssignMember, scope:VMFunctionScope):
 		scope.load(ontology.SELF)
@@ -876,13 +876,13 @@ def translate(roadmap:RoadMap):
 	# Write all types:
 	for scope, module in each_piece(roadmap):
 		STRUCTURE.write_types(module.types, scope)
-		scope.mangle_names(module.agent_definitions)
+		scope.mangle_names(module.actor_definitions)
 		mangle_foreign_symbols(module.foreign)
 
 	# Write all functions (including FFI):
 	for scope, module in each_piece(roadmap):
 		scope.write_outer_functions(module.top_subs)
-		scope.write_actors(module.agent_definitions)
+		scope.write_actors(module.actor_definitions)
 		write_ffi_init(module.foreign)
 	
 	# Delimiter so it's possible to start a begin-expression with a do-block:

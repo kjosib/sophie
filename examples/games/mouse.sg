@@ -12,7 +12,7 @@ define:
 
 ### The main attraction:
 
-    agent mouse_chaser( pos:xy ) as
+    actor mouse_chaser( pos:xy ) as
     
         to mouse(event) is do
             my pos := event.pos;  # Assignment should not look like equality.

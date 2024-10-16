@@ -32,7 +32,7 @@ Strict positions are the recursive extension (from the body expression) of:
 * All arguments to a foreign function.
 * All arguments to what is syntactically a bound-method.
 * The *function to be called* in a function-call expression.
-* Within a ``do``-block, all *new_agent* expressions and each *step* expression.
+* Within a ``do``-block, all *new_actor* expressions and each *step* expression.
 * Within a task-expression, the subexpression that represents the procedure to be scheduled.
 
 Additionally:

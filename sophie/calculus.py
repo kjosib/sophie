@@ -225,21 +225,21 @@ class UserTaskType(ComputedType):
 	def visit(self, visitor: "TypeVisitor"): return visitor.on_user_task(self)
 	def expected_arity(self) -> int: return self.proc_type.expected_arity()
 
-class _AgentDerived(ComputedType):
+class _ActorDerived(ComputedType):
 	args:tuple[SophieType, ...]
 	
-	def __init__(self, uda:syntax.UserAgent, args:ProductType, global_env:TYPE_ENV):
+	def __init__(self, uda:syntax.UserActor, args:ProductType, global_env:TYPE_ENV):
 		assert isinstance(args, ProductType), type(args)
 		self.uda = uda
 		self.args = args.fields
 		self.global_env = global_env
 		super().__init__(uda, args)
 
-class ParametricTemplateType(_AgentDerived):
+class ParametricTemplateType(_ActorDerived):
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_parametric_template(self)
 	def expected_arity(self) -> int: return len(self.uda.members)
 
-class ConcreteTemplateType(_AgentDerived):
+class ConcreteTemplateType(_ActorDerived):
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_concrete_template(self)
 	def expected_arity(self) -> int: return -1  # Not callable; instantiable.
 	def state_pairs(self):
@@ -351,7 +351,7 @@ class Render(TypeVisitor):
 	def on_concrete_template(self, t: ConcreteTemplateType):
 		return "<template:%s%s>"%(t.uda.nom.text, self._args(t.args))
 	def on_uda(self, a: UDAType):
-		return "<agent:%s%s>"%(a.uda.nom.text, self._args(a.args))
+		return "<actor:%s%s>"%(a.uda.nom.text, self._args(a.args))
 	def on_message(self, m: MessageType):
 		return "<message:%s>"%m.arg.visit(self)
 	def on_user_task(self, t: UserTaskType):

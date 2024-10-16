@@ -185,7 +185,7 @@ class Report:
 	
 	# Methods the Alias-checker calls
 	def these_are_not_types(self, non_types:Sequence[syntax.TypeCall]):
-		intro = "Words that get used like types, but refer to something else (e.g. variants, functions, or agent definitions)."
+		intro = "Words that get used like types, but refer to something else (e.g. variants, functions, or actors)."
 		problem = [Annotation(self._path, tc) for tc in non_types]
 		self.issue(Pic(intro, problem))
 	

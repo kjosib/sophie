@@ -48,7 +48,7 @@ s_paddle = xy(s_ball.x, s_ball.y * 6);
 s_field = s_screen - s_ball;
 
 # The main game logic
-agent NotQuitePong(state:State, paddle:number) as
+actor NotQuitePong(state:State, paddle:number) as
 
 	to mouse(event) is case my state of
 		dead -> skip;

@@ -53,7 +53,7 @@ Its ``perform`` method presently uses the passed-in ``dynamic_env`` which reflec
 local static scope wherever the do-block actually appeared.
 
 I'll adjust ``CompoundAction``::``perform`` to create a subordinate activation-record
-and therein assign names per its ``NewAgent`` entries -- if it has any.
+and therein assign names per its ``NewActor`` entries -- if it has any.
 Thanks to the possibility of shadowing, I cannot simply use the outer activation record.
 (Maybe I should disallow shadowing? But that issue should be about ergonomics, not hacks.)
 
@@ -81,7 +81,7 @@ akin to a record-constructor. When called with arguments, it produces a template
 Executive Adjustments
 -----------------------
 There is a function ``_prepare`` in ``executive.py`` which must be adjusted.
-Previously it only *declares* a placeholder slot for ``UserAgent`` symbols.
+Previously it only *declares* a placeholder slot for ``UserActor`` symbols.
 It should rather *assign* either class or template as appropriate.
 This could in principle also be solved in ``runtime.py`` : ``_eval_lookup``,
 but I'd rather deal with it in the same place as record-constructors.
