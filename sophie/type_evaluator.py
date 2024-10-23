@@ -535,7 +535,7 @@ class UnionFinder(Visitor):
 				type_args = tuple(BOTTOM for _ in this.st.variant.type_params)
 				return SumType(this.st.variant, type_args)
 
-	def visit_UDFType(self, this:UserFnType, that: SophieType):
+	def visit_UserFnType(self, this:UserFnType, that: SophieType):
 		if isinstance(that, UserFnType):
 			if len(this.sub.params) == len(that.sub.params):
 				# In principle, we take the intersection of the parameters to the union of the results.
