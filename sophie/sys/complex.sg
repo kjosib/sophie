@@ -16,7 +16,7 @@ define:
 operator + (a,b) = complex(a.re+b.re, a.im+b.im);
 operator - (a,b) = complex(a.re-b.re, a.im-b.im);
 operator * (a,b) = complex(a.re*b.re - a.im*b.im, a.im*b.re + b.im*a.re);
-operator / (a,b) = a*conjugate(b) / (b.re*b.re + b.im*b.im);
+operator / (a,b) = a*conjugate(b) / squared_magnitude(b);
 operator / (a,r) = complex(a.re/r, a.im/r);
 
 conjugate(a) = complex(a.re, -a.im);
