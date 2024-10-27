@@ -64,29 +64,30 @@ def _dynamic_root(preamble_scope) -> RootFrame:
 	reset(lambda s:root.fetch(preamble_scope[s]))
 	return root
 
+def _insert(env:Frame, key:ontology.Symbol, dfn):
+	while isinstance(dfn, syntax.TypeAlias):
+		dfn = dfn.body
+	if isinstance(dfn, syntax.Record):
+		env.assign(dfn, Constructor(dfn, dfn.spec.field_names()))
+	elif isinstance(dfn, syntax.TaggedRecord):
+		env.assign(dfn, Constructor(dfn, dfn.body.field_names()))
+	elif isinstance(dfn, syntax.Tag):
+		env.assign(dfn, {"": dfn})
+	elif isinstance(dfn, syntax.FFI_Alias):
+		env.assign(dfn, _native_object(dfn))
+	elif isinstance(dfn, syntax.Subroutine):
+		env.declare(dfn)
+	elif isinstance(dfn, syntax.UserActor):
+		env.assign(dfn, ActorClass(env, dfn) if dfn.members else ActorTemplate(env, dfn, ()))
+	elif type(dfn) in _ignore_these:
+		pass
+	else:
+		raise ValueError("Don't know how to deal with %r %r"%(type(dfn), key))
+
+
 def _prepare(env:Frame, namespace:ontology.NS):
 	for key, dfn in namespace.local.items():
-		if isinstance(dfn, syntax.Record):
-			env.assign(dfn, Constructor(dfn, dfn.spec.field_names()))
-		elif isinstance(dfn, (syntax.SubTypeSpec, syntax.TypeAlias)):
-			if isinstance(dfn.body, (syntax.ArrowSpec, syntax.TypeCall)):
-				pass
-			elif isinstance(dfn.body, syntax.RecordSpec):
-				env.assign(dfn, Constructor(dfn, dfn.body.field_names()))
-			elif dfn.body is None:
-				env.assign(dfn, {"": dfn})
-			else:
-				raise ValueError("Tagged scalars (%r) are not implemented."%key)
-		elif isinstance(dfn, syntax.FFI_Alias):
-			env.assign(dfn, _native_object(dfn))
-		elif isinstance(dfn, syntax.Subroutine):
-			env.declare(dfn)
-		elif isinstance(dfn, syntax.UserActor):
-			env.assign(dfn, ActorClass(env, dfn) if dfn.members else ActorTemplate(env, dfn, ()))
-		elif type(dfn) in _ignore_these:
-			pass
-		else:
-			raise ValueError("Don't know how to deal with %r %r"%(type(dfn), key))
+		_insert(env, key, dfn)
 
 def _native_object(dfn:syntax.FFI_Alias):
 	if callable(dfn.val):

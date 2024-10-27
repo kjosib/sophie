@@ -473,9 +473,6 @@ def write_record(names:Iterable[str], symbol:ontology.Symbol):
 def write_enum(symbol:ontology.Symbol):
 	write_record((), symbol)
 
-def write_tagged_value(symbol:ontology.Symbol):
-	write_record(["*"], symbol)
-
 def symbol_harbors_thunks(sym:ontology.Symbol):
 	if isinstance(sym, syntax.FormalParameter): return not sym.is_strict
 	if isinstance(sym, syntax.UserFunction) and not sym.params: return True
@@ -859,12 +856,12 @@ class StructureDefiner(Visitor):
 		scope.mangle_names(variant.subtypes)
 		for tag, st in enumerate(variant.subtypes):
 			TYPE_CASE_INDEX[st] = tag
-			if isinstance(st.body, syntax.RecordSpec):
+			if isinstance(st, syntax.TaggedRecord):
 				write_record(st.body.field_names(), st)
-			elif st.body is None:
+			elif isinstance(st, syntax.Tag):
 				write_enum(st)
 			else:
-				write_tagged_value(st)
+				assert False
 
 STRUCTURE = StructureDefiner()
 

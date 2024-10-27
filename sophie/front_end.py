@@ -146,7 +146,7 @@ _hint("BEGIN : semicolon_list(expr) expr ● <END>", "You need a semicolon after
 _hint("expr ● \"", "Seems to be missing some sort of operator before the string that starts here.")
 _hint("TYPE : ??? name ● =", "A type-name IS something, but a function = something.")
 _hint("TYPE : ??? name type_parameters ● =", "A type-name IS something, but a function = something.")
-_hint("CASE : semicolon_list(subtype) ● END", "Do you mean ESAC here?")
+_hint("CASE : semicolon_list(tag_spec) ● END", "Do you mean ESAC here?")
 _hint("semicolon_list(alternative) ELSE ● ->", "This doesn't take an arrow. Just ELSE is enough.")
 _hint("CASE semicolon_list(when_clause) ● ESAC", "CASE-WHEN needs an ELSE clause.")
 _hint("ELSE expr ● ???", "Probably missing a semicolon just before here.")

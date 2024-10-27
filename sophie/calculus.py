@@ -88,7 +88,7 @@ class SumType(FormalType):
 	""" Either a record directly, or a variant-type. Details are in the symbol table. """
 	# NB: The arguments here are actual arguments, not formal parameters.
 	#     The corresponding formal parameters are listed in the symbol,
-	#     itself being either a SubTypeSpec or a TypeDecl
+	#     itself being either a TypeCase or a TypeDecl
 	def __init__(self, variant: syntax.Variant, type_args: Iterable[SophieType]):
 		assert isinstance(variant, syntax.Variant)
 		self.variant = variant
@@ -99,27 +99,25 @@ class SumType(FormalType):
 	def token(self): return self.variant
 
 class SubType(FormalType):
-	st : syntax.SubTypeSpec
+	symbol: syntax.TypeCase
 	def expected_arity(self) -> int: return -1  # Not callable. (There's a constructor arrow made.)
-	def token(self): return self.st.variant
 
 class EnumType(SubType):
-	def __init__(self, st: syntax.SubTypeSpec):
-		assert st.body is None
-		self.st = st
-		super().__init__(st)
+	symbol: syntax.Tag
+	def __init__(self, symbol: syntax.Tag):
+		self.symbol = symbol
+		super().__init__(symbol)
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_tag_enum(self)
-	def family(self) -> Symbol: return self.st.variant
+	def token(self): return self.symbol.variant
 
-class TaggedRecord(SubType):
-	def __init__(self, st: syntax.SubTypeSpec, type_args: Iterable[SophieType]):
-		assert isinstance(st, syntax.SubTypeSpec)
-		assert isinstance(st.body, syntax.RecordSpec)
-		self.st = st
-		self.type_args = _exemplargs(type_args, len(st.variant.type_params))
-		super().__init__(st, *(a.number for a in self.type_args))
+class TaggedRecordType(SubType):
+	symbol: syntax.TaggedRecord
+	def __init__(self, symbol: syntax.TaggedRecord, type_args: Iterable[SophieType]):
+		self.symbol = symbol
+		self.type_args = _exemplargs(type_args, len(symbol.variant.type_params))
+		super().__init__(symbol, *(a.number for a in self.type_args))
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_tag_record(self)
-	def family(self) -> Symbol: return self.st.variant
+	def token(self): return self.symbol.variant
 
 class ProductType(FormalType):
 	def __init__(self, fields: Iterable[SophieType]):
@@ -289,7 +287,7 @@ class TypeVisitor:
 	def on_record(self, r:RecordType): raise NotImplementedError(type(self))
 	def on_sum(self, s:SumType): raise NotImplementedError(type(self))
 	def on_tag_enum(self, e: EnumType): raise NotImplementedError(type(self))
-	def on_tag_record(self, t: TaggedRecord): raise NotImplementedError(type(self))
+	def on_tag_record(self, t: TaggedRecordType): raise NotImplementedError(type(self))
 	def on_arrow(self, a:ArrowType): raise NotImplementedError(type(self))
 	def on_product(self, p:ProductType): raise NotImplementedError(type(self))
 	def on_subroutine(self, sub:SubroutineType): raise NotImplementedError(type(self))
@@ -325,7 +323,7 @@ class Render(TypeVisitor):
 		return s.variant.nom.text+self._generic(s.type_args)
 	def on_tag_enum(self, e: EnumType):
 		return e.st.nom.text
-	def on_tag_record(self, t: TaggedRecord):
+	def on_tag_record(self, t: TaggedRecordType):
 		return t.st.nom.text+self._generic(t.type_args)
 	def on_arrow(self, a: ArrowType):
 		return a.arg.visit(self)+"->"+a.res.visit(self)

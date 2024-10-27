@@ -193,8 +193,13 @@ class _WordDefiner(_ResolutionPass):
 		self._declare_type(v)
 		for st in v.subtypes:
 			self._install(self.globals, st)
-			if st.body is not None:
-				self.visit(st.body)
+			self.visit(st)
+
+	def visit_Tag(self, t:syntax.Tag):
+		pass
+
+	def visit_TaggedRecord(self, t:syntax.TaggedRecord):
+		self.visit_RecordSpec(t.body)
 
 	def visit_Record(self, r:syntax.Record):
 		self._declare_type(r)
@@ -403,9 +408,14 @@ class _WordResolver(_ResolutionPass):
 
 	def visit_Variant(self, v:syntax.Variant):
 		for st in v.subtypes:
-			if st.body is not None:
-				self.visit(st.body, v.param_space)
+			self.visit(st, v.param_space)
 	
+	def visit_Tag(self, t:syntax.Tag, env:NS):
+		pass
+
+	def visit_TaggedRecord(self, t:syntax.TaggedRecord, env:NS):
+		self.visit_RecordSpec(t.body, env)
+
 	def visit_Record(self, r:syntax.Record):
 		self.visit(r.spec, r.param_space)
 	
@@ -633,8 +643,14 @@ class _AliasChecker(Visitor):
 	def visit_Variant(self, v: syntax.Variant):
 		# A variant cannot participate in an aliasing cycle because it is a nominal type.
 		for st in v.subtypes:
-			if st.body is not None:
-				self.visit(st.body)
+			self.visit(st)
+
+	def visit_Tag(self, t:syntax.Tag):
+		pass
+
+	def visit_TaggedRecord(self, t:syntax.TaggedRecord):
+		self.visit_RecordSpec(t.body)
+
 
 	def visit_Opaque(self, td: syntax.Opaque):
 		# An opaque type cannot be part of a cycle because it has out-degree zero.
@@ -705,7 +721,7 @@ def _build_match_dispatch(mx: syntax.MatchExpr, module_scope: NS, report: Report
 		except NoSuchSymbol:
 			report.undefined_name(first.head())
 			return
-		if not isinstance(case, syntax.SubTypeSpec):
+		if not isinstance(case, syntax.TypeCase):
 			report.not_a_case(first)
 			return
 		variant = case.variant

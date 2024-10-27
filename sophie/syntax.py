@@ -149,9 +149,6 @@ class RecordSpec:
 	def field_names(self):
 		return [f.nom.text for f in self.fields]
 
-class VariantSpec(NamedTuple):
-	subtypes: list["SubTypeSpec"]
-
 class Opaque(TypeDeclaration):
 	def has_value_domain(self): return False
 	def as_token(self): return self
@@ -172,13 +169,13 @@ class Record(TypeDeclaration):
 	def as_token(self): return self
 
 class Variant(TypeDeclaration):
-	sub_space: dict[str,"SubTypeSpec"]  # For checking match exhaustiveness.
+	sub_space: dict[str, "TypeCase"]  # For checking match exhaustiveness.
 	
-	def __init__(self, nom: Nom, type_params:tuple[TypeParameter, ...], spec:VariantSpec):
+	def __init__(self, nom: Nom, type_params:tuple[TypeParameter, ...], subtypes: list["TypeCase"]):
 		super().__init__(nom, type_params)
-		self.subtypes = spec.subtypes
+		self.subtypes = subtypes
 		self.sub_space = {}
-		for st in spec.subtypes:
+		for st in subtypes:
 			st.variant = self
 			self.sub_space[st.nom.key()] = st
 	def has_value_domain(self) -> bool: return False
@@ -199,20 +196,20 @@ class Role(TypeDeclaration):
 	def has_value_domain(self) -> bool: return False
 	def as_token(self): return None
 
-class SubTypeSpec(Symbol):
-	body: Optional[Union[RecordSpec, TypeCall, ArrowSpec]]
-	variant: Variant
-	# To clarify: The SubType here describes a *tagged* value, not the type of the value so tagged.
-	# One can tag any kind of value; even a function. Therefore yes, you can always
-	# treat a (tagged) subtype as a function. At least, once everything works right.
+class TypeCase(Symbol):
+	variant: Variant  # Inherited attribute: Variant constructor fills this in.
 	def has_value_domain(self) -> bool: return True
-	def __init__(self, nom:Nom, body=None):
-		super().__init__(nom)
-		self.body = body
-	def head(self) -> slice: return self.nom.head()
-	def key(self): return self.nom.key()
 	def __repr__(self): return "<%s>"%self.nom.text
 	def as_token(self): return self.variant
+
+class Tag(TypeCase):
+	pass
+
+class TaggedRecord(TypeCase):
+	body: RecordSpec
+	def __init__(self, nom:Nom, body):
+		super().__init__(nom)
+		self.body = body
 
 class Assumption(NamedTuple):
 	names: list[Nom]
@@ -419,7 +416,7 @@ class ExplicitList(ValExpr):
 
 class Alternative:
 	pattern: Nom
-	dfn: SubTypeSpec  # Either the match-check pass or the type-checker fills this.
+	dfn: TypeCase  # Either the match-check pass or the type-checker fills this.
 	sub_expr: ValExpr
 	where: Sequence[Subroutine]
 	

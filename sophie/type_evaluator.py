@@ -22,7 +22,7 @@ from .calculus import (
 	TYPE_ENV,
 	SophieType, TypeVisitor, AdHocType,
 	OpaqueType, ProductType, ArrowType, TypeVariable,
-	RecordType, SumType, SubType, TaggedRecord, EnumType,
+	RecordType, SumType, SubType, TaggedRecordType, EnumType,
 	SubroutineType, UserFnType, UserProcType, UDAType, UserTaskType,
 	InterfaceType, MessageType, ParametricTemplateType, ConcreteTemplateType,
 	BOTTOM, ERROR, EMPTY_PRODUCT, READY_MESSAGE
@@ -293,8 +293,8 @@ class Rewriter(TypeVisitor):
 		self._gamma = gamma
 	def on_opaque(self, o: OpaqueType):
 		return o
-	def on_tag_record(self, t: TaggedRecord):
-		return TaggedRecord(t.st, [a.visit(self) for a in t.type_args])
+	def on_tag_record(self, t: TaggedRecordType):
+		return TaggedRecordType(t.symbol, [a.visit(self) for a in t.type_args])
 	def on_record(self, r: RecordType):
 		return RecordType(r.symbol, [a.visit(self) for a in r.type_args])
 	def on_variable(self, v: TypeVariable):
@@ -316,6 +316,12 @@ class Binder(Visitor):
 	"""
 	Discovers (or fails) a substitution-of-variables (in the formal)
 	which makes the formal accept the actual as an instance.
+	
+	Basically this tree-walks the formal-type in parallel with the
+	actual type as long as these harmonize. Type-variables on the
+	left get assigned in the first instance, but subsequent
+	appearances demand "equivalent"-typed actual parameters.
+	We delegate this problem to the UnionFinder.
 	"""
 	def __init__(self, engine, env:TYPE_ENV):
 		self.gamma = {}
@@ -411,16 +417,16 @@ class Binder(Visitor):
 				self.parallel(formal.type_args, actual.type_args)
 			else:
 				self.fail("Variant %s is not variant %s"%(formal.variant, actual.variant))
-		elif isinstance(actual, TaggedRecord):
-			if formal.variant is actual.st.variant:
+		elif isinstance(actual, TaggedRecordType):
+			if formal.variant is actual.symbol.variant:
 				self.parallel(formal.type_args, actual.type_args)
 			else:
-				self.fail("Variant %s is not variant %s"%(formal.variant, actual.st.variant))
+				self.fail("Variant %s is not variant %s"%(formal.variant, actual.symbol.variant))
 		elif isinstance(actual, EnumType):
-			if formal.variant is actual.st.variant:
+			if formal.variant is actual.symbol.variant:
 				pass
 			else:
-				self.fail("Variant %s is not variant %s"%(formal.variant, actual.st.variant))
+				self.fail("Variant %s is not variant %s"%(formal.variant, actual.symbol.variant))
 		else:
 			self.fail("%s is a variant, but %s is not a subtype of any variant."%(formal, actual))
 	
@@ -453,20 +459,27 @@ def _quacks_like_an_action(typ:SophieType) -> bool:
 	return typ in (primitive.literal_act, ERROR)
 
 class UnionFinder(Visitor):
+	"""
+	This object embodies an algorithm to find a least-common-supertype
+	among several constituents. That is, it discerns the smallest type
+	which contains every value of any constituent type, and therefore
+	provides only the *intersection* of their guarantees.
+	"""
+	
 	def __init__(self):
-		self._prototype = BOTTOM
+		self._unifier = BOTTOM
 		self._expr = None
 	
 	def result(self):
-		return self._prototype
+		return self._unifier
 	
 	def unify_with(self, env, expr, typ:SophieType, report:diagnostics.Report):
-		if ERROR not in (self._prototype, typ):
-			union = self.do(self._prototype, typ)
+		if ERROR not in (self._unifier, typ):
+			union = self.do(self._unifier, typ)
 			if union is ERROR:
-				report.type_mismatch(env, self._expr, self._prototype, expr, typ)
+				report.type_mismatch(env, self._expr, self._unifier, expr, typ)
 			else:
-				self._prototype = union
+				self._unifier = union
 				self._expr = expr
 				return True
 	
@@ -503,37 +516,37 @@ class UnionFinder(Visitor):
 			if this.variant is that.variant:
 				type_args = self.parallel(this.type_args, that.type_args)
 				return SumType(this.variant, type_args)
-		elif isinstance(that, TaggedRecord):
-			if this.variant is that.st.variant:
+		elif isinstance(that, TaggedRecordType):
+			if this.variant is that.symbol.variant:
 				type_args = self.parallel(this.type_args, that.type_args)
 				return SumType(this.variant, type_args)
 		elif isinstance(that, EnumType):
-			if this.variant is that.st.variant:
+			if this.variant is that.symbol.variant:
 				return this
 			
-	def visit_TaggedRecord(self, this: TaggedRecord, that: SophieType):
-		if isinstance(that, TaggedRecord):
-			if this.st is that.st:
+	def visit_TaggedRecordType(self, this: TaggedRecordType, that: SophieType):
+		if isinstance(that, TaggedRecordType):
+			if this.symbol is that.symbol:
 				type_args = self.parallel(this.type_args, that.type_args)
-				return TaggedRecord(this.st, type_args)
-			if this.st.variant is that.st.variant:
+				return TaggedRecordType(this.symbol, type_args)
+			if this.symbol.variant is that.symbol.variant:
 				type_args = self.parallel(this.type_args, that.type_args)
-				return SumType(this.st.variant, type_args)
+				return SumType(this.symbol.variant, type_args)
 		elif isinstance(that, EnumType):
-			if this.st.variant is that.st.variant:
-				return SumType(this.st.variant, this.type_args)
+			if this.symbol.variant is that.symbol.variant:
+				return SumType(this.symbol.variant, this.type_args)
 		elif isinstance(that, SumType):
 			return self.visit_SumType(that, this)
 		
 	def visit_EnumType(self, this: EnumType, that: SophieType):
 		if isinstance(that, SumType):
 			return self.visit_SumType(that, this)
-		elif isinstance(that, TaggedRecord):
-			return self.visit_TaggedRecord(that, this)
+		elif isinstance(that, TaggedRecordType):
+			return self.visit_TaggedRecordType(that, this)
 		elif isinstance(that, EnumType):
-			if this.st.variant is that.st.variant:
-				type_args = tuple(BOTTOM for _ in this.st.variant.type_params)
-				return SumType(this.st.variant, type_args)
+			if this.symbol.variant is that.symbol.variant:
+				type_args = tuple(BOTTOM for _ in this.symbol.variant.type_params)
+				return SumType(this.symbol.variant, type_args)
 
 	def visit_UserFnType(self, this:UserFnType, that: SophieType):
 		if isinstance(that, UserFnType):
@@ -717,13 +730,15 @@ class DeductionEngine(Visitor):
 		self._types[v] = SumType(v, type_args)
 		builder = ManifestBuilder(v.type_params, type_args)
 		for st in v.subtypes:
-			if st.body is None:
+			if isinstance(st, syntax.Tag):
 				self._constructors[st] = EnumType(st)
-			elif isinstance(st.body, syntax.RecordSpec):
+			elif isinstance(st, syntax.TaggedRecord):
 				arg = builder.visit(st.body)
-				res = TaggedRecord(st, type_args)
+				res = TaggedRecordType(st, type_args)
 				self._constructors[st] = ArrowType(arg, res)
-				
+			else:
+				assert False, st
+
 	def visit_TypeAlias(self, alias: syntax.TypeAlias):
 		type_args = [TypeVariable() for _ in alias.type_params]
 		self._types[alias] = referent = ManifestBuilder(alias.type_params, type_args).visit(alias.body)
@@ -936,7 +951,7 @@ class DeductionEngine(Visitor):
 		
 	def visit_Lookup(self, lu:syntax.Lookup, env:TYPE_ENV) -> SophieType:
 		target = lu.ref.dfn
-		if isinstance(target, (syntax.TypeDeclaration, syntax.SubTypeSpec, syntax.UserActor)):
+		if isinstance(target, (syntax.TypeDeclaration, syntax.TypeCase, syntax.UserActor)):
 			return self._constructors[target]  # Must succeed because of resolution.check_constructors
 		if isinstance(target, syntax.FFI_Alias):
 			return self._ffi[target]
@@ -1023,8 +1038,8 @@ class DeductionEngine(Visitor):
 		elif subject_type is BOTTOM:
 			return try_everything([BOTTOM] * len(mx.variant.type_params))
 		
-		elif isinstance(subject_type, SubType) and subject_type.st.variant is mx.variant:
-			case_key = subject_type.st
+		elif isinstance(subject_type, SubType) and subject_type.symbol.variant is mx.variant:
+			case_key = subject_type.symbol
 			if case_key in mx.dispatch:
 				return try_one_alternative(mx.dispatch[case_key], subject_type)
 			else:
@@ -1061,9 +1076,9 @@ class DeductionEngine(Visitor):
 		elif isinstance(lhs_type, RecordType):
 			spec = lhs_type.symbol.spec
 			parameters = lhs_type.symbol.type_params
-		elif isinstance(lhs_type, TaggedRecord):
-			spec = lhs_type.st.body
-			parameters = lhs_type.st.variant.type_params
+		elif isinstance(lhs_type, TaggedRecordType):
+			spec = lhs_type.symbol.body
+			parameters = lhs_type.symbol.variant.type_params
 		elif lhs_type is BOTTOM:
 			# In principle the evaluator could make an observation / infer a constraint
 			return lhs_type
@@ -1160,11 +1175,8 @@ class DeductionEngine(Visitor):
 		self._report.bad_task(env, at.proc_ref, proc_type)
 		return ERROR
 
-def _hypothesis(st:syntax.SubTypeSpec, type_args:Sequence[SophieType]) -> SubType:
-	assert isinstance(st, syntax.SubTypeSpec)
-	body = st.body
-	if body is None:
-		return EnumType(st)
-	if isinstance(body, syntax.RecordSpec):
-		return TaggedRecord(st, type_args)
+def _hypothesis(st:syntax.TypeCase, type_args:Sequence[SophieType]) -> SubType:
+	if isinstance(st, syntax.Tag): return EnumType(st)
+	elif isinstance(st, syntax.TaggedRecord): return TaggedRecordType(st, type_args)
+	else: assert False, type(st)
 

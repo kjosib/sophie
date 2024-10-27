@@ -66,13 +66,12 @@ simple_type -> generic(simple_type)
 
 record_spec  -> round_list(field_dfn)                    :RecordSpec
 
-variant_spec -> CASE ':' semicolon_list(subtype) ESAC    :VariantSpec
+variant_spec -> CASE ':' semicolon_list(tag_spec) ESAC
 
 field_dfn -> name ':' simple_type   :FieldDefinition
 
-subtype  -> name record_spec    :SubTypeSpec
-          | name simple_type    :SubTypeSpec
-          | name                :SubTypeSpec
+tag_spec  -> name record_spec    :TaggedRecord
+           | name                :Tag
 
 role_spec  -> ROLE ':' semicolon_list(method_type) END
 method_type -> name optional(round_list(simple_type))      :MethodSpec
@@ -215,7 +214,7 @@ Experience may later suggest expanding the `pattern` grammar, but this will do f
 
 **Absurd Cases**
 
-Type-case matches in Sophie must list every variety of subtype for the subject of the match.
+Type-case matches in Sophie must list every possible case for the subject of the match.
 But sometimes there are cases which cannot happen in the first place.
 Sophie's type-system is cool, but Sophie is not a proof system.
 Instead, Sophie allows you to declare a case to be *absurd* along with a brief explanation.
