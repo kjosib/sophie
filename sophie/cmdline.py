@@ -21,7 +21,7 @@ Documentation: https://sophie.readthedocs.io/en/latest/
 import sys, argparse
 from pathlib import Path
 
-EXPERIMENT = "to emit some IL"  # nothing
+EXPERIMENT = "nothing"
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -31,6 +31,7 @@ parser = argparse.ArgumentParser(
 )
 parser.add_argument("program", help="try examples/turtle.sg for example.")
 parser.add_argument('-c', "--check", action="count", help="Check the program verbosely but do not actually execute the program.")
+parser.add_argument('-t', "--translate", action="store_true", help="Translate the program into input for the VM.")
 parser.add_argument('-x', "--experimental", action="store_true", help="Opt into experiment-mode, which is presently %s."%EXPERIMENT)
 
 def run(args):
@@ -60,7 +61,7 @@ def run(args):
 	else:
 		from .demand import analyze_demand
 		analyze_demand(roadmap)
-		if args.experimental:
+		if args.translate:
 			from .intermediate import translate
 			translate(roadmap)
 		else:
