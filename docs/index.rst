@@ -25,6 +25,7 @@ Sophie has many desirable characteristics. You might like to get to know Sophie.
    ref/index
    explain/index
    tech/index
+   future/index
 
 Some Desirable Characteristics
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -33,7 +34,7 @@ For practical purposes, Sophie is:
 
 * Easy on the eyes,
 * Easy on the brain (for beginners and experts alike)
-* Fun at parties. *(What, WHAT?)*
+* Fun at parties. *(Wait, WHAT?)*
 
 That last point might need a word of explanation. Games are an early niche.
 That's actually part of Sophie's secret plan to take over the world.

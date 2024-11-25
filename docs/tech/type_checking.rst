@@ -7,7 +7,8 @@ but I do not mean to impose burdens normally associated with *dependent-type* sy
 I settled on a solution based on abstract interpretation.
 In concept, my approach is to just run the program as-is, but in the realm of types rather than values.
 This is a whole-program approach to the question type-correctness:
-The same function might be safe-or-not depending on how you call it.
+We consider every distinct type that comes as input to a given function.
+In practice, this is normally a relatively small set.
 
 .. contents::
     :local:
