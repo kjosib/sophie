@@ -1,4 +1,4 @@
-2-D Graphics and Animation
+Role-Based Actor Polymorphism 
 ===============================
 
 .. warning:: This chapter is under development along with the features it describes.
