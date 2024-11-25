@@ -322,9 +322,9 @@ class Render(TypeVisitor):
 	def on_sum(self, s: SumType):
 		return s.variant.nom.text+self._generic(s.type_args)
 	def on_tag_enum(self, e: EnumType):
-		return e.st.nom.text
+		return e.symbol.nom.text
 	def on_tag_record(self, t: TaggedRecordType):
-		return t.st.nom.text+self._generic(t.type_args)
+		return t.symbol.nom.text+self._generic(t.type_args)
 	def on_arrow(self, a: ArrowType):
 		return a.arg.visit(self)+"->"+a.res.visit(self)
 	def on_product(self, p: ProductType):
