@@ -46,14 +46,10 @@ class ZooOfFail(unittest.TestCase):
 			"mismatched_where",
 		))
 
-	def test_01_define(self):
-		self.expect("define", [
+	def test_01_resolve(self):
+		self.expect("resolve", [
 			"defined_twice",
 			"generic_opaque",
-		])
-	
-	def test_02_resolve(self):
-		self.expect("resolve", [
 			"bad_type_alias",
 			"bad_typecase_name",
 			"bogus_type_alias",
@@ -62,30 +58,26 @@ class ZooOfFail(unittest.TestCase):
 			"confused",
 			"bad_else",
 			"duplicate_case",
+			"construct_variant",
+			"instantiate_opaque",
+			"instantiate_variant",
+			"instantiate_variant_indirect",
+			"alias_subtype",
+			"function_as_manifest_type",
+			"parameter_to_opaque",
+			"alias_switcheroo",
+			"parameter_as_generic",
 		])
 	
-	def test_03_alias(self):
+	def test_02_alias(self):
 		self.expect("alias", [
 			"alias_as_nominal_parameter",
 			"alias_as_structural_component",
 			"alias_circular_mutually",
 			"alias_circular_trivially",
-			"alias_subtype",
-			"alias_switcheroo",
-			"function_as_manifest_type",
-			"parameter_as_generic",
-			"parameter_to_opaque",
 		])
 	
-	def test_04_constructors(self):
-		self.expect("constructors", [
-			"construct_variant",
-			"instantiate_opaque",
-			"instantiate_variant",
-			"instantiate_variant_indirect",
-		])
-	
-	def test_05_type_check(self):
+	def test_03_type_check(self):
 		self.expect("type_check", [
 			"circular_function_mutually",
 			"circular_function_trivially",
@@ -101,7 +93,7 @@ class ZooOfFail(unittest.TestCase):
 			"assume_incorrectly",
 		])
 	
-	def test_06_import(self):
+	def test_04_import(self):
 		self.expect("import", [
 			"circular_import",
 			"missing_import",

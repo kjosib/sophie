@@ -58,11 +58,13 @@ RELOP_MAP = {}
 
 OVERLOAD = {}
 
+_PRIMITIVE_TYPES = primitive.root_scope.types
+
 _PRIMITIVE_TYPE_CLASS = {
-	int: primitive.root_namespace['number'],
-	float: primitive.root_namespace['number'],
-	str: primitive.root_namespace['string'],
-	bool: primitive.root_namespace['flag'],
+	int: _PRIMITIVE_TYPES.symbol('number'),
+	float: _PRIMITIVE_TYPES.symbol('number'),
+	str: _PRIMITIVE_TYPES.symbol('string'),
+	bool: _PRIMITIVE_TYPES.symbol('flag'),
 }
 
 def _type_class(x:STRICT_VALUE):
@@ -322,7 +324,7 @@ class ActorClass(Function):
 		self._uda = uda
 		
 	def apply(self, args: Sequence[LAZY_VALUE], dynamic_env:ENV) -> "ActorTemplate":
-		assert len(args) == len(self._uda.members)
+		assert len(args) == len(self._uda.fields)
 		return ActorTemplate(self._global_link, self._uda, args)
 
 
@@ -333,8 +335,8 @@ class ActorTemplate:
 		self._args = args
 	
 	def instantiate(self):
-		state = dict(zip(self._uda.members, map(force, self._args)))
-		vtable = self._uda.message_space.local
+		state = dict(zip(self._uda.fields, map(force, self._args)))
+		vtable = self._uda.behavior_space._symbol
 		return UserDefinedActor(state, vtable, self._global_link)
 
 class UserDefinedActor(Actor):
@@ -435,6 +437,11 @@ def sophie_this(item): return {"":THIS.key, "item":item}
 ###############################################################################
 
 def reset(fetch):
+	"""
+	The run-time needs frequent access to a few term-symbols
+	defined in the preamble. We enter references into global
+	variables named for the symbol (but all-upper-case).
+	"""
 	OVERLOAD.clear()
 	for k in 'nil', 'cons', 'less', 'same', 'more', 'this', 'nope':
 		globals()[k.upper()] = fetch(k)

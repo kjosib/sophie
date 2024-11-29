@@ -73,8 +73,8 @@ field_dfn -> name ':' simple_type   :FieldDefinition
 tag_spec  -> name record_spec    :TaggedRecord
            | name                :Tag
 
-role_spec  -> ROLE ':' semicolon_list(method_type) END
-method_type -> name optional(round_list(simple_type))      :MethodSpec
+role_spec  -> ROLE ':' semicolon_list(ability) END
+ability -> name optional(round_list(simple_type))      :Ability
 
 ```
 *Sidebar:* The "simple" types in type declarations have a close cousin found in function declarations.

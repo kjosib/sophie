@@ -1,7 +1,7 @@
 # Commonalities between the first and second puzzle of 2023 day 2
 
 import:
-"common" (slice, surely);
+"common" (slice);
 
 define:
 

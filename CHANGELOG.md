@@ -2,6 +2,38 @@
 
 Read this to get a general idea of what's new and nontrivial.
 
+## November 2024
+
+* 28 November: The resolver is completely restructured and much simplified:
+    * Three passes (`WordDefiner`, `WordResolver`, and `AliasChecker`) merge to become `Resolver`, dropping lots of code and running faster.
+    * Types and terms now have distinct name spaces, which simplifies a lot of things.
+    * By all rights, the new version should consume less time and space.
+* 27 November: Switched to Python 3.12 (from 3.9).
+* 25 November: *Translation to IL for the VM* is no longer considered *experimental*. It gets its own flag `-t` on the command line.
+
+## October 2024
+
+* 29 October: Force-push entire commit history with corrected meta-data.
+* 27 October: Assorted code clean-ups, better names, etc.
+* 15 October: Change `agent` and `interface` to `actor` and `role`, respectively.
+* 3 October: Fix author name.
+
+## Summer of 2024
+
+* 20 September: Labs drawn and first dose of HRT. Down 50 lbs from peak in June.
+* 19 September: Finally saw endocrinologist.
+* 27 August: Endocrinologist hospitalized; pushed appointment. Parents stopped fighting me about being a girl.
+* 30 July: Signed up for HRT. Should see endocrinologist on 28 August. Roller rink is much more fun in girl-mode.
+* 28 July: Purse arrives.
+* 24 July: Fem wallet arrives.
+* 18 July: Out to everyone at work. HR system updated. Wearing dresses at all times and places.
+* 11 July: Received first e-mail to preferred name.
+* 5 July: Began laser hair removal. Came out to first colleague.
+* 1 July: Got ears pierced.
+* 30 June: Sleeping much better and waking refreshed. Lost interest in drinking and coffee. Eating right.
+* 29 June: Yay! I'm a girl!
+* 24 June: Ordered Programmer Socks.
+
 ## May 2024
 
 * 10 May: Sophie's VM now has a *generational* garbage collector.

@@ -829,6 +829,7 @@ def write_ffi_init(foreign: list[syntax.ImportForeign]):
 			emit(".ffi")
 			emit(quote(fi.source.value))
 			for ref in fi.linkage:
+				assert hasattr(ref, "dfn"), ref.nom
 				emit(quote(MANGLED[ref.dfn]))
 			emit(";")
 
@@ -857,7 +858,7 @@ class StructureDefiner(Visitor):
 		for tag, st in enumerate(variant.subtypes):
 			TYPE_CASE_INDEX[st] = tag
 			if isinstance(st, syntax.TaggedRecord):
-				write_record(st.body.field_names(), st)
+				write_record(st.spec.field_names(), st)
 			elif isinstance(st, syntax.Tag):
 				write_enum(st)
 			else:
@@ -867,19 +868,20 @@ STRUCTURE = StructureDefiner()
 
 def translate(roadmap:RoadMap):
 	# Mangle the built-in types
-	for name, symbol in primitive.root_namespace.local.items():
+	for name in primitive.built_in_type_names:
+		symbol = primitive.root_scope.types.symbol(name)
 		MANGLED[symbol] = name
 	
 	# Write all types:
 	for scope, module in each_piece(roadmap):
 		STRUCTURE.write_types(module.types, scope)
-		scope.mangle_names(module.actor_definitions)
+		scope.mangle_names(module.actors)
 		mangle_foreign_symbols(module.foreign)
 
 	# Write all functions (including FFI):
 	for scope, module in each_piece(roadmap):
 		scope.write_outer_functions(module.top_subs)
-		scope.write_actors(module.actor_definitions)
+		scope.write_actors(module.actors)
 		write_ffi_init(module.foreign)
 	
 	# Delimiter so it's possible to start a begin-expression with a do-block:

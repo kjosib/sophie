@@ -6,7 +6,7 @@
 # it instead filters stars according to bands of numbers.
 
 import:
-"2023 Day 03 common" (range_matrix, rolling_combinations, Triple, map2, Range);
+"2023 Day 03 common" (range_matrix, rolling_combinations, Triple, Range);
 
 define:
 

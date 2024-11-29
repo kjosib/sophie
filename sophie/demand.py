@@ -38,7 +38,7 @@ class DeterminedCallGraphPass(TopDown):
 			if isinstance(udf, syntax.UserFunction):
 				self.graph[udf] = set()
 		self.tour(module.top_subs)
-		self.tour(module.actor_definitions)
+		self.tour(module.actors)
 		for expr in module.main:
 			self.visit(expr, None)
 	

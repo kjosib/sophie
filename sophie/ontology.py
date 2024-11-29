@@ -1,5 +1,4 @@
 from pathlib import Path
-from boozetools.support.symtab import NameSpace
 
 class Nom:
 	""" Representing the occurrence of a name anywhere. """
@@ -25,25 +24,16 @@ class Symbol:
 	def __init__(self, nom:Nom): self.nom = nom
 	def __repr__(self):
 		return "{%s:%s}" % (self.nom.text, type(self).__name__)
-	#def __str__(self): return self.nom.text
 	def head(self) -> slice: return self.nom.head()
-	def has_value_domain(self) -> bool: raise NotImplementedError(type(self))
 
-NS = NameSpace[Symbol]
 
-class Term(Symbol):
-	source_path: Path  # WordDefiner pass fills this in.
-	def has_value_domain(self): return True
+class TypeSymbol(Symbol): pass
+
+class TermSymbol(Symbol): pass
 
 class Expr:
 	def head(self) -> slice:
 		""" Indicate which bit of code this node represents. """
 		raise NotImplementedError(type(self))
 
-class Reference(Expr):
-	nom:Nom
-	dfn:Symbol   # Should happen during WordResolver pass.
-	def __init__(self, nom:Nom): self.nom = nom
-
-
-SELF = Term(Nom("SELF", None))
+SELF = TermSymbol(Nom("SELF", None))

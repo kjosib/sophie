@@ -40,7 +40,7 @@ setuptools.setup(
 		"Topic :: Education",
 		"Environment :: Console",
     ],
-	python_requires='>=3.9',
+	python_requires='>=3.12',
 	install_requires=[
 		"booze-tools>=0.6.2.1",
 		"pygame>=2.4.0",

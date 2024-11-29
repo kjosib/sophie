@@ -235,13 +235,13 @@ class _ActorDerived(ComputedType):
 
 class ParametricTemplateType(_ActorDerived):
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_parametric_template(self)
-	def expected_arity(self) -> int: return len(self.uda.members)
+	def expected_arity(self) -> int: return len(self.uda.fields)
 
 class ConcreteTemplateType(_ActorDerived):
 	def visit(self, visitor:"TypeVisitor"): return visitor.on_concrete_template(self)
 	def expected_arity(self) -> int: return -1  # Not callable; instantiable.
 	def state_pairs(self):
-		return zip(self.uda.members, self.args)
+		return zip(self.uda.fields, self.args)
 
 class UDAType(ComputedType):
 	"""

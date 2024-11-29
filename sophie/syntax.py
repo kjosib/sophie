@@ -7,10 +7,8 @@ Class-level type annotations make peace with pycharm wherever later passes add f
 from pathlib import Path
 from typing import Optional, Any, Sequence, NamedTuple, Union
 from boozetools.parsing.interface import SemanticError
-from .ontology import (
-	Nom, Symbol, NS, Reference,
-	Expr, Term,
-)
+from .space import Layer
+from .ontology import Nom, Symbol, Expr, TypeSymbol, TermSymbol
 
 class MismatchedBookendsError(SemanticError):
 	# The one semantic error we catch early enough to interrupt the parse.
@@ -18,16 +16,9 @@ class MismatchedBookendsError(SemanticError):
 	def __init__(self, head: slice, coda: slice):
 		super().__init__(head, coda)
 
-class TypeParameter(Symbol):
-	def __init__(self, nom:Nom):
-		super().__init__(nom)
-	def head(self) -> slice:
-		return self.nom.head()
-	def has_value_domain(self) -> bool:
-		return False
+class TypeParameter(TypeSymbol): pass
 
-class TypeDeclaration(Symbol):
-	param_space: NS   # Will address the type parameters. Word-definer fills this.
+class TypeDeclaration(TypeSymbol):
 	type_params: tuple[TypeParameter, ...]
 	
 	def __init__(self, nom: Nom, type_params:tuple[TypeParameter, ...]):
@@ -39,14 +30,16 @@ class TypeDeclaration(Symbol):
 def type_parameters(param_names:Sequence[Nom]):
 	return tuple(TypeParameter(n) for n in param_names)
 
-
-
 class SimpleType(Expr):
 	def can_construct(self) -> bool: raise NotImplementedError(type(self))
 	def dispatch_token(self): raise NotImplementedError(type(self))
 
-class ValExpr(Expr):
-	pass
+class ValExpr(Expr): pass
+
+class Reference(Expr):
+	nom:Nom
+	dfn:Symbol   # Should happen during WordResolver pass.
+	def __init__(self, nom:Nom): self.nom = nom
 
 class PlainReference(Reference):
 	def head(self) -> slice: return self.nom.head()
@@ -84,7 +77,7 @@ class ArrowSpec(SimpleType):
 	def can_construct(self) -> bool: return False
 	def dispatch_token(self): return None
 
-class MessageSpec(SimpleType):
+class MessageSpec(SimpleType):  # The anonymous kind that shows up in signatures
 	type_exprs: Sequence[ARGUMENT_TYPE]
 	def __init__(self, _head:Nom, type_exprs):
 		self._head = _head
@@ -98,7 +91,6 @@ class TypeCall(SimpleType):
 		assert isinstance(ref, Reference)
 		self.ref, self.arguments = ref, arguments or ()
 	def head(self) -> slice: return self.ref.head()
-	def can_construct(self) -> bool: return self.ref.dfn.has_value_domain()
 	def dispatch_token(self):
 		symbol = self.ref.dfn
 		assert isinstance(symbol, TypeDeclaration)
@@ -124,8 +116,7 @@ class ExplicitTypeVariable(Reference):
 	@staticmethod
 	def dispatch_token(): return None
 
-class FormalParameter(Symbol):
-	def has_value_domain(self): return True
+class FormalParameter(TermSymbol):
 	def __init__(self, stricture, nom:Nom, type_expr: Optional[ARGUMENT_TYPE]):
 		super().__init__(nom)
 		self.is_strict = stricture is not None
@@ -142,7 +133,7 @@ def FieldDefinition(nom:Nom, type_expr: Optional[ARGUMENT_TYPE]):
 	return FormalParameter(None, nom, type_expr)
 
 class RecordSpec:
-	field_space: NS  # WordDefiner pass fills this in.
+	field_space:Layer[FormalParameter]  # Resolver fills this in.
 	def __init__(self, fields: list[FormalParameter]):
 		self.fields = fields
 	
@@ -150,7 +141,6 @@ class RecordSpec:
 		return [f.nom.text for f in self.fields]
 
 class Opaque(TypeDeclaration):
-	def has_value_domain(self): return False
 	def as_token(self): return self
 
 class TypeAlias(TypeDeclaration):
@@ -158,14 +148,12 @@ class TypeAlias(TypeDeclaration):
 	def __init__(self, nom: Nom, type_params:tuple[TypeParameter, ...], body:SimpleType):
 		super().__init__(nom, type_params)
 		self.body = body
-	def has_value_domain(self) -> bool: return self.body.can_construct()
 	def as_token(self): return self.body.dispatch_token()
 
 class Record(TypeDeclaration):
 	def __init__(self, nom: Nom, type_params:tuple[TypeParameter, ...], spec:RecordSpec):
 		super().__init__(nom, type_params)
 		self.spec = spec
-	def has_value_domain(self) -> bool: return True
 	def as_token(self): return self
 
 class Variant(TypeDeclaration):
@@ -178,27 +166,22 @@ class Variant(TypeDeclaration):
 		for st in subtypes:
 			st.variant = self
 			self.sub_space[st.nom.key()] = st
-	def has_value_domain(self) -> bool: return False
 	def as_token(self): return self
 
-class MethodSpec(Symbol):
-	role_decl : "Role"
+class Ability(Symbol):
 	def __init__(self, nom:Nom, type_exprs:Sequence[SimpleType]):
 		super().__init__(nom)
 		self.type_exprs = type_exprs or ()
-	def has_value_domain(self) -> bool: return False
 
 class Role(TypeDeclaration):
-	method_space: NS
-	def __init__(self, nom: Nom, type_params:tuple[TypeParameter, ...], spec:Sequence[MethodSpec]):
+	ability_space: Layer["Ability"]  # Resolver supplies this
+	def __init__(self, nom: Nom, type_params:tuple[TypeParameter, ...], abilities:Sequence[Ability]):
 		super().__init__(nom, type_params)
-		self.spec = spec
-	def has_value_domain(self) -> bool: return False
+		self.abilities = abilities
 	def as_token(self): return None
 
 class TypeCase(Symbol):
 	variant: Variant  # Inherited attribute: Variant constructor fills this in.
-	def has_value_domain(self) -> bool: return True
 	def __repr__(self): return "<%s>"%self.nom.text
 	def as_token(self): return self.variant
 
@@ -206,10 +189,10 @@ class Tag(TypeCase):
 	pass
 
 class TaggedRecord(TypeCase):
-	body: RecordSpec
-	def __init__(self, nom:Nom, body):
+	spec: RecordSpec
+	def __init__(self, nom:Nom, spec):
 		super().__init__(nom)
-		self.body = body
+		self.spec = spec
 
 class Assumption(NamedTuple):
 	names: list[Nom]
@@ -221,20 +204,20 @@ def _bookend(head: Nom, where: Optional["WhereClause"]) -> Sequence["Subroutine"
 		return where.sub_fns
 	else:
 		raise MismatchedBookendsError(head.head(), where.coda.head())
-	
 
-class Subroutine(Term):
+class Subroutine(TermSymbol):
+	source_path: Path
 	params: Sequence[FormalParameter]
+	result_type_expr: Optional[ARGUMENT_TYPE]
 	expr: ValExpr
 	where: Sequence["Subroutine"]
-	strictures: tuple[int, ...] # Tree-walking runtime uses this.
+	captures: dict[Symbol, bool]  # Resolver builds this. True for *direct* captures.
+	strictures: tuple[int, ...]  # Tree-walking runtime uses this.
 	def is_thunk(self) -> bool:
 		""" So the compiler can decide how to encode these things """
 		raise NotImplementedError(type(self))
 
 class UserFunction(Subroutine):
-	namespace: NS
-	
 	def __init__(
 			self,
 			nom: Nom,
@@ -276,10 +259,11 @@ class WhereClause(NamedTuple):
 	sub_fns: Sequence[Subroutine]
 	coda: Nom
 
-class UserActor(Term):
-	member_space: NS
-	members: Sequence[FormalParameter]
-	message_space: NS
+class UserActor(TermSymbol):
+	fields: Sequence[FormalParameter]
+	behaviors: Sequence["UserProcedure"]
+	field_space: Layer["FormalParameter"]  # Resolver supplies this
+	behavior_space: Layer["UserProcedure"]  # Resolver supplies this
 	def head(self) -> slice: return self.nom.head()
 	def __init__(
 		self,
@@ -289,17 +273,17 @@ class UserActor(Term):
 		coda: Nom,
 	):
 		super().__init__(nom)
-		self.members = members or ()
+		self.fields = members or ()
 		self.behaviors = behaviors
 		if nom.text != coda.text:
 			raise MismatchedBookendsError(nom.head(), coda.head())
 
 	def member_names(self):
-		return [f.nom.text for f in self.members]
+		return [f.nom.text for f in self.fields]
 
 
 class UserProcedure(Subroutine):
-	namespace: NS
+	result_type_expr = None  # Simplifies the resolver.
 	reads_members: set[FormalParameter]  # Resolver must fill this.
 	
 	def head(self) -> slice: return self.nom.head()
@@ -420,8 +404,6 @@ class Alternative:
 	sub_expr: ValExpr
 	where: Sequence[Subroutine]
 	
-	namespace: NS  # WordDefiner fills
-
 	def __init__(self, pattern:Nom, _head:Nom, sub_expr:ValExpr, where:Optional[WhereClause]):
 		self.pattern = pattern
 		self._head = _head
@@ -444,7 +426,7 @@ class Absurdity(ValExpr):
 def absurdAlternative(pattern:Nom, _head:Nom, absurdity:Absurdity):
 	return Alternative(pattern, _head, absurdity, None)
 	
-class Subject(Term):
+class Subject(TermSymbol):
 	""" Within a match-case, a name must reach a different symbol with the particular subtype """
 	expr: ValExpr
 	def __init__(self, expr: ValExpr, alias: Optional[Nom]):
@@ -469,8 +451,6 @@ class MatchExpr(ValExpr):
 	alternatives: list[Alternative]
 	otherwise: Optional[ValExpr]
 	
-	namespace: NS  # WordDefiner fills this
-	
 	variant:Variant  # Match-Check fills these two.
 	dispatch: dict[Symbol:Alternative] # It is now part of the WordResolver pass.
 	
@@ -482,14 +462,12 @@ class MatchExpr(ValExpr):
 	def head(self) -> slice:
 		return self.subject.head()
 
-class NewActor(Term):
+class NewActor(TermSymbol):
 	def __init__(self, nom:Nom, expr:ValExpr):
 		super().__init__(nom)
 		self.expr = expr
 
 class DoBlock(ValExpr):
-	namespace: NS  # WordDefiner fills
-	
 	# The value of a do-block does not depend on when it runs.
 	# Its consequence may so depend, but by definition steps run in sequence.
 
@@ -526,13 +504,13 @@ class ImportSymbol(NamedTuple):
 
 class ImportModule(Symbol):
 	module_key: Path  # Module loader fills this.
-	def __init__(self, package:Optional[Nom], relative_path:Literal, nom:Optional[Nom], vocab:Optional[Sequence[ImportSymbol]]):
-		super().__init__(nom)
+	def __init__(self, package:Optional[Nom], relative_path:Literal, alias:Optional[Nom], vocab:Optional[Sequence[ImportSymbol]]):
+		super().__init__(alias)
 		self.package = package
 		self.relative_path = relative_path
 		self.vocab = vocab or ()
 
-class FFI_Alias(Term):
+class FFI_Alias(TermSymbol):
 	""" Built-in and foreign (Python) function symbols. """
 	val:Any  # Fill in during WordDefiner pass
 	
@@ -544,8 +522,7 @@ class FFI_Alias(Term):
 	def span_of_native_name(self):
 		return (self.alias or self.nom).head()
 
-def FFI_Symbol(nom:Nom):
-	return FFI_Alias(nom, None)
+def FFI_Symbol(nom:Nom): return FFI_Alias(nom, None)
 
 class FFI_Operator(FFI_Alias):
 	"""
@@ -555,7 +532,6 @@ class FFI_Operator(FFI_Alias):
 	pass
 
 class FFI_Group:
-	param_space: NS   # Will address the type parameters. Word-definer fills this.
 	def __init__(self, symbols:list[FFI_Alias], type_params:Optional[Sequence[TypeParameter]], type_expr:SimpleType):
 		self.symbols = symbols
 		self.type_params = type_params or ()
@@ -564,7 +540,8 @@ class FFI_Group:
 class ImportForeign:
 	def __init__(self, source:Literal, linkage:Optional[Sequence[Reference]], groups:list[FFI_Group]):
 		self.source = source
-		self.linkage = linkage
+		if linkage is None: self.linkage = None
+		else: self.linkage = [Lookup(ref) for ref in linkage]
 		self.groups = groups
 
 ImportDirective = Union[ImportModule, ImportForeign]
@@ -574,7 +551,7 @@ class Module:
 	foreign: list[ImportForeign]
 	assumptions: list[Assumption]
 	top_subs: list[Subroutine]
-	actor_definitions: list[UserActor]
+	actors: list[UserActor]
 	user_operators: list[UserOperator]
 	
 	source_path: Path  # Module loader fills this.
@@ -591,7 +568,7 @@ class Module:
 		self.types = types
 		self.assumptions = assumptions
 		self.top_subs = []
-		self.actor_definitions = []
+		self.actors = []
 		self.user_operators = []
 		self.all_fns = []
 		self.all_procs = []
@@ -599,7 +576,7 @@ class Module:
 		for item in top_levels:
 			if isinstance(item, UserOperator): self.user_operators.append(item)
 			if isinstance(item, Subroutine): self.top_subs.append(item)
-			elif isinstance(item, UserActor): self.actor_definitions.append(item)
+			elif isinstance(item, UserActor): self.actors.append(item)
 			else: assert False, type(item)
 		self.main = main
 	

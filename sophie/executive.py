@@ -4,7 +4,8 @@ This is the overall control for the run-time.
 """
 import sys
 from collections import deque
-from . import syntax, primitive,  ontology
+from . import syntax, primitive
+from .space import Scope, Layer
 from .stacking import Frame, RootFrame, Activation
 from .runtime import (
 	force, _strict, Constructor, Primitive, Thunk,
@@ -19,16 +20,16 @@ DRIVERS = {}
 def run_program(roadmap:RoadMap):
 	DRIVERS.clear()
 	_set_strictures(roadmap.preamble)
-	preamble_scope = roadmap.module_scopes[roadmap.preamble]
+	preamble_scope = roadmap.export_scopes[roadmap.preamble]
 	root = _dynamic_root(preamble_scope)
 	for module in roadmap.each_module:
 		_set_strictures(module)
 		env = Activation.for_module(root, module)
-		_prepare(env, roadmap.module_scopes[module])
+		_prepare(env, roadmap.export_scopes[module])
 		for d in module.foreign:
 			if d.linkage is not None:
 				py_module = sys.modules[d.source.value]
-				linkage = [env.fetch(ref.dfn) for ref in d.linkage]
+				linkage = [env.chase(ref.dfn).fetch(ref.dfn) for ref in d.linkage]
 				DRIVERS.update(py_module.sophie_init(*linkage) or ())
 		install_overrides(env, module.user_operators)
 		for expr in module.main:
@@ -59,18 +60,21 @@ def _set_strictures(module):
 
 def _dynamic_root(preamble_scope) -> RootFrame:
 	root = RootFrame()
-	_prepare(root, primitive.root_namespace)
+	_prepare(root, primitive.root_scope)
 	_prepare(root, preamble_scope)
-	reset(lambda s:root.fetch(preamble_scope[s]))
+	reset(lambda s:root.fetch(preamble_scope.terms.symbol(s)))
 	return root
 
-def _insert(env:Frame, key:ontology.Symbol, dfn):
-	while isinstance(dfn, syntax.TypeAlias):
-		dfn = dfn.body
+def _prepare(env:Frame, scope:Scope):
+	assert isinstance(scope.terms, Layer)
+	for dfn in scope.terms.each_symbol():
+		_insert(env, dfn)
+
+def _insert(env:Frame, dfn):
 	if isinstance(dfn, syntax.Record):
 		env.assign(dfn, Constructor(dfn, dfn.spec.field_names()))
 	elif isinstance(dfn, syntax.TaggedRecord):
-		env.assign(dfn, Constructor(dfn, dfn.body.field_names()))
+		env.assign(dfn, Constructor(dfn, dfn.spec.field_names()))
 	elif isinstance(dfn, syntax.Tag):
 		env.assign(dfn, {"": dfn})
 	elif isinstance(dfn, syntax.FFI_Alias):
@@ -78,30 +82,16 @@ def _insert(env:Frame, key:ontology.Symbol, dfn):
 	elif isinstance(dfn, syntax.Subroutine):
 		env.declare(dfn)
 	elif isinstance(dfn, syntax.UserActor):
-		env.assign(dfn, ActorClass(env, dfn) if dfn.members else ActorTemplate(env, dfn, ()))
-	elif type(dfn) in _ignore_these:
-		pass
+		env.assign(dfn, ActorClass(env, dfn) if dfn.fields else ActorTemplate(env, dfn, ()))
 	else:
-		raise ValueError("Don't know how to deal with %r %r"%(type(dfn), key))
+		raise ValueError("Don't know how to deal with %r / %r"%(type(dfn), dfn))
 
-
-def _prepare(env:Frame, namespace:ontology.NS):
-	for key, dfn in namespace.local.items():
-		_insert(env, key, dfn)
 
 def _native_object(dfn:syntax.FFI_Alias):
 	if callable(dfn.val):
 		return Primitive(dfn.val)
 	else:
 		return dfn.val
-
-_ignore_these = {
-	syntax.ArrowSpec,
-	syntax.TypeCall,
-	syntax.Variant,
-	syntax.Opaque,
-	syntax.Role,
-}
 
 def dethunk(result:dict):
 	"""

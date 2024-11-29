@@ -4,16 +4,18 @@ Also, some bits used for operator syntax
 and the primitive literal types
 """
 
-from .ontology import NS, Nom
+from .ontology import Nom
 from . import calculus, syntax
+from .space import Scope
 
-root_namespace = NS(place=None)
+root_scope = Scope.fresh()
+built_in_type_names = []
 
 def _built_in_type(name:str) -> calculus.OpaqueType:
+	built_in_type_names.append(name)
 	symbol = syntax.Opaque(Nom(name, None), ())
-	term = calculus.OpaqueType(symbol)
-	root_namespace[name] = symbol
-	return term
+	root_scope.types.define(symbol)
+	return calculus.OpaqueType(symbol)
 
 literal_number = _built_in_type("number")
 literal_string = _built_in_type("string")

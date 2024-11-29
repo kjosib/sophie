@@ -4,7 +4,7 @@ from traceback import TracebackException, format_stack
 from pathlib import Path
 from boozetools.support.failureprone import SourceText, Issue, Evidence, Severity, illustration
 from . import syntax
-from .ontology import Expr, Nom, Symbol, Reference, Term
+from .ontology import Expr, Nom, Symbol, TermSymbol
 from .calculus import TYPE_ENV, SophieType
 from .stacking import Frame
 
@@ -155,12 +155,13 @@ class Report:
 		ann = Annotation(self._path, d.source, caption%(arity, len(d.linkage)))
 		self.issue(Pic(intro, [ann]))
 
-	def redefined_name(self, earlier:Symbol, later:Nom):
-		if earlier not in self._redefined:
-			issue = Redefined(_fetch(self._path), earlier.nom.head())
+	def redefined(self, text:str, first:slice, guilty:slice):
+		key = text, first
+		if key not in self._redefined:
+			issue = Redefined(_fetch(self._path), first)
 			self.issue(issue)
-			self._redefined[earlier] = issue
-		self._redefined[earlier].note(later.head())
+			self._redefined[key] = issue
+		self._redefined[key].note(guilty)
 
 	def undefined_name(self, guilty:slice):
 		assert isinstance(guilty, slice)
@@ -183,6 +184,18 @@ class Report:
 		problem = [Annotation(env.path(), fr)]
 		self.issue(Pic(intro, problem))
 	
+	def called_a_type_parameter(self, tc:syntax.TypeCall):
+		pattern = "'%s' is a type-parameter, which cannot take type-arguments itself."
+		intro = pattern % (tc.ref.nom.text)
+		problem = [Annotation(self._path, tc)]
+		self.issue(Pic(intro, problem))
+	
+	def wrong_type_arity(self, tc:syntax.TypeCall, given:int, needed:int):
+		pattern = "%d type-arguments were given; %d are needed."
+		intro = pattern % (given, needed)
+		problem = [Annotation(self._path, tc)]
+		self.issue(Pic(intro, problem))
+	
 	# Methods the Alias-checker calls
 	def these_are_not_types(self, non_types:Sequence[syntax.TypeCall]):
 		intro = "Words that get used like types, but refer to something else (e.g. variants, functions, or actors)."
@@ -194,14 +207,8 @@ class Report:
 		problem = [Annotation(self._path, node) for node in scc]
 		self.issue(Pic(intro, problem))
 	
-	def wrong_type_arity(self, tc:syntax.TypeCall, given:int, needed:int):
-		pattern = "%d type-arguments were given; %d are needed."
-		intro = pattern % (given, needed)
-		problem = [Annotation(self._path, tc)]
-		self.issue(Pic(intro, problem))
-	
 	# Methods the match-checker calls
-	def not_a_variant(self, ref:Reference):
+	def not_a_variant(self, ref:syntax.Reference):
 		intro = "That's not a variant-type name"
 		ann = Annotation(self._path, ref)
 		self.issue(Pic(intro, [ann]))
@@ -266,8 +273,8 @@ class Report:
 			problem = [Annotation(env.path(), site, intro)]
 			self.issue(Pic(intro, trace_stack(env) + problem))
 	
-	def bad_argument(self, env: TYPE_ENV, term:Term, param:syntax.FormalParameter, actual:SophieType, why:str):
-		assert isinstance(term, Term)
+	def bad_argument(self, env: TYPE_ENV, term:TermSymbol, param:syntax.FormalParameter, actual:SophieType, why:str):
+		assert isinstance(term, TermSymbol)
 		assert isinstance(param, syntax.FormalParameter)
 		assert isinstance(why, str)
 		intro = "Type-checking found a square peg in a round hole:"

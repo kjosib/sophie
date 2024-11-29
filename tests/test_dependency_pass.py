@@ -15,8 +15,8 @@ class DependencyPassTests(unittest.TestCase):
 		report.assert_no_issues("Test is subverted.")
 		sut = DependencyPass()
 		sut.visit(roadmap.preamble)
-		scope = roadmap.module_scopes[roadmap.preamble]
-		udf = scope['map']
+		scope = roadmap.export_scopes[roadmap.preamble]
+		udf = scope.terms.symbol('map')
 		self.assertSetEqual(set(udf.params), sut.depends[udf])
 		
 		

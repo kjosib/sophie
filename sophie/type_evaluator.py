@@ -65,7 +65,7 @@ class DependencyPass(TopDown):
 		
 	def visit_Module(self, module: syntax.Module):
 		self._walk_children(module.top_subs, None)
-		self._walk_children(module.actor_definitions, None)
+		self._walk_children(module.actors, None)
 		for expr in module.main:
 			self.visit(expr, None)
 		self._flow_dependencies()
@@ -116,7 +116,7 @@ class DependencyPass(TopDown):
 			return self._is_in_scope(param, self._parent[env])
 		if isinstance(env, syntax.UserActor):
 			assert self._parent[env] is None
-			return param in env.members
+			return param in env.fields
 		assert False, (param, env)
 
 	@staticmethod
@@ -276,8 +276,8 @@ class ManifestBuilder(Visitor):
 		return MessageType(product).exemplar()
 		
 	def make_actor_template(self, uda:syntax.UserActor, module_scope:TYPE_ENV):
-		if uda.members:
-			product = self._make_product(field.type_expr for field in uda.members)
+		if uda.fields:
+			product = self._make_product(field.type_expr for field in uda.fields)
 			return ParametricTemplateType(uda, product, module_scope)
 		else:
 			# In this case, we have a (stateless) template ready to go.
@@ -702,7 +702,7 @@ class DeductionEngine(Visitor):
 				self._types[udf] = builder.visit(udf.result_type_expr)
 		for udp in module.all_procs:
 			install_params(udp)
-		for uda in module.actor_definitions:
+		for uda in module.actors:
 			self._constructors[uda] = builder.make_actor_template(uda, local)
 	
 	def _trace_visit(self, expr, local):
@@ -733,7 +733,7 @@ class DeductionEngine(Visitor):
 			if isinstance(st, syntax.Tag):
 				self._constructors[st] = EnumType(st)
 			elif isinstance(st, syntax.TaggedRecord):
-				arg = builder.visit(st.body)
+				arg = builder.visit(st.spec)
 				res = TaggedRecordType(st, type_args)
 				self._constructors[st] = ArrowType(arg, res)
 			else:
@@ -1077,7 +1077,7 @@ class DeductionEngine(Visitor):
 			spec = lhs_type.symbol.spec
 			parameters = lhs_type.symbol.type_params
 		elif isinstance(lhs_type, TaggedRecordType):
-			spec = lhs_type.symbol.body
+			spec = lhs_type.symbol.spec
 			parameters = lhs_type.symbol.variant.type_params
 		elif lhs_type is BOTTOM:
 			# In principle the evaluator could make an observation / infer a constraint
@@ -1088,9 +1088,9 @@ class DeductionEngine(Visitor):
 		else:
 			self._report.type_has_no_fields(env, fr, lhs_type)
 			return ERROR
-		try:
-			field_spec = spec.field_space[fr.field_name.text]
-		except KeyError:
+		
+		field_spec = spec.field_space.symbol(fr.field_name.key())
+		if field_spec is None:
 			self._report.record_lacks_field(env, fr, lhs_type)
 			return ERROR
 		assert isinstance(field_spec, syntax.FormalParameter), field_spec
@@ -1100,20 +1100,21 @@ class DeductionEngine(Visitor):
 		actor_type = self.visit(mr.receiver, env)
 		if actor_type is ERROR: return ERROR
 		if isinstance(actor_type, InterfaceType):
-			try:
-				ms = actor_type.symbol.method_space[mr.method_name.key()]
-			except KeyError:
+			role = actor_type.symbol
+			assert isinstance(role, syntax.Role)
+			ms = role.ability_space.symbol(mr.method_name.key())
+			if ms is None:
 				self._report.bad_message(env, mr, actor_type)
 				return ERROR
 			else:
-				assert isinstance(ms, syntax.MethodSpec)
+				assert isinstance(ms, syntax.Ability)
 				parameters = actor_type.symbol.type_params
 				builder = ManifestBuilder(parameters, actor_type.type_args)
 				args = ProductType(builder.visit(tx) for tx in ms.type_exprs)
 				return MessageType(args)
 		elif isinstance(actor_type, UDAType):
 			try:
-				procedure = actor_type.uda.message_space[mr.method_name.key()]
+				procedure = actor_type.uda.behavior_space.symbol(mr.method_name.key())
 			except KeyError:
 				self._report.bad_message(env, mr, actor_type)
 				return ERROR
