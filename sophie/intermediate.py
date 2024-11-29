@@ -477,7 +477,7 @@ def symbol_harbors_thunks(sym:ontology.Symbol):
 	if isinstance(sym, syntax.FormalParameter): return not sym.is_strict
 	if isinstance(sym, syntax.UserFunction) and not sym.params: return True
 
-def handles_tails(expr: syntax.Expr):
+def handles_tails(expr: syntax.Phrase):
 	return isinstance(expr, (syntax.Call, syntax.ShortCutExp, syntax.Cond, syntax.MatchExpr))
 
 def is_eager(expr: syntax.ValExpr):

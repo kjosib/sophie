@@ -10,12 +10,6 @@
 # One of those tensions relates to literacy: It's hard to know where to put commentary.
 # Another is the lack of proper generics just yet: Keys can so far only be numbers and strings.
 
-export:
-	Tree, Removed,
-	
-	search, in_order, assign, new_tree, is_empty,
-	first, last, shift, delete, tree_of
-
 type:
 
 	#####################   Public Interface Types   #####################

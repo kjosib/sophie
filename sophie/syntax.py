@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Optional, Any, Sequence, NamedTuple, Union
 from boozetools.parsing.interface import SemanticError
 from .space import Layer
-from .ontology import Nom, Symbol, Expr, TypeSymbol, TermSymbol
+from .ontology import Nom, Symbol, Phrase, TypeSymbol, TermSymbol
 
 class MismatchedBookendsError(SemanticError):
 	# The one semantic error we catch early enough to interrupt the parse.
@@ -30,13 +30,12 @@ class TypeDeclaration(TypeSymbol):
 def type_parameters(param_names:Sequence[Nom]):
 	return tuple(TypeParameter(n) for n in param_names)
 
-class SimpleType(Expr):
-	def can_construct(self) -> bool: raise NotImplementedError(type(self))
+class SimpleType(Phrase):
 	def dispatch_token(self): raise NotImplementedError(type(self))
 
-class ValExpr(Expr): pass
+class ValExpr(Phrase): pass
 
-class Reference(Expr):
+class Reference(Phrase):
 	nom:Nom
 	dfn:Symbol   # Should happen during WordResolver pass.
 	def __init__(self, nom:Nom): self.nom = nom
@@ -74,7 +73,6 @@ class ArrowSpec(SimpleType):
 		self._head = _head
 		self.rhs = rhs
 	def head(self) -> slice: return self._head.head()
-	def can_construct(self) -> bool: return False
 	def dispatch_token(self): return None
 
 class MessageSpec(SimpleType):  # The anonymous kind that shows up in signatures
@@ -83,7 +81,6 @@ class MessageSpec(SimpleType):  # The anonymous kind that shows up in signatures
 		self._head = _head
 		self.type_exprs = type_exprs or ()
 	def head(self): return self._head.head()
-	def can_construct(self) -> bool: return False
 	def dispatch_token(self): return None
 
 class TypeCall(SimpleType):
@@ -561,8 +558,7 @@ class Module:
 	
 	performative : list[bool]  # Type checker fills this in so compiler emits correctly.
 
-	def __init__(self, exports:list, imports:list[ImportDirective], types:list[TypeDeclaration], assumptions:list[Assumption], top_levels:list, main:list[ValExpr]):
-		self.exports = exports
+	def __init__(self, imports:list[ImportDirective], types:list[TypeDeclaration], assumptions:list[Assumption], top_levels:list, main:list[ValExpr]):
 		self.imports = [i for i in imports if isinstance(i, ImportModule)]
 		self.foreign = [i for i in imports if isinstance(i, ImportForeign)]
 		self.types = types

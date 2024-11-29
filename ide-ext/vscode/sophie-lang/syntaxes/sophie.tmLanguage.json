@@ -11,7 +11,7 @@
 			"match": "(?i)\\b(and|or|not|div|mod|absurd)\\b"
 		}, {
 			"name": "keyword.other.sophie",
-			"match": "(?i)\\b(import|export|type|assume|define|begin)\\s*:"
+			"match": "(?i)\\b(import|type|assume|define|begin)\\s*:"
 		}, {
 			"name": "variable.language.sophie",
 			"match": "(?i)\\b(my)\\b"

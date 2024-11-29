@@ -4,7 +4,7 @@ from traceback import TracebackException, format_stack
 from pathlib import Path
 from boozetools.support.failureprone import SourceText, Issue, Evidence, Severity, illustration
 from . import syntax
-from .ontology import Expr, Nom, Symbol, TermSymbol
+from .ontology import Phrase, Nom, Symbol, TermSymbol
 from .calculus import TYPE_ENV, SophieType
 from .stacking import Frame
 
@@ -105,7 +105,7 @@ class Report:
 
 	# Methods the package / import mechanism invokes:
 
-	def _file_error(self, path:Path, cause:Expr, prefix:str):
+	def _file_error(self, path:Path, cause:Phrase, prefix:str):
 		intro = prefix+" "+str(path)
 		if cause:
 			problem = [Annotation(self._path, cause)]
@@ -113,10 +113,10 @@ class Report:
 			problem = []
 		self.issue(Pic(intro, problem))
 		
-	def no_such_file(self, path:Path, cause:Expr):
+	def no_such_file(self, path:Path, cause:Phrase):
 		self._file_error(path, cause, "I see no file called")
 	
-	def broken_file(self, path:Path, cause:Expr):
+	def broken_file(self, path:Path, cause:Phrase):
 		self._file_error(path, cause, "Something went pear-shaped while trying to read")
 	
 	def cyclic_import(self, cause, cycle):

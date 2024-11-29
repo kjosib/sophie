@@ -1,4 +1,4 @@
-from pathlib import Path
+""" The most fundamental classes in the syntax of Sophie """
 
 class Nom:
 	""" Representing the occurrence of a name anywhere. """
@@ -11,7 +11,12 @@ class Nom:
 	def __repr__(self): return "<Name %r>" % self.text
 	def key(self): return self.text
 
-class Symbol:
+class Phrase:
+	def head(self) -> slice:
+		""" Indicate which bit of code this node represents. """
+		raise NotImplementedError(type(self))
+
+class Symbol(Phrase):
 	"""
 	Any named defined thing that may be found in some name-space.
 	Thus, functions, parameters, types, subtypes, that sort of thing.
@@ -22,18 +27,11 @@ class Symbol:
 	"""
 	nom: Nom  # fill in during parsing.
 	def __init__(self, nom:Nom): self.nom = nom
-	def __repr__(self):
-		return "{%s:%s}" % (self.nom.text, type(self).__name__)
+	def __repr__(self): return "{%s:%s}" % (self.nom.text, type(self).__name__)
 	def head(self) -> slice: return self.nom.head()
-
 
 class TypeSymbol(Symbol): pass
 
 class TermSymbol(Symbol): pass
-
-class Expr:
-	def head(self) -> slice:
-		""" Indicate which bit of code this node represents. """
-		raise NotImplementedError(type(self))
 
 SELF = TermSymbol(Nom("SELF", None))

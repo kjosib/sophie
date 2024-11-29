@@ -8,7 +8,7 @@ from typing import Optional
 
 from .diagnostics import Report
 from .front_end import parse_text
-from .ontology import Expr
+from .ontology import Phrase
 from .syntax import Module, ImportModule
 
 class SophieParseError(Exception):
@@ -31,14 +31,14 @@ class Program:
 	"""
 
 	def __init__(self, main_path:Path, report: Report):
-		def require(path:Path, cause:Optional[Expr]) -> Module:
+		def require(path:Path, cause:Optional[Phrase]) -> Module:
 			""" This function may raise an exception on failure. """
 			abs_path = path.resolve()
 			if abs_path not in parsed_modules:
 				self.module_sequence.append(miss_cache(abs_path, cause))
 			return parsed_modules[abs_path]
 
-		def miss_cache(abs_path: Path, cause: Optional[Expr]):
+		def miss_cache(abs_path: Path, cause: Optional[Phrase]):
 			if abs_path in construction_stack:
 				depth = construction_stack.index(abs_path)
 				report.cyclic_import(cause, construction_stack[depth:])
@@ -46,7 +46,7 @@ class Program:
 			else:
 				return load_module(abs_path, cause)
 			
-		def load_module(abs_path: Path, cause: Optional[Expr]):
+		def load_module(abs_path: Path, cause: Optional[Phrase]):
 			report.info("Loading", abs_path)
 			try:
 				with open(abs_path, "r", encoding="utf-8") as fh:

@@ -11,7 +11,7 @@ from inspect import signature
 from boozetools.support.foundation import Visitor, strongly_connected_components_hashable
 from . import syntax, primitive
 from .diagnostics import Report
-from .ontology import Symbol, TypeSymbol, SELF, Nom
+from .ontology import Symbol, TypeSymbol, TermSymbol, SELF, Nom
 from .modularity import Program, SophieParseError, SophieImportError
 from .space import Space, Layer, Scope, AlreadyExists
 
@@ -133,7 +133,7 @@ class Resolver(TopDown):
 	
 	"""
 	exported_types: Layer[syntax.TypeDeclaration]
-	exported_terms: Layer[Symbol]
+	exported_terms: Layer[TermSymbol]
 	
 	def export_scope(self):
 		return Scope(self.exported_types, self.exported_terms)
