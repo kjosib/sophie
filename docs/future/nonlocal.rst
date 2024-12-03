@@ -49,8 +49,8 @@ but indirect imports are found in the surrounding function's own closure.)
 
 One solution would be to associate every symbol with the function in which it's declared/created.
 This makes the information available to the translator at the cost of an odd comparison.
-The other solution is to store captures as pairs containing a symbol and a flag.
-That is what the VM uses anyway, and it works well enough. So I'll do it that way.
+Another solution is to store captures as pairs containing a symbol and a flag.
+That is what the VM uses, but the translator can afford to be a bit more clever.
 
 In principle it can be done early, perhaps even as early as symbol resolution.
 In fact, that's exactly the right time/place to do it.
@@ -62,4 +62,20 @@ Phases
 2. Simplify ``translate.py`` to rely on this new mechanism. Check everything.
 3. Change ``runtime.py`` to follow the VM's lead on the *upvar* mechanism, using the capture-map.
 4. Finally, ``type_evaluator.py`` drops the ``DependencyPass`` and relies on the capture-map instead.
+
+
+Update
+---------
+
+29 November 2024
+
+I changed the resolver to build a capture-map -- just a set, really, for each function.
+But I forgot that the translator makes thunks as separate functions all over the place,
+so the translator's (and VM's) idea of what's a function does not at all line up with
+the syntax tree.
+
+On the plus side, the new thing can still improve the type-checker.
+
+Ideas
+    * I now see how to reliably lift sub-functions to their outermost reasonable scope.
 
