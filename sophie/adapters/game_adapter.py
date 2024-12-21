@@ -26,8 +26,9 @@ import pygame
 from typing import Optional
 from pygame import draw, gfxdraw
 
-from ..runtime import iterate_list, force, ParametricMessage
-from ..scheduler import NativeObjectProxy
+from ..tree_walker.values import ParametricMessage
+from ..tree_walker.runtime import iterate_list, force
+from ..tree_walker.scheduler import NativeObjectProxy
 
 linkage = {}
 
@@ -38,19 +39,19 @@ def sophie_init(xy, mouse_event, button_event, key_event):
 	linkage['key_event'] = key_event
 
 def xy(x, y):
-	return linkage['xy'].apply([x,y], None)
+	return linkage['xy'].apply([x,y])
 
 def mouse_event(e):
 	args = [xy(*e.pos), xy(*e.rel), e.buttons[0], e.buttons[1], e.buttons[2], e.touch, ]
-	return linkage['mouse_event'].apply(args, None)
+	return linkage['mouse_event'].apply(args)
 
 def button_event(e):
 	args = [xy(*e.pos), e.button, e.touch]
-	return linkage['button_event'].apply(args, None)
+	return linkage['button_event'].apply(args)
 
 def key_event(e):
 	args = [e.unicode, e.key, e.mod, e.scancode]
-	return linkage['key_event'].apply(args, None)
+	return linkage['key_event'].apply(args)
 
 class GameLoop:
 	"""
@@ -69,6 +70,7 @@ class GameLoop:
 		self._on_key_down:Optional[ParametricMessage] = None
 		self._on_key_up:Optional[ParametricMessage] = None
 		self._on_tick:Optional[ParametricMessage] = None
+		self._is_running = False
 	pass
 	
 	def on_quit(self, action): self._on_quit = action
@@ -83,30 +85,42 @@ class GameLoop:
 		pygame.init()
 		width, height = force(size['x']), force(size['y'])
 		display = pygame.display.set_mode((width, height))
-		display_actor = NativeObjectProxy(DisplayProxy(display))
+		self.display_actor = NativeObjectProxy(DisplayProxy(display))
+		self.clock = pygame.time.Clock()
+		self.fps = fps
+		self.start()
+	
+	def start(self):
+		if not self._is_running:
+			self._is_running = True
+			events.accept_message("next_frame", ())
+	
+	def stop(self):
+		self._is_running = False
+	
+	def next_frame(self):
+		for event in pygame.event.get():
+			if event.type == pygame.QUIT:
+				self.stop()
+				if self._on_quit is not None:
+					self._on_quit.perform()
+				return
+			elif event.type == pygame.MOUSEMOTION and self._on_mouse is not None:
+				self._on_mouse.dispatch_with(mouse_event(event))
+			elif event.type == pygame.MOUSEBUTTONDOWN and self._on_button_down is not None:
+				self._on_button_down.dispatch_with(button_event(event))
+			elif event.type == pygame.MOUSEBUTTONUP and self._on_button_up is not None:
+				self._on_button_up.dispatch_with(button_event(event))
+			elif event.type == pygame.KEYDOWN and self._on_key_down is not None:
+				self._on_key_down.dispatch_with(key_event(event))
+			elif event.type == pygame.KEYUP and self._on_key_up is not None:
+				self._on_key_up.dispatch_with(key_event(event))
 
-		clock = pygame.time.Clock()
-		while True:
-			for event in pygame.event.get():
-				if event.type == pygame.QUIT:
-					if self._on_quit is not None:
-						self._on_quit.perform()
-					return
-				elif event.type == pygame.MOUSEMOTION and self._on_mouse is not None:
-					self._on_mouse.dispatch_with(mouse_event(event))
-				elif event.type == pygame.MOUSEBUTTONDOWN and self._on_button_down is not None:
-					self._on_button_down.dispatch_with(button_event(event))
-				elif event.type == pygame.MOUSEBUTTONUP and self._on_button_up is not None:
-					self._on_button_up.dispatch_with(button_event(event))
-				elif event.type == pygame.KEYDOWN and self._on_key_down is not None:
-					self._on_key_down.dispatch_with(key_event(event))
-				elif event.type == pygame.KEYUP and self._on_key_up is not None:
-					self._on_key_up.dispatch_with(key_event(event))
-
-			clock.tick(fps)
+		if self._is_running:
+			self.clock.tick(self.fps)
 			if self._on_tick is not None:
-				self._on_tick.dispatch_with(display_actor)
-		pass
+				self._on_tick.dispatch_with(self.display_actor)
+			events.accept_message("next_frame", ())
 		
 def _force_rgb(color):
 	f = lambda field: int(force(color[field])) & 255

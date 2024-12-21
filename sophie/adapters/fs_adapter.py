@@ -1,5 +1,6 @@
-from ..runtime import as_sophie_list, ParametricMessage
-from ..scheduler import NativeObjectProxy
+from ..tree_walker.values import ParametricMessage
+from ..tree_walker.runtime import as_sophie_list
+from ..tree_walker.scheduler import NativeObjectProxy
 
 class FileSystem:
 	@staticmethod

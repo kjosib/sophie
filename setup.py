@@ -16,12 +16,12 @@ setuptools.setup(
 	author='Beth Kjos',
 	author_email='kjosib@gmail.com',
 	version='0.0.8',
-	packages=['sophie', "sophie.adapters", ],
+	packages=["sophie", "sophie.adapters", "sophie.static", "sophie.tree_walker"],
 	package_data={
-		'sophie': ["Sophie.automaton"]+["sys/"+f for f in os.listdir("sophie/sys")],
+		'sophie':["Sophie.automaton"] + ["sys/" + f for f in os.listdir("sophie/sys")],
 	},
 	entry_points={
-		'console_scripts': ["sophie = sophie.cmdline:main"],
+		'console_scripts':["sophie = sophie.cmdline:main"],
 	},
 	license='MIT',
 	description='A call-by-need strongly-static-duck-typed language named for French mathematician Sophie Germain',
@@ -39,7 +39,7 @@ setuptools.setup(
 		"Topic :: Software Development :: Compilers",
 		"Topic :: Education",
 		"Environment :: Console",
-    ],
+	],
 	python_requires='>=3.12',
 	install_requires=[
 		"booze-tools>=0.6.2.1",

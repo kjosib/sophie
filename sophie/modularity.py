@@ -7,9 +7,8 @@ from pathlib import Path
 from typing import Optional
 
 from .diagnostics import Report
-from .front_end import parse_text
-from .ontology import Phrase
-from .syntax import Module, ImportModule
+from .front_end import parse_text, reset_parser
+from .syntax import Phrase, Module, ImportModule
 
 class SophieParseError(Exception):
 	pass
@@ -75,14 +74,9 @@ class Program:
 
 		def enter(abs_path):
 			construction_stack.append(abs_path)
-			report.set_path(abs_path)
 
 		def leave():
 			construction_stack.pop()
-			if construction_stack:
-				report.set_path(construction_stack[-1])
-			else:
-				report.set_path(None)
 
 		def chase_the_imports(base, directives):
 			""" Interpret the import directives in a module... """
@@ -100,7 +94,8 @@ class Program:
 				except KeyError:
 					report.no_such_package(im.package)
 					raise SophieImportError
-
+		
+		reset_parser()
 		construction_stack = []
 		self.import_map:dict[ImportModule,Module] = {}
 		parsed_modules:dict[Path,Module] = {}

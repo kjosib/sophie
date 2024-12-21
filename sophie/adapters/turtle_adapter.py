@@ -1,12 +1,12 @@
-from ..runtime import force, iterate_list
-from ..scheduler import NativeObjectProxy, MAIN_QUEUE, SimpleTask
+from ..tree_walker.runtime import force, iterate_list
+from ..tree_walker.scheduler import NativeObjectProxy, MAIN_QUEUE, SimpleTask
 import turtle, tkinter
 
 def sophie_init(drawing):
 	return {drawing.key:some_turtle_graphics}
 
-def some_turtle_graphics(env, drawing):
-	worker.accept_message("draw", (env, drawing))
+def some_turtle_graphics(drawing):
+	worker.accept_message("draw", (drawing))
 
 class Worker:
 	@staticmethod

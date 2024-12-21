@@ -4,7 +4,7 @@ from unittest import mock
 
 from sophie.diagnostics import Report
 from sophie.resolution import RoadMap, Yuck
-from sophie.type_evaluator import DeductionEngine
+from sophie.static.check import TypeChecker
 
 class Silence(Report):
 	def __init__(self):
@@ -28,7 +28,7 @@ def _identify_problem(folder:Path, filename:str):
 		return ex.args[0]
 	else:
 		report.assert_no_issues("Roadmap generated errors, but failed to fail properly.")
-		DeductionEngine(roadmap, report)
+		TypeChecker(report).check_program(roadmap)
 		if report.sick(): return "type_check"
 		else: return "failed to fail"
 
@@ -84,6 +84,7 @@ class ZooOfFail(unittest.TestCase):
 			"has_no_fields",
 			"lacks_field",
 			"mismatched_case_when",
+			"mismatched_type_case",
 			"num_plus_string",
 			"bad_message",
 			"omega",

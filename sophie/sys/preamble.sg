@@ -11,7 +11,7 @@ foreign "math" where
 
 	acos, acosh, asin, asinh, atan, atanh,
 	ceil, cos, cosh, degrees, erf, erfc, exp, expm1,
-	abs@"fabs", factorial, floor, gamma,
+	"fabs" as abs, factorial, floor, gamma,
 	lgamma, log, log10, log1p, log2,
 	radians, sin, sinh, sqrt,
 	tan, tanh, trunc, ulp : (number) -> number;
@@ -39,7 +39,7 @@ foreign "sophie.adapters.yarn" where
 end;
 
 foreign "operator" where
-	strcat@"add" : (string, string) -> string;
+	"add" as strcat : (string, string) -> string;
 end;
 
 # A few of Python's standard math functions are trouble (currently).
@@ -66,6 +66,10 @@ end;
 
 type:
 
+    number is opaque;
+    string is opaque;
+    flag is opaque;
+
 	order is case:
 		less;
 		same;
@@ -91,7 +95,7 @@ type:
 		step(view:V, state:S);
 	esac;
 
-	predicate[x] is (x)->flag;
+        predicate[x] is (x)->flag;
 
 	Console is role:
 		echo(list[string]);

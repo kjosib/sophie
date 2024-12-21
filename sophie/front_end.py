@@ -1,19 +1,15 @@
-"""
-"""
 import sys
 from pathlib import Path
 from typing import Union
 
 from boozetools.macroparse.runtime import TypicalApplication, make_tables
 from boozetools.scanning.engine import IterableScanner
-from boozetools.parsing.interface import ParseError
+from boozetools.parsing.interface import UnexpectedTokenError, UnexpectedEndOfTextError
 from boozetools.support.failureprone import Issue
 from boozetools.support.pretty import DOT
 from . import syntax
+from .location import reset_location_index, start_segment, insert_token
 from .diagnostics import Report
-
-class SophieParseError(ParseError):
-	pass
 
 _tables = make_tables(Path(__file__).parent/"Sophie.md")
 _parse_table = _tables['parser']
@@ -26,27 +22,27 @@ class SophieParser(TypicalApplication):
 	@staticmethod
 	def scan_punctuation(yy: IterableScanner):
 		punctuation = sys.intern(yy.match())
-		nom = syntax.Nom(punctuation, yy.slice())
+		nom = syntax.Nom(punctuation, insert_token(yy.slice()))
 		yy.token(punctuation, nom)
 	
 	@staticmethod
-	def scan_integer(yy: IterableScanner): yy.token("integer", syntax.Literal(int(yy.match()), yy.slice()))
+	def scan_integer(yy: IterableScanner): yy.token("integer", syntax.Literal(int(yy.match()), insert_token(yy.slice())))
 	
 	@staticmethod
 	def scan_hexadecimal(yy: IterableScanner):
-		yy.token("integer", syntax.Literal(int(yy.match()[1:], 16), yy.slice()))
+		yy.token("integer", syntax.Literal(int(yy.match()[1:], 16), insert_token(yy.slice())))
 	
 	@staticmethod
-	def scan_real(yy: IterableScanner): yy.token("real", syntax.Literal(float(yy.match()), yy.slice()))
+	def scan_real(yy: IterableScanner): yy.token("real", syntax.Literal(float(yy.match()), insert_token(yy.slice())))
 	
 	@staticmethod
-	def scan_short_string(yy: IterableScanner): yy.token("short_string", syntax.Literal(yy.match()[1:-1], yy.slice()))
+	def scan_short_string(yy: IterableScanner): yy.token("short_string", syntax.Literal(yy.match()[1:-1], insert_token(yy.slice())))
 	
 	@staticmethod
 	def scan_word(yy: IterableScanner):
 		upper = yy.match().upper()
-		if upper in RESERVED: yy.token(upper, syntax.Nom(upper, yy.slice()))
-		else: yy.token("name", syntax.Nom(sys.intern(yy.match()), yy.slice()))
+		if upper in RESERVED: yy.token(upper, syntax.Nom(upper, insert_token(yy.slice())))
+		else: yy.token("name", syntax.Nom(sys.intern(yy.match()), insert_token(yy.slice())))
 	
 	@staticmethod
 	def parse_nothing(): return None
@@ -63,26 +59,27 @@ class SophieParser(TypicalApplication):
 	def default_parse(ctor, *args):
 		return getattr(syntax, ctor)(*args)
 		
-	def unexpected_token(self, kind, semantic, pds):
-		raise SophieParseError(self.stack_symbols(pds), kind, self.yy.slice())
-	
 	pass
 
 sophie_parser = SophieParser(_tables)
 
+
+
+def reset_parser():
+	reset_location_index()
+
 def parse_text(text:str, path:Path, report:Report) -> Union[syntax.Module, Issue]:
 	""" Submit text to parser; submit the resulting tree to subsequent pass """
-	assert isinstance(path, Path)
+	start_segment(path)
 	try:
 		module = sophie_parser.parse(text, filename=str(path))
 		return module
 	except syntax.MismatchedBookendsError as ex:
-		report.error("Checking Bookends", ex.args, "These names don't line up. Has part of a function been lost?")
-	except ParseError as ex:
-		stack_symbols, lookahead, span = ex.args
-		hint = _best_hint(stack_symbols, lookahead)
-		node = syntax.Nom(text[span], span)
-		report.generic_parse_error(path, lookahead, node, hint)
+		report.error(ex.args, "These names don't line up. Has part of a function been lost?")
+	except UnexpectedTokenError as ex:
+		report.generic_parse_error(ex.kind, ex.semantic, _best_hint(ex.pds.stack, ex.kind))
+	except UnexpectedEndOfTextError as ex:
+		report.ran_out_of_tokens(path, _best_hint(ex.pds.stack, "<END>"))
 
 ##########################
 #

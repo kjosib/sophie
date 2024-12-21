@@ -2,8 +2,8 @@
 
 import:
 
-foreign "sophie.adapters.yarn" where
-	native_id@"identity" : [a] (a)->a;
+foreign "sophie.adapters.for_test_purposes" where
+	"identity" as native_id : [a] (a)->a;
 end;
 
 

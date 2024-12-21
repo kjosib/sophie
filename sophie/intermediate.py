@@ -13,7 +13,8 @@ but if that passes, then you get corresponding VM intermediate code on standard 
 
 from typing import Iterable, Optional
 from boozetools.support.foundation import Visitor
-from . import syntax, ontology, primitive
+from . import syntax
+from .ontology import SELF
 from .resolution import RoadMap
 
 class TooComplicated(Exception):
@@ -73,7 +74,7 @@ LABEL_QUEUE = list(reversed(range(4096)))
 LABEL_MAP = {}
 
 MANGLED = {}
-def _mangle_name(prefix:str, symbol:ontology.Symbol):
+def _mangle_name(prefix:str, symbol:syntax.Symbol):
 	assert symbol not in MANGLED
 	MANGLED[symbol] = prefix + symbol.nom.key()
 
@@ -92,24 +93,24 @@ class VMScope:
 	
 	def nl(self): newline(self.indent)
 
-	def capture(self, symbol: ontology.Symbol) -> bool:
+	def capture(self, symbol: syntax.Symbol) -> bool:
 		raise NotImplementedError(type(self))
 
-	def emit_captured(self, captives: list[Optional[ontology.Symbol]]):
+	def emit_captured(self, captives: list[Optional[syntax.Symbol]]):
 		raise NotImplementedError(type(self))
 
 	def member_number(self, field:str):
 		raise NotImplementedError(type(self))
 	
-	def mangle_names(self, syms:Iterable[ontology.Symbol]):
+	def mangle_names(self, syms:Iterable[syntax.Symbol]):
 		for symbol in syms:
 			if isinstance(symbol, syntax.UserOperator): _mangle_user_operator(symbol)
 			else: _mangle_name(self._prefix, symbol)
 
-	def declare(self, symbol: ontology.Symbol):
+	def declare(self, symbol: syntax.Symbol):
 		raise NotImplementedError(type(self))
 	
-	def declare_several(self, symbols: Iterable[ontology.Symbol]):
+	def declare_several(self, symbols: Iterable[syntax.Symbol]):
 		for sym in symbols:
 			self.declare(sym)
 
@@ -128,10 +129,10 @@ class VMScope:
 class VMGlobalScope(VMScope):
 	""" Mainly a null-object that encloses a nest of scopes without itself being enclosed. """
 	
-	def capture(self, symbol: ontology.Symbol) -> bool:
+	def capture(self, symbol: syntax.Symbol) -> bool:
 		return False
 
-	def emit_captured(self, captives: list[ontology.Symbol]):
+	def emit_captured(self, captives: list[syntax.Symbol]):
 		for sym in captives:
 			assert sym is None
 			emit("*")
@@ -159,7 +160,7 @@ class VMGlobalScope(VMScope):
 				emit(".fn")
 			self.write_one_subroutine(fn)
 	
-	def declare(self, symbol: ontology.Symbol):
+	def declare(self, symbol: syntax.Symbol):
 		pass
 	
 	def write_actors(self, actor_definitions:list[syntax.UserActor]):
@@ -182,10 +183,10 @@ class VMActorScope(VMScope):
 		emit(".actor", *dfn.member_names(), quote(MANGLED[dfn]))
 		self._field_map = {field:i for i,field in enumerate(dfn.member_names())}
 
-	def capture(self, symbol: ontology.Symbol) -> bool:
+	def capture(self, symbol: syntax.Symbol) -> bool:
 		return False
 
-	def emit_captured(self, captives: list[ontology.Symbol]):
+	def emit_captured(self, captives: list[syntax.Symbol]):
 		assert not captives
 	
 	def member_number(self, field: str):
@@ -197,9 +198,11 @@ class VMActorScope(VMScope):
 		# Also, access to self-dot-foo will use actor-specific instructions.
 		inner = VMFunctionScope(self, behavior.nom.text, is_thunk=False)
 		emit(1 + len(behavior.params), quote(behavior.nom.text))
-		inner.declare(ontology.SELF)
+		inner.declare(SELF)
 		inner.declare_several(behavior.params)
-		for member in behavior.reads_members:
+		behavior.captures.discard(SELF)
+		for member in behavior.captures:
+			assert isinstance(member, syntax.FormalParameter)
 			inner.emit_reads_member(member)
 		inner.write_inner_functions(behavior.where)
 		LAST.visit(behavior.expr, inner)
@@ -208,7 +211,7 @@ class VMActorScope(VMScope):
 class VMFunctionScope(VMScope):
 	""" Encapsulates VM mechanics around the stack, parameters, closure capture, jumps, etc. """
 	
-	_captives : dict[Optional[ontology.Symbol], int]
+	_captives : dict[Optional[syntax.Symbol], int]
 	
 	def __init__(self, outer:VMScope, infix:str, is_thunk:bool):
 		super().__init__(outer._prefix + infix + ":")
@@ -229,11 +232,11 @@ class VMFunctionScope(VMScope):
 	def _push(self):
 		self._depth += 1
 
-	def declare(self, symbol: ontology.Symbol):
+	def declare(self, symbol: syntax.Symbol):
 		self.alias(symbol)
 		self._push()
 	
-	def alias(self, symbol: ontology.Symbol):
+	def alias(self, symbol: syntax.Symbol):
 		"""
 		Establishes where in the call-frame to look for a symbol.
 		Call this just before pushing that symbol's value on the stack.
@@ -252,7 +255,7 @@ class VMFunctionScope(VMScope):
 		emit("{", 0, quote(name))
 		return inner
 
-	def load(self, symbol: ontology.Symbol):
+	def load(self, symbol: syntax.Symbol):
 		if symbol in self._local:
 			frame_offset = self._local[symbol]
 			assert frame_offset < self._depth
@@ -277,7 +280,7 @@ class VMFunctionScope(VMScope):
 				assert False
 		self._push()
 
-	def capture(self, symbol: ontology.Symbol) -> bool:
+	def capture(self, symbol: syntax.Symbol) -> bool:
 		if symbol in self._local or symbol in self._captives:
 			return True
 		elif self._outer.capture(symbol):
@@ -329,7 +332,7 @@ class VMFunctionScope(VMScope):
 		emit("|", len(self._captives))
 		self._outer.emit_captured(list(self._captives)) # Preserving insertion order
 		
-	def emit_captured(self, captives: list[ontology.Symbol]):
+	def emit_captured(self, captives: list[syntax.Symbol]):
 		for sym in captives:
 			if sym in self._local:
 				emit("L", self._local[sym])
@@ -462,7 +465,7 @@ def write_vtable(symbol):
 	newline()
 
 
-def write_record(names:Iterable[str], symbol:ontology.Symbol):
+def write_record(names:Iterable[str], symbol:syntax.Symbol):
 	emit(".data")
 	for name in names:
 		emit(name)
@@ -470,17 +473,17 @@ def write_record(names:Iterable[str], symbol:ontology.Symbol):
 	emit(".end")
 	newline()
 
-def write_enum(symbol:ontology.Symbol):
+def write_enum(symbol:syntax.Symbol):
 	write_record((), symbol)
 
-def symbol_harbors_thunks(sym:ontology.Symbol):
+def symbol_harbors_thunks(sym:syntax.Symbol):
 	if isinstance(sym, syntax.FormalParameter): return not sym.is_strict
 	if isinstance(sym, syntax.UserFunction) and not sym.params: return True
 
 def handles_tails(expr: syntax.Phrase):
 	return isinstance(expr, (syntax.Call, syntax.ShortCutExp, syntax.Cond, syntax.MatchExpr))
 
-def is_eager(expr: syntax.ValExpr):
+def is_eager(expr: syntax.ValueExpression):
 	"""Basically, loads that are guaranteed not to be a thunk. So match-subjects mainly..."""
 	if isinstance(expr, syntax.Lookup):
 		return not symbol_harbors_thunks(expr.ref.dfn)
@@ -516,7 +519,7 @@ class LazyContext(Context):
 		else: scope.make_thunk(fr)
 	
 	@staticmethod
-	def _thunk_it(expr:syntax.ValExpr, scope: VMFunctionScope):
+	def _thunk_it(expr:syntax.ValueExpression, scope: VMFunctionScope):
 		scope.make_thunk(expr)
 	
 	visit_Call = _thunk_it
@@ -535,7 +538,7 @@ class LazyContext(Context):
 		scope.load(sym)
 
 	@staticmethod
-	def _force_it(expr:syntax.ValExpr, scope: VMFunctionScope):
+	def _force_it(expr:syntax.ValueExpression, scope: VMFunctionScope):
 		FORCE.visit(expr, scope)
 	
 	visit_Literal = _force_it
@@ -580,7 +583,7 @@ class EagerContext(Context):
 		scope.alias(mx.subject)
 		FORCE.visit(mx.subject.expr, scope)
 		depth = scope.depth()
-		nr_cases = len(mx.variant.subtypes)
+		nr_cases = len(mx.variant.type_cases)
 		cases = scope.cases(nr_cases)
 		after = []
 		for alt in mx.alternatives:
@@ -672,8 +675,9 @@ class EagerContext(Context):
 
 class FunctionContext(EagerContext):
 
-	def visit_DoBlock(self, do:syntax.DoBlock, outer:VMFunctionScope):
-		assert False, outer._prefix+": This should be neither possible nore necessary anymore."
+	@staticmethod
+	def visit_DoBlock(_:syntax.DoBlock, outer:VMFunctionScope):
+		assert False, outer._prefix+": This should be neither possible nor necessary anymore."
 	
 	def visit_AsTask(self, task:syntax.AsTask, scope:VMFunctionScope):
 		FORCE.visit(task.proc_ref, scope)
@@ -774,7 +778,7 @@ class ProcContext(EagerContext):
 		scope.emit_drop(len(do.actors))
 
 	def visit_AssignMember(self, am:syntax.AssignMember, scope:VMFunctionScope):
-		scope.load(ontology.SELF)
+		scope.load(SELF)
 		FORCE.visit(am.expr, scope)
 		scope.emit_assign_member(am.nom.text)
 		self.semicolon(scope)
@@ -841,25 +845,27 @@ class StructureDefiner(Visitor):
 		for t in types:
 			self.visit(t, scope)
 
-	def visit_TypeAlias(self, t, scope:VMGlobalScope): pass
-	def visit_Role(self, t, scope:VMGlobalScope): pass
+	@staticmethod
+	def visit_OpaqueSymbol(t, scope:VMGlobalScope): scope.mangle_names([t])
+	def visit_TypeAliasSymbol(self, t, scope:VMGlobalScope): pass
+	def visit_RoleSymbol(self, t, scope:VMGlobalScope): pass
 	
 	@staticmethod
-	def visit_Record(r:syntax.Record, scope:VMGlobalScope):
+	def visit_RecordSymbol(r:syntax.RecordSymbol, scope:VMGlobalScope):
 		scope.mangle_names([r])
 		write_vtable(r)
 		write_record(r.spec.field_names(), r)
 		
 	@staticmethod
-	def visit_Variant(variant:syntax.Variant, scope:VMGlobalScope):
+	def visit_VariantSymbol(variant:syntax.VariantSymbol, scope:VMGlobalScope):
 		scope.mangle_names([variant])
 		write_vtable(variant)
-		scope.mangle_names(variant.subtypes)
-		for tag, st in enumerate(variant.subtypes):
+		scope.mangle_names(variant.type_cases)
+		for tag, st in enumerate(variant.type_cases):
 			TYPE_CASE_INDEX[st] = tag
-			if isinstance(st, syntax.TaggedRecord):
+			if isinstance(st, syntax.RecordTag):
 				write_record(st.spec.field_names(), st)
-			elif isinstance(st, syntax.Tag):
+			elif isinstance(st, syntax.EnumTag):
 				write_enum(st)
 			else:
 				assert False
@@ -867,11 +873,6 @@ class StructureDefiner(Visitor):
 STRUCTURE = StructureDefiner()
 
 def translate(roadmap:RoadMap):
-	# Mangle the built-in types
-	for name in primitive.built_in_type_names:
-		symbol = primitive.root_scope.types.symbol(name)
-		MANGLED[symbol] = name
-	
 	# Write all types:
 	for scope, module in each_piece(roadmap):
 		STRUCTURE.write_types(module.types, scope)

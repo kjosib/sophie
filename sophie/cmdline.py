@@ -21,7 +21,7 @@ Documentation: https://sophie.readthedocs.io/en/latest/
 import sys, argparse
 from pathlib import Path
 
-EXPERIMENT = "nothing"
+EXPERIMENT = "to stop after name resolution"
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -37,8 +37,6 @@ parser.add_argument('-x', "--experimental", action="store_true", help="Opt into 
 def run(args):
 	from .diagnostics import Report, TooManyIssues
 	from .resolution import RoadMap, Yuck
-	from .type_evaluator import DeductionEngine
-	from .executive import run_program
 	report = Report(verbose=args.check)
 	try:
 		try: roadmap = RoadMap(Path.cwd() / args.program, report)
@@ -47,7 +45,9 @@ def run(args):
 			report.complain_to_console()
 			return 1
 		assert report.ok()
-		DeductionEngine(roadmap, report)
+		if args.experimental: return
+		from .static.check import TypeChecker
+		TypeChecker(report).check_program(roadmap)
 		if report.sick():
 			report.complain_to_console()
 			return 1
@@ -65,6 +65,7 @@ def run(args):
 			from .intermediate import translate
 			translate(roadmap)
 		else:
+			from .tree_walker.executive import run_program
 			run_program(roadmap)
 
 def main():

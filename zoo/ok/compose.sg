@@ -1,0 +1,18 @@
+# This example attempts to stress a particular aspect of Sophie's type-checker.
+
+import:
+
+foreign "yarn" where
+    compose : [a,b,c] (fn[b,c], fn[a,b]) -> fn[a,c];
+end;
+
+type:
+    fn[x,y] is (x)->y;
+
+define:
+    boop = compose(str, ord);
+
+begin:
+
+    boop("Fred");  # Should print the letter "F"
+

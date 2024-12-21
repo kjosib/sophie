@@ -4,7 +4,7 @@ Sophie's notion of a name-spaces with support for nested scopes
 
 from abc import ABC, abstractmethod
 from typing import Iterable, NamedTuple, Optional
-from .ontology import Nom, Symbol, TypeSymbol, TermSymbol
+from .ontology import Phrase, Nom, Symbol, TypeSymbol, TermSymbol
 
 class AlreadyExists(KeyError): pass
 class Absent(KeyError): pass
@@ -17,16 +17,16 @@ class Space[T:Symbol](ABC):
 	def symbol(self, key: str) -> Optional[T]: pass
 
 	@abstractmethod
-	def locate(self, key: str) -> slice: pass
+	def locate(self, key: str) -> Phrase: pass
 	
 	def define(self, symbol: T) -> T:
-		return self.alias(symbol.nom, symbol)
+		return self.install_alias(symbol.nom, symbol)
 	
-	def alias(self, nom: Nom, symbol: T) -> T:
-		return self.mount(nom.key(), nom.head(), symbol)
+	def install_alias(self, alias: Nom, symbol: T) -> T:
+		return self.mount(alias.key(), alias, symbol)
 	
 	@abstractmethod
-	def mount(self, key:str, place:slice, symbol:T) -> T: pass
+	def mount(self, key:str, phrase:Phrase, symbol:T) -> T: pass
 	
 	def child(self) -> "Chain[T]":
 		return Chain(Layer(), self)
@@ -37,7 +37,7 @@ class Space[T:Symbol](ABC):
 
 class Layer[T:Symbol](Space[T]):
 	""" Lightly enhanced dictionary: It does not like duplicate keys. """
-	_locate: dict[str, slice]
+	_locate: dict[str, Phrase]
 	_symbol: dict[str, T]
 	
 	def __init__(self):
@@ -49,14 +49,14 @@ class Layer[T:Symbol](Space[T]):
 	def symbol(self, key: str) -> Optional[T]:
 		return self._symbol.get(key)
 
-	def locate(self, key: str) -> slice:
+	def locate(self, key: str) -> Phrase:
 		return self._locate[key]
 	
-	def mount(self, key:str, place:slice, symbol:T) -> T:
+	def mount(self, key:str, phrase:Phrase, symbol:T) -> T:
 		if key in self._locate:
 			raise AlreadyExists
 		else:
-			self._locate[key] = place
+			self._locate[key] = phrase
 			self._symbol[key] = symbol
 			return symbol
 	
@@ -75,12 +75,12 @@ class Chain[T:Symbol](Space[T]):
 	def symbol(self, key: str) -> Optional[T]:
 		return self.top.symbol(key) or self._rest.symbol(key)
 	
-	def locate(self, key: str) -> slice:
+	def locate(self, key: str) -> Phrase:
 		try: return self.top.locate(key)
 		except KeyError: return self._rest.locate(key)
 	
-	def mount(self, key:str, place:slice, symbol:T) -> T:
-		return self.top.mount(key, place, symbol)
+	def mount(self, key:str, phrase:Phrase, symbol:T) -> T:
+		return self.top.mount(key, phrase, symbol)
 
 
 class Scope(NamedTuple):

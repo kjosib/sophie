@@ -1,7 +1,9 @@
 from pathlib import Path
 import unittest
 from unittest.mock import patch
-from sophie import executive, diagnostics, resolution, type_evaluator
+from sophie.static.check import TypeChecker
+from sophie import diagnostics, resolution
+from sophie.tree_walker import executive
 from sophie.intermediate import translate
 from sophie.demand import analyze_demand
 
@@ -20,7 +22,7 @@ def _good(folder, which) -> resolution.RoadMap:
 		assert False, "Test failed %s phase"%ex.args[0]
 	else:
 		report.assert_no_issues("Ostensibly-good example broke before type-check, but failed to fail properly.")
-		type_evaluator.DeductionEngine(roadmap, report)
+		TypeChecker(report).check_program(roadmap)
 		report.assert_no_issues("Ostensibly-good example failed to type-check.")
 		analyze_demand(roadmap)
 		with patch("sophie.intermediate.emit", lambda *args:None):

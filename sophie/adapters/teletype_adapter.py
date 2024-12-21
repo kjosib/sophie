@@ -1,7 +1,8 @@
 import sys
 import random
-from ..runtime import iterate_list, ParametricMessage
-from ..scheduler import NativeObjectProxy
+from ..tree_walker.values import ParametricMessage
+from ..tree_walker.runtime import iterate_list
+from ..tree_walker.scheduler import NativeObjectProxy
 
 class Console:
 	@staticmethod

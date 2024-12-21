@@ -15,7 +15,7 @@
 
 import:
 
-"2023 Day 02 common" (surely, split, split_one);
+"2023 Day 02 common" (split, split_one);
 
 define:
 

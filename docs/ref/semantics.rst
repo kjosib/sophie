@@ -43,3 +43,31 @@ Semantic Overview
 
 * Module imports may not form a cycle.
 
+The Functional / Procedural / Message Split
+============================================
+
+Sophie attempts to reconcile lazy functional purity with observable outcomes
+through these rules:
+
+* A function must return a value and have no observable side effects.
+* A procedure cannot return a value, and can only express behavior
+  such as creating actors and sending messages to them.
+* However, a procedure *is* a value: It can be returned from a function,
+  invoked (in procedural context) for its effect, or wrapped up into a
+  (potentially-parametric) message.
+
+Sophie's take on the Actor Model
+=================================
+
+* Actors encapsulate private mutable state and associate it with a
+  language of messages (usually defined by roles) and implemented
+  as method-procedures.
+* Any given actor is running on at most one thread, servicing one
+  message at a time.
+* Messages from `A` to `B` arrive in the order that `A` sent them,
+  possibly interleaved with other messages.
+* Messages are asynchronous and one-way. If you want a response,
+  build that into the protocol. (Normally that means including a
+  *return-address* actor-reference in the first message.)
+* Actors can change their own state, but the updates only become
+  visible for subsequent messages. (Reads come from a snapshot.)

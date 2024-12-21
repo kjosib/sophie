@@ -1,0 +1,10 @@
+define:
+broken(xs:list) = case xs of
+    nil -> "empty";
+    cons -> 42;
+esac;
+
+begin:
+broken([18, 24, 36]);
+broken(nil);
+

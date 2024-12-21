@@ -16,7 +16,6 @@ It is up to date by definition.
 * Things like `:foo` (words beginning with a colon) refer to parse actions, defined elsewhere. You can ignore them.
 * The vertical-bar character `|` sits between equally-valid alternatives.
 * Something like `optional(foo)` means a reference to the `optional` macro. These are defined later on in this file.
-* You occasionally see a dot before a symbol, as in `.CASE`. You can ignore these dots.
 
 Now let's begin.
 
@@ -42,9 +41,9 @@ Sophie uses keywords to introduce the different sections.
 module_definition -> import_section typedef_section assume_section define_section main_section :Module
 
 import_section  -> IMPORT ':' semicolon_list(import_directive) | :empty
-typedef_section -> TYPE ':' semicolon_list(type_dfn)           | :empty
+typedef_section -> TYPE ':' semicolon_list(type_definition)    | :empty
 assume_section  -> ASSUME ':' semicolon_list(assumption)       | :empty
-define_section  -> DEFINE ':' semicolon_list(term_dfn)         | :empty
+define_section  -> DEFINE ':' semicolon_list(term_definition)  | :empty
 main_section    -> BEGIN ':' semicolon_list(expr)              | :empty
 ```
 
@@ -64,20 +63,21 @@ alias -> AS name | :nothing
 Sophie makes a point of a strong and expressive type system.
 
 ```
-type_dfn  -> name type_parameters IS OPAQUE        :Opaque
-           | name type_parameters IS simple_type   :TypeAlias
-           | name type_parameters IS record_spec   :Record
-           | name type_parameters IS variant_spec  :Variant
-           | name type_parameters IS role_spec     :Role
+type_definition  -> name type_parameters IS OPAQUE        :OpaqueSymbol
+                  | name type_parameters IS record_spec   :RecordSymbol
+                  | name type_parameters IS type_cases    :VariantSymbol
+                  | name type_parameters IS simple_type   :TypeAliasSymbol
+                  | name type_parameters IS role_spec     :RoleSymbol
 
-type_parameters -> square_list(name) :type_parameters     | :empty
-simple_type -> generic(simple_type)
+type_parameters -> optional(square_list(name))
+
+simple_type  -> generic(simple_type)
 record_spec  -> round_list(field_dfn)                    :RecordSpec
-variant_spec -> CASE ':' semicolon_list(tag_spec) ESAC
-field_dfn -> name ':' simple_type   :FieldDefinition
+type_cases   -> CASE ':' semicolon_list(tag_spec) ESAC
+field_dfn    -> name ':' simple_type   :FieldDefinition
 
-tag_spec  -> name record_spec    :TaggedRecord
-           | name                :Tag
+tag_spec  -> name record_spec    :RecordTag
+           | name                :EnumTag
 
 role_spec  -> ROLE ':' semicolon_list(ability) END
 ability -> name optional(round_list(simple_type))      :Ability
@@ -115,7 +115,7 @@ only by how you use it.
 
 **Terms you can `define:`**
 ```
-term_dfn -> subroutine | actor_definition | operator_overload
+term_definition -> subroutine | actor_definition | operator_overload
 ```
 Let's consider each in turn, starting with functions.
 
@@ -136,12 +136,12 @@ or use a question-mark anywhere a type-name would normally go,
 and Sophie will deal with it sensibly.
 ```
 parameter  ->  stricture name annotation   :FormalParameter
-stricture  ->  :nothing | .STRICT
+stricture  ->  :nothing | STRICT
 annotation ->  :nothing | ':' arg_type
 
 arg_type -> generic(arg_type)
-          | '?' name    :ExplicitTypeVariable
-          | '?'         :ImplicitTypeVariable
+          | '?' name    :TypeCapture
+          | '?'         :FreeType
 
 ```
 I suppose it bears mention that all Sophie functions are implicitly generic
@@ -155,7 +155,7 @@ However, if you specify parameter types, then the type-checker will check them a
 You can define the meanings of (a small selection of) mathematical operators in conjunction with your data types:
 
 ```
-operator -> '+' | '-' | '*' | '/' | '^' | '<=>'
+operator -> '+' | '-' | '*' | '/' | '^' | DIV | MOD | '<=>' | '=='
 operator_overload -> OPERATOR operator formals annotation '=' expr where_clause_for_operator     :UserOperator
 where_clause_for_operator -> :nothing | WHERE semicolon_list(function) END OPERATOR operator     :WhereClause
 ```
@@ -173,6 +173,13 @@ For anything else, named functions are recommended.
 If you define the three-way comparison operator '<=>' for some particular type,
 then it must return an `order` and you will get the six relational operators for free.
 This makes sense when a total order is reasonable and natural.
+
+If you define the equality operator `==` for a type, then it must return a `flag`
+and you get `!=` for free. This is appropriate for when equivalence is well-defined,
+but order makes no particular sense.
+
+If you define both, the system will attempt to use the `==` definition in preference,
+because that's assumed to be faster.
 
 > *Note:*
 >
@@ -196,8 +203,8 @@ expr -> integer | real | short_string | list_expr | conditional | case_expr | ma
       | expr '^' expr         :BinExp
       | expr '*' expr         :BinExp
       | expr '/' expr         :BinExp
-      | .expr .DIV .expr      :BinExp
-      | .expr .MOD .expr      :BinExp
+      | expr DIV expr      :BinExp
+      | expr MOD expr      :BinExp
       | expr '+' expr         :BinExp
       | expr '-' expr         :BinExp
       | expr '==' expr        :BinExp
@@ -207,16 +214,16 @@ expr -> integer | real | short_string | list_expr | conditional | case_expr | ma
       | expr '>' expr         :BinExp
       | expr '>=' expr        :BinExp
       | expr '<=>' expr       :BinExp
-      | .expr .AND .expr      :ShortCutExp
-      | .expr .OR .expr       :ShortCutExp
-      | .NOT .expr            :UnaryExp
+      | expr AND expr      :ShortCutExp
+      | expr OR expr       :ShortCutExp
+      | NOT expr            :UnaryExp
       | expr round_list(expr) :Call
       | expr list_expr        :call_upon_list
          
-      | .YES   :truth
-      | .NO    :falsehood
+      | YES   :truth
+      | NO    :falsehood
       
-      | .'{' .comma_list(parameter) '|' .expr .'}'   :LambdaForm
+      | '{' comma_list(parameter) '|' expr '}'   :LambdaForm
 
 term_reference -> name              :PlainReference
                 | name '@' name     :QualifiedReference
@@ -251,7 +258,7 @@ but should resemble whatever happens in case of division by zero.
 
 ```
 alternative -> name '->' absurdity :absurdAlternative
-absurdity -> .ABSURD .optional(short_string)  :Absurdity
+absurdity -> ABSURD optional(short_string)  :Absurdity
 ```
 
 Let's also provide for the `ELSE` case to be absurd.
@@ -336,10 +343,10 @@ import_directive -> FOREIGN short_string ffi_linkage ffi_body   :ImportForeign
 
 ffi_linkage -> round_list(term_reference)     |    '(' ')' :empty    |    :nothing
 ffi_body    -> WHERE semicolon_list(ffi_group)  END             |    :empty
-ffi_group   -> comma_list(ffi_symbol) ':' type_parameters simple_type  :FFI_Group
+ffi_group -> comma_list(ffi_symbol) ':' type_parameters simple_type  :FFI_Group
 ffi_symbol  -> name                                 :FFI_Symbol
-             | name '@' short_string                :FFI_Alias
-             | OPERATOR operator '@' short_string   :FFI_Operator
+             | short_string AS name                 :FFI_Alias
+             | short_string AS OPERATOR operator    :FFI_Operator
 ```
 
 -----
@@ -377,11 +384,13 @@ round_list(x) -> '(' comma_list(x) ')'
 %right '->' IF ELSE
 ```
 
-This next bit tells the parser-generator how to tell which terminals have semantic value,
-and therefore get passed to a production rule's action:
+This next bit tells the parser-generator how to tell which terminals LACK
+semantic value, and therefore DO NOT get passed to a production rule's action:
 ```
-%void_set UPPER
-%void '(' ')' '[' ']' '.' ',' ';' ':' '=' '@' ':='
+%void IMPORT TYPE ASSUME DEFINE BEGIN END TO AS MY
+%void ACTOR ROLE CAST IS OF WHEN IF THEN ELSE
+%void FOREIGN OPERATOR CASE ESAC OPAQUE WHERE
+%void '(' ')' '[' ']' '.' ',' ';' ':' '=' '@' ':=' '|'
 ```
 
 ## Definitions

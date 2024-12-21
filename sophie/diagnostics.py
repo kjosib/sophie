@@ -1,12 +1,16 @@
 import sys, random
-from typing import Sequence, Optional, Union, Any
+from collections import defaultdict
+from functools import lru_cache
+from typing import Sequence, Any, Iterable
 from traceback import TracebackException, format_stack
 from pathlib import Path
-from boozetools.support.failureprone import SourceText, Issue, Evidence, Severity, illustration
-from . import syntax
-from .ontology import Phrase, Nom, Symbol, TermSymbol
-from .calculus import TYPE_ENV, SophieType
+from boozetools.support.failureprone import SourceText, illustration
+
+from .location import lookup_span
+from .ontology import Phrase, Nom
 from .stacking import Frame
+from . import syntax
+from .static.domain import SophieType
 
 class TooManyIssues(Exception):
 	pass
@@ -26,7 +30,7 @@ def _outburst():
 		'Whiskey Tango ....', 'Wretch it all', 'Woe be unto me', 'Woe is me',
 	]
 	
-	resignatons = [
+	resignations = [
 		'I am undone.',
 		'I cannot continue.',
 		'The path before me fades into darkness.',
@@ -35,12 +39,11 @@ def _outburst():
 		'I need an adult!',
 	]
 	
-	return "%s%s! %s"%tuple(map(random.choice, (particle, minced_oaths, resignatons)))
+	return "%s%s! %s"%tuple(map(random.choice, (particle, minced_oaths, resignations)))
 
 class Report:
 	""" Might this end up participating in a result-monad? """
-	_issues : list[Union[Issue, "Pic", "Redefined", "Undefined"]]
-	_path : Optional[Path]
+	_issues : list["Pic"]
 	
 	def __init__(self, *, verbose:int, max_issues=3):
 		self._verbose = verbose or 0   # Because None is incomparable.
@@ -48,7 +51,6 @@ class Report:
 		self._redefined = {}
 		self._already_complained_about = set()
 		self._undefined = None
-		self._path = None
 		self._max_issues = max_issues
 	
 	def ok(self): return not self._issues
@@ -66,25 +68,16 @@ class Report:
 		if self._verbose:
 			print(*args, file=sys.stderr)
 	
-	def trace(self, *args):
-		if self._verbose > 1:
-			print(*args, file=sys.stderr)
+	@staticmethod
+	def trace(message, site):
+		ann = Annotation(site, message)
+		print(ann.illustrate(), ann.path, file=sys.stderr)
 	
-	def set_path(self, path:Optional[Path]):
-		""" Let the report know which file is under consideration, for in case of error. """
-		# Yes, it's a temporal coupling. But it's a small worry, at least for now.
-		self._path = path
-		
-	def error(self, phase: str, guilty: Sequence[slice], msg: str):
+	def error(self, guilty: Sequence[Phrase], msg: str):
 		""" Actually make an entry of an issue """
-		for g in guilty:
-			assert isinstance(g, slice), type(g)
-		if guilty:
-			assert self._path is not None
-			for s in guilty:
-				assert isinstance(s, slice), s
-		evidence = {self._path: [Evidence(s, "") for s in guilty]}
-		self.issue(Issue(phase, Severity.ERROR, msg, evidence))
+		for g in guilty: assert isinstance(g, Phrase), g
+		problem = [Annotation(g, "") for g in guilty]
+		self.issue(Pic(msg, problem))
 
 	def complain_to_console(self):
 		""" Emit all the issues to the console. """
@@ -94,21 +87,24 @@ class Report:
 		""" Does what it says on the tin """
 		if self._issues:
 			self.complain_to_console()
-			assert False, "This is supposed to be impossible. "+message
+			raise AssertionError(_outburst()+" "+message)
 	
 	# Methods the front-end is likely to call:
-	def generic_parse_error(self, path: Path, lookahead, node:Nom, hint: str):
-		intro = "Sophie got confused by %s." % lookahead
-		problem = [Annotation(path, node, "Sophie got confused here")]
-		self.issue(Pic(intro, problem))
-		self.issue(Pic(hint, []))
+	def generic_parse_error(self, kind, token:Phrase, hint:str):
+		intro = "Sophie got confused by %s." % kind
+		problem = [Annotation(token, "Sophie got confused here")]
+		self.issue(Pic(intro, problem, [hint]))
+	
+	def ran_out_of_tokens(self, path:Path, hint:str):
+		intro = "Ran out of words in %s"%path
+		self.issue(Pic(intro, [], [hint]))
 
 	# Methods the package / import mechanism invokes:
 
 	def _file_error(self, path:Path, cause:Phrase, prefix:str):
 		intro = prefix+" "+str(path)
 		if cause:
-			problem = [Annotation(self._path, cause)]
+			problem = [Annotation(cause)]
 		else:
 			problem = []
 		self.issue(Pic(intro, problem))
@@ -121,14 +117,14 @@ class Report:
 	
 	def cyclic_import(self, cause, cycle):
 		intro = "Here begins a cycle of imports. Sophie considers that an error."
-		problem = [Annotation(self._path, cause)]
+		problem = [Annotation(cause)]
 		footer = [" - The full cycle is:"]
 		footer.extend('     '+str(path) for path in cycle)
 		self.issue(Pic(intro, problem, footer))
 
 	def no_such_package(self, cause:Nom):
 		intro = "There's no such package:"
-		problem = [Annotation(self._path, cause)]
+		problem = [Annotation(cause)]
 		footer = ["(At the moment, there is only sys.)"]
 		self.issue(Pic(intro, problem, footer))
 
@@ -137,104 +133,105 @@ class Report:
 		msg = "Attempting to import this module threw an exception."
 		text = ''.join(tbx.format())
 		self.issue((Pic(text, [])))
-		self.error("Defining words", [source.head()], msg)
+		self.error([source], msg)
 	
 	def missing_foreign_module(self, source):
 		intro = "Missing Foreign Module"
 		caption = "This module could not be found."
-		self.issue(Pic(intro, [Annotation(self._path, source, caption)]))
+		self.issue(Pic(intro, [Annotation(source, caption)]))
 
 	def missing_foreign_linkage(self, source):
 		intro = "Missing Foreign Linkage Function"
 		caption = "This module has no 'sophie_init'."
-		self.issue(Pic(intro, [Annotation(self._path, source, caption)]))
+		self.issue(Pic(intro, [Annotation(source, caption)]))
 		
 	def wrong_linkage_arity(self, d:syntax.ImportForeign, arity:int):
 		intro = "Disagreeable Foreign Linkage Function"
 		caption = "This module's 'sophie_init' expects %d argument(s) but got %d instead."
-		ann = Annotation(self._path, d.source, caption%(arity, len(d.linkage)))
+		ann = Annotation(d.source, caption%(arity, len(d.linkage)))
 		self.issue(Pic(intro, [ann]))
 
-	def redefined(self, text:str, first:slice, guilty:slice):
+	def redefined(self, text:str, first:Phrase, guilty:Phrase):
 		key = text, first
 		if key not in self._redefined:
-			issue = Redefined(_fetch(self._path), first)
+			intro = "This symbol is defined more than once in the same scope."
+			issue = Pic(intro, [Annotation(first, "Earliest definition")])
 			self.issue(issue)
 			self._redefined[key] = issue
-		self._redefined[key].note(guilty)
+		self._redefined[key].also(guilty)
 
-	def undefined_name(self, guilty:slice):
-		assert isinstance(guilty, slice)
+	def undefined_name(self, guilty:Phrase):
+		assert isinstance(guilty, Phrase)
 		if self._undefined is None:
-			self._undefined = Undefined(_fetch(self._path))
+			intro = "I don't see what this refers to."
+			self._undefined = Pic(intro, [])
 			self.issue(self._undefined)
-		self._undefined.note(guilty)
+		self._undefined.also(guilty)
 
 	def opaque_generic(self, guilty:Sequence[syntax.TypeParameter]):
 		admonition = "Opaque types are not to be made generic."
-		where = [g.head() for g in guilty]
-		self.error("Defining Types", where, admonition)
+		self.error([guilty], admonition)
 	
 	def can_only_see_member_within_behavior(self, nom:Nom):
 		intro = "You can only refer to an actor's state within that actor's own behaviors."
-		self.issue(Pic(intro, [Annotation(self._path, nom)]))
+		self.issue(Pic(intro, [Annotation(nom)]))
 	
-	def use_my_instead(self, env: TYPE_ENV, fr: syntax.FieldReference):
+	def use_my_instead(self, fr: syntax.FieldReference):
 		intro = "To read an actor's own private state, use `my %s` here." % fr.field_name.text
-		problem = [Annotation(env.path(), fr)]
+		problem = [Annotation(fr)]
 		self.issue(Pic(intro, problem))
 	
 	def called_a_type_parameter(self, tc:syntax.TypeCall):
 		pattern = "'%s' is a type-parameter, which cannot take type-arguments itself."
-		intro = pattern % (tc.ref.nom.text)
-		problem = [Annotation(self._path, tc)]
+		intro = pattern % tc.ref.nom.text
+		problem = [Annotation(tc)]
 		self.issue(Pic(intro, problem))
 	
 	def wrong_type_arity(self, tc:syntax.TypeCall, given:int, needed:int):
 		pattern = "%d type-arguments were given; %d are needed."
 		intro = pattern % (given, needed)
-		problem = [Annotation(self._path, tc)]
+		problem = [Annotation(tc)]
 		self.issue(Pic(intro, problem))
 	
 	# Methods the Alias-checker calls
 	def these_are_not_types(self, non_types:Sequence[syntax.TypeCall]):
 		intro = "Words that get used like types, but refer to something else (e.g. variants, functions, or actors)."
-		problem = [Annotation(self._path, tc) for tc in non_types]
+		problem = [Annotation(tc) for tc in non_types]
 		self.issue(Pic(intro, problem))
 	
 	def circular_type(self, scc:Sequence):
 		intro = "What we have here is a circular type-definition."
-		problem = [Annotation(self._path, node) for node in scc]
+		problem = [Annotation(node) for node in scc]
 		self.issue(Pic(intro, problem))
 	
 	# Methods the match-checker calls
 	def not_a_variant(self, ref:syntax.Reference):
 		intro = "That's not a variant-type name"
-		ann = Annotation(self._path, ref)
+		ann = Annotation(ref)
 		self.issue(Pic(intro, [ann]))
 	
-	def not_a_case_of(self, nom:Nom, variant:syntax.Variant):
-		# pattern = "This case is not a member of the variant-type <%s>."
-		# intro = pattern%variant.nom.text
-		self.undefined_name(nom.head())
-		pass
+	def not_a_case_of(self, nom:Nom, variant:syntax.VariantSymbol):
+		pattern = "This case is not a member of the variant-type <%s>."
+		intro = pattern%variant.nom.text
+		ann = Annotation(nom)
+		self.issue(Pic(intro, [ann]))
 	
 	def not_a_case(self, nom:Nom):
 		intro = "This needs to refer to one case of a variant-type."
-		ann = Annotation(self._path, nom)
+		ann = Annotation(nom)
 		self.issue(Pic(intro, [ann]))
 	
 	def not_exhaustive(self, mx:syntax.MatchExpr):
 		pattern = "This case-block does not cover all the cases of <%s> and lacks an else-clause."
 		intro = pattern % mx.variant.nom.text
-		ann = Annotation(self._path, mx)
+		ann = Annotation(mx)
 		self.issue(Pic(intro, [ann]))
 	
 	def redundant_pattern(self, prior:syntax.Alternative, new:syntax.Alternative):
 		intro = "These two patterns are the same, or overlap, or are redundant."
 		problem = [
-			Annotation(self._path, prior.pattern, "First"),
-			Annotation(self._path, new.pattern, "Not First")
+			Annotation(prior.pattern, "First"),
+			Annotation(new.pattern, "Not First")
 		]
 		footer = ["That's probably an oversight."]
 		self.issue(Pic(intro, problem, footer))
@@ -242,106 +239,104 @@ class Report:
 	def redundant_else(self, mx:syntax.MatchExpr):
 		intro = "This case-block has an extra else-clause."
 		problem = [
-			Annotation(self._path, mx, "covers every case"),
-			Annotation(self._path, mx.otherwise, "cannot happen")
+			Annotation(mx, "covers every case"),
+			Annotation(mx.otherwise, "cannot happen")
 		]
 		footer = ["That's probably an oversight."]
 		self.issue(Pic(intro, problem, footer))
 
-	# Methods specific to report type-checking issues.
-	
-	def type_mismatch(self, env:TYPE_ENV, x1:syntax.ValExpr, t1:SophieType, x2:syntax.ValExpr, t2:SophieType):
+	# # Methods specific to report type-checking issues.
+	# 
+	def type_mismatch(self, env:Frame, x1:syntax.ValueExpression, t1, x2:syntax.ValueExpression, t2):
 		intro = "Types for these expressions need to match, but they do not."
-		path = env.path()
 		problem = [
-			Annotation(path, x1, str(t1)),
-			Annotation(path, x2, str(t2)),
+			Annotation(x1, str(t1)),
+			Annotation(x2, str(t2)),
 		]
 		self.issue(Pic(intro, problem))
 		self.issue(Pic("Here's how that happens:", trace_stack(env)))
 	
-	def wrong_arity(self, env:TYPE_ENV, site:syntax.ValExpr, callee_type:SophieType, args:Sequence[syntax.ValExpr]):
-		arity = callee_type.expected_arity()
+	def not_callable(self, frame:Frame, site:syntax.ValueExpression, callee:SophieType):
+		intro = "Dunno how to call %s as a function." % callee
+		ann = Annotation(site, "Found to be "+str(callee))
+		self.issue(Pic(intro, trace_stack(frame) + [ann]))
+	
+	def wrong_arity(self, frame:Frame, site:syntax.ValueExpression, need:int, got:int):
+		intro = "Type-checking found a disagreement over arguments."
 		if site not in self._already_complained_about:
 			self._already_complained_about.add(site)
-			if arity < 0:
-				intro = "This %s is not callable."%callee_type
-			else:
-				plural = '' if arity == 1 else 's'
-				pattern = "This %s takes %d argument%s, but got %d instead."
-				intro = pattern % (callee_type, arity, plural, len(args))
-			problem = [Annotation(env.path(), site, intro)]
-			self.issue(Pic(intro, trace_stack(env) + problem))
-	
-	def bad_argument(self, env: TYPE_ENV, term:TermSymbol, param:syntax.FormalParameter, actual:SophieType, why:str):
-		assert isinstance(term, TermSymbol)
-		assert isinstance(param, syntax.FormalParameter)
-		assert isinstance(why, str)
-		intro = "Type-checking found a square peg in a round hole:"
-		caption = str(actual) + " does not apply because " + why
-		problem = [Annotation(term.source_path, param, caption)]
-		self.issue(Pic(intro, trace_stack(env)+problem))
-	
-	def bad_result(self, env: TYPE_ENV, fn:syntax.UserFunction, result_type, why):
+			plural = '' if need == 1 else 's'
+			pattern = "This takes %d argument%s, but got %d instead."
+			caption = pattern % (need, plural, got)
+			problem = [Annotation(site, caption)]
+			self.issue(Pic(intro, trace_stack(frame) + problem))
+
+	def bad_argument(self, env: Frame, expr, mismatch):
+		self.bad_type(env, expr, mismatch.need, mismatch.got)
+
+	def bad_result(self, env: Frame, sub:syntax.Subroutine, mismatch):
 		intro = "Type-checking found a problematic result:"
-		produced = Annotation(fn.source_path, fn.expr, "Produced "+str(result_type))
-		caption = "Did not match because " + why
-		needed = Annotation(fn.source_path, fn.result_type_expr, caption)
-		self.issue(Pic(intro, trace_stack(env)+[produced, needed]))
+		need = Annotation(sub.result_type_expr, "Declared this")
+		got = Annotation(sub.expr, "Produced " + str(mismatch.got))
+		self.issue(Pic(intro, trace_stack(env)+[need, got]))
 
-	def bad_type(self, env: TYPE_ENV, expr: syntax.ValExpr, need, got, why):
-		intro = "Type-checking found a problem. Here's how it happens:"
+	def bad_type(self, env: Frame, expr: syntax.ValueExpression, need, got):
+		intro = "Type-checking found %s where %s was expected:"%(got, need)
 		complaint = "This %s needs to be a(n) %s."%(got, need)
-		problem = [Annotation(env.path(), expr, complaint)]
-		self.issue(Pic(intro, trace_stack(env)+problem, (why,)))
-	
-	def bad_task(self, env: TYPE_ENV, expr: syntax.ValExpr, got):
-		intro = "I don't know how to convert %s into a task." % got
-		footer = "Typically you'll want a procedure here."
-		problem = [Annotation(env.path(), expr)]
+		problem = [Annotation(expr, complaint)]
+		self.issue(Pic(intro, trace_stack(env) + problem))
+
+	def bad_task(self, env: Frame, expr: syntax.ValueExpression, got):
+		intro = "I don't know how to make this %s into a task." % got
+		footer = "Typically you'll refer to a procedure here."
+		problem = [Annotation(expr, "judged to be "+str(got))]
 		self.issue(Pic(intro, trace_stack(env)+problem, (footer,)))
-
 	
-	def does_not_express_behavior(self, env: TYPE_ENV, procedure:syntax.UserProcedure, got):
+	def does_not_express_behavior(self, env: Frame, procedure:syntax.Subroutine, got):
 		intro = "This definition expresses %s instead of behavior"%got
-		problem = [Annotation(env.path(), procedure)]
+		problem = [Annotation(procedure)]
 		self.issue(Pic(intro, trace_stack(env)+problem))
 
-	def must_not_express_behavior(self, env: TYPE_ENV, fn:syntax.UserFunction):
+	def must_not_express_behavior(self, env: Frame, fn:syntax.Subroutine):
 		intro = "Procedural steps cannot happen within a pure function."
-		problem = [Annotation(env.path(), fn)]
-		self.issue(Pic(intro, trace_stack(env)+problem))
-
-	def bad_message(self, env:TYPE_ENV, expr:syntax.BindMethod, actor_type:SophieType):
-		intro = "This %s does not understand..." % actor_type
-		problem = [Annotation(env.path(), expr.method_name, "this message")]
+		problem = [Annotation(fn)]
 		self.issue(Pic(intro, trace_stack(env)+problem))
 	
-	def type_has_no_fields(self, env:TYPE_ENV, fr:syntax.FieldReference, lhs_type):
+	def not_an_actor(self, env:Frame, expr:syntax.ValueExpression, got):
+		intro = "Tried to send a message to not-an-actor:"
+		problem = [Annotation(expr, "Seems to be "+str(got))]
+		self.issue(Pic(intro, trace_stack(env)+problem))
+
+	def bad_message(self, env:Frame, method_name:Nom, actor_type):
+		intro = "This %s does not understand..." % actor_type
+		problem = [Annotation(method_name, "this message")]
+		self.issue(Pic(intro, trace_stack(env)+problem))
+
+	def type_has_no_fields(self, env:Frame, fr:syntax.FieldReference, lhs_type):
 		field = fr.field_name.text
 		intro = "Type-checking found an unsuitable source for field '%s' access."%field
 		complaint = "%s has no fields; in particular not '%s'."%(lhs_type, field)
-		problem = [Annotation(env.path(), fr, complaint)]
+		problem = [Annotation(fr, complaint)]
 		self.issue(Pic(intro, trace_stack(env)+problem))
-	
-	def no_telepathy_allowed(self, env:TYPE_ENV, fr:syntax.FieldReference, lhs_type):
+
+	def no_telepathy_allowed(self, env:Frame, fr:syntax.FieldReference, lhs_type):
 		intro = "You cannot read the private state of actor %s."%lhs_type
-		problem = [Annotation(env.path(), fr)]
+		problem = [Annotation(fr)]
 		self.issue(Pic(intro, trace_stack(env)+problem))
-	
-	def record_lacks_field(self, env:TYPE_ENV, fr:syntax.FieldReference, lhs_type:SophieType):
+
+	def record_lacks_field(self, env:Frame, fr:syntax.FieldReference, lhs_type):
 		field = fr.field_name.text
 		intro = "Type-checking found an unsuitable source for field '%s' access."%field
 		complaint = "Type '%s' has fields, but not one called '%s'."%(lhs_type, field)
-		problem = [Annotation(env.path(), fr, complaint)]
-		self.issue(Pic(intro, trace_stack(env)+problem))
-	
-	def ill_founded_function(self, env:TYPE_ENV, sub:syntax.Subroutine):
-		intro = "This definition turned up circular, as in a=a."
-		problem = [Annotation(sub.source_path, sub, "This one.")]
+		problem = [Annotation(fr, complaint)]
 		self.issue(Pic(intro, trace_stack(env)+problem))
 
-	def no_applicable_method(self, env:TYPE_ENV, actual_types):
+	def ill_founded_function(self, env:Frame, sub:syntax.Subroutine):
+		intro = "This definition turned up circular, as in a=a."
+		problem = [Annotation(sub, "This one.")]
+		self.issue(Pic(intro, trace_stack(env)+problem))
+
+	def no_applicable_method(self, env:Frame, actual_types):
 		intro = "A type-directed operation goes off the rails. Here's how:"
 		footer = [
 			"This operator has no method for "+str(tuple(actual_types))+".",
@@ -349,110 +344,95 @@ class Report:
 			"then please define the operator for these types.",
 		]
 		self.issue(Pic(intro, trace_stack(env), footer))
-	
+
 	def bogus_operator_arity(self, udf):
 		intro = "Define most operators for two arguments. Negation (-) can also be defined for only one."
-		problem = [Annotation(udf.source_path, udf, "This one.")]
+		problem = [Annotation(udf, "This one.")]
 		self.issue(Pic(intro, problem))
 
 	# Some things for just in case:
-	
-	def drat(self, env:TYPE_ENV, hint):
+
+	def drat(self, env:Frame, hint):
 		intro = "This code hits an unfinished part of the type-checker."
 		python_frames = map(str.rstrip, format_stack(limit=8)[:-1])
 		footer = [
 			"",
-			"Hint: "+str(hint),
-			"",
 			"Recent Python frames:",
 			*python_frames,
+			"",
+			"Hint: "+str(hint),
 		]
 		self.issue(Pic(intro, trace_stack(env), footer))
-		# self.complain_to_console()
+		self.complain_to_console()
+		# import os
+		# os._exit(9)
+		raise AssertionError(hint)
 
 class Annotation:
 	path: Path
 	slice: slice
 	caption: str
-	def __init__(self, path:Path, node, caption:str=""):
-		self.path = path
-		self.slice = node.head()
+	def __init__(self, node:Phrase, caption:str=""):
+		span = lookup_span(*node.span())
+		self.path = span.path
+		self.slice = span.slice
 		self.caption = caption
-		assert isinstance(self.slice, slice), (type(node), "head method fails to return a slice.")
-
-def illustrate(source, span:slice, caption):
-	row, col = source.find_row_col(span.start)
-	single_line = source.line_of_text(row)
-	width = span.stop - span.start
-	return illustration(single_line, col, width, prefix='% 6d |' % row, caption=caption)
+	def illustrate(self):
+		source = _fetch(self.path)
+		row, col = source.find_row_col(self.slice.start)
+		single_line = source.line_of_text(row)
+		width = self.slice.stop - self.slice.start
+		return illustration(single_line, col, width, prefix='% 6d |' % row, caption=self.caption)
 
 class Tracer:
 	def __init__(self):
 		self.trace = []
-	def called_from(self, path, pc):
-		self.trace.append(Annotation(path, pc))
+	def called_from(self, pc:Phrase):
+		self.trace.append(Annotation(pc))
 	def hit_bottom(self):
 		pass
-	def trace_frame(self, path, breadcrumb, bindings):
+	def trace_frame(self, breadcrumb, bindings):
 		args = {
 			k:v for k,v in bindings.items()
 			if isinstance(k, (syntax.FormalParameter, syntax.Subject))
 		}
 		if args:
 			bind_text = ', '.join("%s:%s" % (p.nom.text, t) for p, t in args.items())
-			self.trace.append(Annotation(path, breadcrumb, bind_text))
+			self.trace.append(Annotation(breadcrumb, bind_text))
 
 		
 
-def trace_stack(env:Frame) -> list[Annotation]:
+def trace_stack(frame:Frame) -> list[Annotation]:
 	tracer = Tracer()
-	env.trace(tracer)
+	frame.trace(tracer)
 	return tracer.trace
 
 class Pic:
-	def __init__(self, intro:str, trace:list[Annotation], footer=()):
-		source, path = ..., ...
-		self.lines = [intro, ""]
-		for ann in trace:
+	def __init__(self, intro:str, anns:list[Annotation], footer=()):
+		self._intro, self._anns, self._footer = intro, anns, footer
+	def also(self, node, caption:str=""): self._anns.append(Annotation(node, caption))
+	def as_text(self):
+		# Hey! This has precisely the algorithm it does so that stack traces make sense!
+		lines = [self._intro, ""]
+		path = None
+		for ann in self._anns:
 			if ann.path != path:
 				path = ann.path
-				self.lines.append(str(path))
-				source = _fetch(path)
-			self.lines.append(illustrate(source, ann.slice, ann.caption))
-		self.lines.extend(footer)
-	def as_text(self, fetch):
-		return '\n'.join(self.lines)
-		
+				lines.append(str(path))
+			lines.append(ann.illustrate())
+		lines.extend(self._footer)
+		return '\n'.join(lines)
+
+@lru_cache(5)
 def _fetch(path) -> SourceText:
 	if path is None:
 		return SourceText("")
 	with open(path, "r", encoding="utf-8") as fh:
 		return SourceText(fh.read(), filename=str(path))
 
-class Redefined:
-	def __init__(self, source:SourceText, earliest:slice):
-		self._source = source
-		self._lines = [
-			"This symbol is defined more than once in the same scope.",
-			illustrate(source, earliest, "Earliest definition"),
-		]
-	def note(self, span:slice):
-		self._lines.append(illustrate(self._source, span, ""))
-	def as_text(self, fetch):
-		return '\n'.join(self._lines)
-
-class Undefined:
-	def __init__(self, source:SourceText):
-		self._source = source
-		self._lines = ["In file: "+str(source.filename), "I don't see what this refers to."]
-	def note(self, span:slice):
-		self._lines.append(illustrate(self._source, span, ""))
-	def as_text(self, fetch):
-		return '\n'.join(self._lines)
-
 def trace_absurdity(env:Frame, absurdity:syntax.Absurdity):
 	intro = "Absurd thing happened:"
-	problem = [Annotation(env.path(), absurdity)]
+	problem = [Annotation(absurdity)]
 	_bemoan([Pic(intro, trace_stack(env) + problem)])
 
 def _bemoan(issues):
@@ -462,4 +442,5 @@ def _bemoan(issues):
 		print(_outburst(), file=sys.stderr)
 	for i in issues:
 		print("  -"*20, file=sys.stderr)
-		print(i.as_text(_fetch), file=sys.stderr)
+		print(i.as_text(), file=sys.stderr)
+	sys.stderr.flush()

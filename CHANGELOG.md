@@ -2,6 +2,18 @@
 
 Read this to get a general idea of what's new and nontrivial.
 
+## December 2024
+
+* 20 December: Numerous changes since the last report:
+  * Type-checker is rewritten into a sub-package of its own: Similar concept of operation, but simpler and more flexible.
+  * Tree-walking runtime is migrated into a package of its own, and better organized.
+  * Pygame adapter no longer hogs the main thread, so exceptions in other code *finally* promptly
+    shut down the scheduler and get displayed without waiting for the user to close the game window.
+  * Updating an actor's field currently needs a bit of work. This relates to a planned change in how Sophie
+    will handle the type of an actor: It will become more like how records work. But that's for the next update.
+* 3 December: Deep into a complete re-build of the type-checker.
+  There will be less predefined magic.
+
 ## November 2024
 
 * 29 November: The grammar is better-organized and reads more like a narrative tour of the language.

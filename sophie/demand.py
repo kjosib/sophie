@@ -140,7 +140,7 @@ class DemandPass(Visitor):
 				return self._union(call.args)
 			elif isinstance(target, syntax.FormalParameter):
 				return {target}
-			elif isinstance(target, (syntax.TypeCase, syntax.Record)):
+			elif isinstance(target, (syntax.TypeCase, syntax.RecordSymbol)):
 				return EMPTY
 			elif isinstance(target, syntax.UserActor):
 				# This is a rough spot. In general, the params to a syntax.UserActor

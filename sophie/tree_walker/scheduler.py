@@ -4,10 +4,16 @@ At some point I may do a work-stealing version for fun,
 but the semantics of the language are the same regardless.
 """
 from collections import deque
-from threading import Lock, Thread
+from threading import Lock, Thread, local
 from typing import Optional
 
 POOL_SIZE = 3
+
+per_thread = local()
+
+def _init_thread_local_storage(name):
+	per_thread.call_stack = []
+	per_thread.name = name
 
 class ThreadPoolScheduler:
 	"""
@@ -57,6 +63,7 @@ class ThreadPoolScheduler:
 		self._mutex.release()
 
 	def _worker(self, i):
+		_init_thread_local_storage("Thread " + str(i))
 		notify_me = Lock()
 		notify_me.acquire()
 		while True:
@@ -124,6 +131,7 @@ class MainThread:
 	
 	def run(self):
 		# This function exits with self._ready in the locked state. Always.
+		_init_thread_local_storage("Main thread")
 		while True:
 			self._ready.acquire()
 			with self._mutex:
@@ -133,10 +141,11 @@ class MainThread:
 				return
 			try:
 				for task in tasks:
-					if isinstance(task, BaseException):
-						self._zombify()
-						raise task
+					if isinstance(task, BaseException): raise task
 					else: task.proceed()
+			except BaseException:
+				self._zombify()
+				raise
 			finally:
 				self._main_queue.unpin()
 			
