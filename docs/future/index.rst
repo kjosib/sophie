@@ -12,6 +12,6 @@ Sophie's Future
     :maxdepth: 2
     :caption: Contents:
 
-    nonlocal
     roles
+    lifting
     game2
