@@ -91,8 +91,8 @@ class Report:
 	
 	# Methods the front-end is likely to call:
 	def generic_parse_error(self, kind, token:Phrase, hint:str):
-		intro = "Sophie got confused by %s." % kind
-		problem = [Annotation(token, "Sophie got confused here")]
+		intro = "Parsing got thrown off by %s." % kind
+		problem = [Annotation(token, "Parse failed here")]
 		self.issue(Pic(intro, problem, [hint]))
 	
 	def ran_out_of_tokens(self, path:Path, hint:str):

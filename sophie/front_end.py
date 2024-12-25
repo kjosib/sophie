@@ -16,7 +16,12 @@ _parse_table = _tables['parser']
 RESERVED = frozenset(t for t in _parse_table["terminals"] if t.isupper() and t.isalpha())
 
 class SophieParser(TypicalApplication):
-	
+
+	def unexpected_token(self, kind, semantic, pds):
+		raise UnexpectedTokenError(kind, semantic, pds)
+	def unexpected_eof(self, pds):
+		raise UnexpectedEndOfTextError(pds)
+
 	def scan_ignore(self, yy: IterableScanner): pass
 
 	@staticmethod
@@ -70,6 +75,7 @@ def reset_parser():
 
 def parse_text(text:str, path:Path, report:Report) -> Union[syntax.Module, Issue]:
 	""" Submit text to parser; submit the resulting tree to subsequent pass """
+	
 	start_segment(path)
 	try:
 		module = sophie_parser.parse(text, filename=str(path))
@@ -77,15 +83,19 @@ def parse_text(text:str, path:Path, report:Report) -> Union[syntax.Module, Issue
 	except syntax.MismatchedBookendsError as ex:
 		report.error(ex.args, "These names don't line up. Has part of a function been lost?")
 	except UnexpectedTokenError as ex:
-		report.generic_parse_error(ex.kind, ex.semantic, _best_hint(ex.pds.stack, ex.kind))
+		report.generic_parse_error(ex.kind, ex.semantic, _choose_hint(ex.pds, ex.kind))
 	except UnexpectedEndOfTextError as ex:
-		report.ran_out_of_tokens(path, _best_hint(ex.pds.stack, "<END>"))
+		report.ran_out_of_tokens(path, _choose_hint(ex.pds, "<END>"))
 
 ##########################
 #
 #  I've been meaning to improve parse error messages.
 #  Code from here down represents progress in that direction.
 #
+
+def _choose_hint(pds, lookahead):
+	stack_symbols = sophie_parser.stack_symbols(pds)
+	return _best_hint(stack_symbols, lookahead)
 
 _vocabulary = set(_parse_table['terminals']).union(_parse_table['nonterminals'])
 ETC = "???"
@@ -174,7 +184,7 @@ _hint("name formals : name ● ???", "It seems to cut off after perhaps a type-a
 _hint("name type_parameters IS ( name : name ● ???", "Anticipated a comma or perhaps open-square-bracket here.")
 _hint("WHEN expr ● ->", "WHEN goes with THEN. The arrow is for type matches.")
 _hint("TYPE : ??? round_list(simple_type) ● ;", "Might be a record missing field types, or the first part of a function-type (expecting '->' and a result-type ).")
-_hint("ACTOR ??? semicolon_list(procedure) END ● ;", "End actors by name: ACTOR foo ... END foo;")
+_hint("ACTOR ??? END ● ;", "End actors by name: ACTOR foo ... END foo;")
 _hint("name formals annotation = expr WHERE semicolon_list(subroutine) END ● ;", "End enclosing functions by name: foo(x) = ... WHERE ... END foo;")
 _hint("TYPE : ??? ! ● name", "you have !foo and probably want !(foo) to represent a message/procedure of one argument.")
 
