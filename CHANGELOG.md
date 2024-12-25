@@ -18,6 +18,8 @@ Read this to get a general idea of what's new and nontrivial.
 
 * 29 November: The grammar is better-organized and reads more like a narrative tour of the language.
   Also, the notion of an `export:` section is dropped from the language -- for now.
+  Finally, I changed the resolver to build a capture-map for each function.
+  This means less work for the type-checker now, but may facilitate other improvements later.
 * 28 November: The resolver is completely restructured and much simplified:
     * Three passes (`WordDefiner`, `WordResolver`, and `AliasChecker`) merge to become `Resolver`, dropping lots of code and running faster.
     * Types and terms now have distinct name spaces, which simplifies a lot of things.
