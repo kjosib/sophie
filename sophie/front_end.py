@@ -95,7 +95,7 @@ def parse_text(text:str, path:Path, report:Report) -> Union[syntax.Module, Issue
 
 def _choose_hint(pds, lookahead):
 	stack_symbols = sophie_parser.stack_symbols(pds)
-	return _best_hint(stack_symbols, lookahead)
+	return _best_hint(stack_symbols, lookahead) + "    state: "+str(pds.state)
 
 _vocabulary = set(_parse_table['terminals']).union(_parse_table['nonterminals'])
 ETC = "???"
