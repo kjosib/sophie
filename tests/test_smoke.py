@@ -56,13 +56,14 @@ class ExampleSmokeTests(unittest.TestCase):
 			"tutorial/patron",
 			"tutorial/simple_calculations",
 			"tutorial/explicit_list_construction",
+			"mathematics/Fibonacci",
+			"mathematics/factors",
 			"mathematics/Newton",
 			"mathematics/Newton_2",
 			"mathematics/Newton_3",
+			"mathematics/primes",
 			"tutorial/case_when",
 			"tutorial/some_arithmetic",
-			"mathematics/Fibonacci",
-			"mathematics/primes",
 			"tutorial/generic_parameter",
 		]:
 			with self.subTest(name):

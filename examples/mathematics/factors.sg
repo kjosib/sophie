@@ -1,0 +1,18 @@
+# Kapitancho on the Programming Languages discord suggested that,
+# since the year 2025 has a nice prime factorization, it would be
+# a good time to do a factorization kata in our language of choice.
+
+# Here's mine.
+
+define:
+prime_factors(n) = pf(n, 2) where
+    pf(k, d) = case
+        when d*d > k then cons(k, nil);
+        when k mod d == 0 then cons(d, pf(k div d, d));
+        else pf(k, d+1);
+    esac;
+end prime_factors;
+
+begin:
+console!echo(interleave(" ", map(str, prime_factors(2025))));
+console!echo[EOL];
