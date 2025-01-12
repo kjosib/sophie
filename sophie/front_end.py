@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Union
 
 from boozetools.macroparse.runtime import TypicalApplication, make_tables
+from boozetools.macroparse.expansion import CompactHFA
 from boozetools.scanning.engine import IterableScanner
 from boozetools.parsing.interface import UnexpectedTokenError, UnexpectedEndOfTextError
 from boozetools.support.failureprone import Issue
@@ -95,7 +96,9 @@ def parse_text(text:str, path:Path, report:Report) -> Union[syntax.Module, Issue
 
 def _choose_hint(pds, lookahead):
 	stack_symbols = sophie_parser.stack_symbols(pds)
-	return _best_hint(stack_symbols, lookahead) + "    state: "+str(pds.state)
+	expected = sophie_parser.expected_tokens(pds)
+	hint = _best_hint(stack_symbols, lookahead)
+	return "Expected any of: %s\n%s"%(" ".join(expected), hint)
 
 _vocabulary = set(_parse_table['terminals']).union(_parse_table['nonterminals'])
 ETC = "???"
@@ -187,6 +190,7 @@ _hint("TYPE : ??? round_list(simple_type) ● ;", "Might be a record missing fie
 _hint("ACTOR ??? END ● ;", "End actors by name: ACTOR foo ... END foo;")
 _hint("name formals annotation = expr WHERE semicolon_list(subroutine) END ● ;", "End enclosing functions by name: foo(x) = ... WHERE ... END foo;")
 _hint("TYPE : ??? ! ● name", "you have !foo and probably want !(foo) to represent a message/procedure of one argument.")
+_hint("IS ROLE ● [", "`foo[T] is role:`, not `foo is role[T]`.")
 
 assert _best_hint("export_section import_section TYPE : name square_list(name) IS".split(), 'OPAQUE')
 

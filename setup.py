@@ -15,7 +15,7 @@ setuptools.setup(
 	name='sophie-lang',
 	author='Beth Kjos',
 	author_email='kjosib@gmail.com',
-	version='0.0.8',
+	version='0.0.9',
 	packages=["sophie", "sophie.adapters", "sophie.static", "sophie.tree_walker"],
 	package_data={
 		'sophie':["Sophie.automaton"] + ["sys/" + f for f in os.listdir("sophie/sys")],
@@ -42,7 +42,7 @@ setuptools.setup(
 	],
 	python_requires='>=3.12',
 	install_requires=[
-		"booze-tools>=0.6.2.1",
+		"booze-tools>=0.6.3",
 		"pygame>=2.4.0",
 	]
 )
