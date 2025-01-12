@@ -21,7 +21,7 @@ Documentation: https://sophie.readthedocs.io/en/latest/
 import sys, argparse
 from pathlib import Path
 
-EXPERIMENT = "to stop after name resolution"
+EXPERIMENT = "to skip type-checking"
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -45,12 +45,12 @@ def run(args):
 			report.complain_to_console()
 			return 1
 		assert report.ok()
-		if args.experimental: return
-		from .static.check import TypeChecker
-		TypeChecker(report).check_program(roadmap)
-		if report.sick():
-			report.complain_to_console()
-			return 1
+		if not args.experimental:
+			from .static.check import TypeChecker
+			TypeChecker(report).check_program(roadmap)
+			if report.sick():
+				report.complain_to_console()
+				return 1
 	except TooManyIssues:
 		report.complain_to_console()
 		print(" *"*35, file=sys.stderr)
